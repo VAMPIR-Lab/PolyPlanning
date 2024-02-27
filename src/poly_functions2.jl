@@ -90,8 +90,8 @@ end
 
 function signed_distance(P1::ConvexPolygon2D, 
                          P2::ConvexPolygon2D)
-    A1 = -P1.A
-    b1 = -P1.b
+    A1 = P1.A
+    b1 = P1.b
     A2 = P2.A
     b2 = P2.b
 
