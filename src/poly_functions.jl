@@ -175,6 +175,8 @@ function signed_distance(P::ConvexPolygon2D, p::Vector{Float64})
     return (; sd=sds[id], id)
 end
 
+
+
 function test_psd()
     P = ConvexPolygon2D([[0.0,0], [1,0], [-0.5,1], [1.5,1], [0.5,2.5]])
     G = [Vector{Float64}[] for _ in 1:5] 

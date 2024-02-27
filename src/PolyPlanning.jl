@@ -5,9 +5,10 @@ using OSQP
 using SparseArrays
 using Infiltrator
 using GLMakie
+using PATHSolver
 
 include("solvers.jl")
-include("poly_functions.jl")
+include("poly_functions2.jl")
 
 export ConvexPolygon2D
 
