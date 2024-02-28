@@ -105,8 +105,15 @@ function signed_distance(P1::ConvexPolygon2D,
     l = [zeros(m1); fill(-Inf, 2); zeros(m2); fill(-Inf, 1)]
     u = fill(Inf, m1+m2+3)
     ret = solve_lmcp(UsePATHSolver(), M, q, l, u) 
+    z = ret.z
+    num_weak = sum(z .< (l .+ 1e-4) .&& (M*z+q .< 1e-4))
     y = ret.z[1:m1]
     x = ret.z[m1+1:m1+2]
     sd = y'*(A1*x+b1)
-    (; sd, y, x, ret.solve_status, ret.info)
+    (; sd, y, x, ret.solve_status, ret.info, num_weak)
+end
+
+function sym_signed_distance(P1::ConvexPolygon2D,
+                             P2::ConvexPolygon2D)
+    signed_distance(P1,P2) + signed_distance(P2,P1)
 end
