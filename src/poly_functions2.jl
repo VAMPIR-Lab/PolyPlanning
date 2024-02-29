@@ -2,14 +2,14 @@ struct ConvexPolygon2D
     A::SparseMatrixCSC{Float64, Int64}
     b::Vector{Float64}
     V::Vector{Vector{Float64}}
-    c::Vector{Float64}
     function ConvexPolygon2D(A,b; tol=1e-5)
         # Convert from Hrep to Vrep
         m = length(b)
         V = Vector{Float64}[]
         for i in 1:m
-            A[i,:] ./= norm(A[i,:])
-            b[i] ./= norm(A[i,:])
+            nm = norm(A[i,:])
+            A[i,:] ./= nm
+            b[i] /= nm
         end
         for i1 = 1:m
             a1 = A[i1,:]
@@ -17,7 +17,7 @@ struct ConvexPolygon2D
                 a2 = A[i2,:]
                 rhs = [b[i1], b[i2]]
                 try
-                    v = [a1'; a2'] \ rhs
+                    v = [a1'; a2'] \ -rhs
                     if all(- tol .≤ A*v+b)
                         push!(V, v)
                     end
@@ -35,10 +35,36 @@ struct ConvexPolygon2D
         I = sortperm(θs) |> reverse
         V = V[I]
 
-        new(A,b,V,c)
+        new(A,b,V)
     end
     function ConvexPolygon2D(V; tol=1e-5)
         # Convert from Vrep to Hrep
+
+        A = []
+        b = Float64[]
+        N = length(V)
+        supporting_verts = Int[]
+        for i = 1:N
+            for j = 1:N
+                j == i && continue
+                v1 = V[i]
+                v2 = V[j]
+                t = v2-v1
+                t ./= norm(t)
+                ai = [t[2], -t[1]]
+                bi = -(ai'*v1)
+                if all( -tol .≤ ai'*v+bi for v in V)
+                    push!(A,ai)
+                    push!(b,bi)
+                    push!(supporting_verts, i)
+                    push!(supporting_verts, j)
+                end
+            end
+        end
+        
+        A = hcat(A...)' 
+        supporting_verts = Set(supporting_verts) |> collect
+        V = V[supporting_verts]
         c = sum(V) / length(V)
         θs = map(V) do vi
             d = vi-c
@@ -46,38 +72,13 @@ struct ConvexPolygon2D
         end
         I = sortperm(θs) |> reverse
         V = V[I]
-
-        A = []
-        b = Float64[]
-        N = length(V)
-        for i = 1:N-1
-            v1 = V[i]
-            v2 = V[i+1]
-            t = v2-v1
-            t ./= norm(t)
-            ai = [t[2], -t[1]]
-            bi = -(ai'*v1)
-            push!(A,ai)
-            push!(b,bi)
-        end
-        v1 = V[N]
-        v2 = V[1]
-        t = v2-v1
-        t ./= norm(t)
-        ai = [t[2], -t[1]]
-        bi = -(ai'*v1)
-        push!(A,ai)
-        push!(b,bi)
-        A = hcat(A...)' 
-        c = sum(V) ./ N
-        new(sparse(A),b,V,c)
+        new(sparse(A),b,V)
     end
 end
 
 function plot!(ax, P::ConvexPolygon2D; kwargs...)
     N = length(P.V) 
     V = P.V
-    c = P.c
     for i in 1:N-1
         vii = V[i+1]
         vi = V[i]

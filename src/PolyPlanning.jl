@@ -8,6 +8,7 @@ using GLMakie
 using PATHSolver
 using Symbolics
 using Random
+using Combinatorics
 
 include("solvers.jl")
 include("poly_functions2.jl")
