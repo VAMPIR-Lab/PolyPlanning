@@ -7,6 +7,7 @@ using Infiltrator
 using GLMakie
 using PATHSolver
 using Symbolics
+using Random
 
 include("solvers.jl")
 include("poly_functions2.jl")
