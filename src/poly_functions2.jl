@@ -2,6 +2,9 @@ struct ConvexPolygon2D
     A::SparseMatrixCSC{Float64, Int64}
     b::Vector{Float64}
     V::Vector{Vector{Float64}}
+    function ConvexPolygon2D(A,b,V)
+        new(A,b,V)
+    end
     function ConvexPolygon2D(A,b; tol=1e-5)
         # Convert from Hrep to Vrep
         m = length(b)
