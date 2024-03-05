@@ -5,7 +5,7 @@ function f(z, T, goal_dir, R)
         ut = @view(z[(t-1)*6+4:(t-1)*6+6])
         #cost += ut'*R*ut - goal_dir'*xt[1:2]
         #cost += xt[1:2]'*xt[1:2]
-        cost += -goal_dir'*xt[1:2]
+        cost += -0.01*goal_dir'*xt[1:2]
     end
     cost
 end
@@ -176,8 +176,7 @@ end
 function get_sd_ids(z, T, A1o,b1o,A2o,b2o,A3o,b3o, angles, lengths)
     num_polys = 3
     avoid_polys = [(A1o,b1o), (A2o,b2o), (A3o,b3o)]
-    IDs = Dict()
-    SDs = Dict()
+    IDs = Dict{Tuple{Int, Int}, Tuple{Vector{Int},Vector{Int}}}()
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
         A1,b1 = poly_from(xt, angles, lengths)
@@ -188,13 +187,17 @@ function get_sd_ids(z, T, A1o,b1o,A2o,b2o,A3o,b3o, angles, lengths)
             m2 = length(b2)
 
             ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+            if ret.info.status_polish == -1
+                @warn "not polished"
+            end
             primals = ret.x
             duals = -ret.y
 
             cons = AA*primals+bb
-            I1 = duals .≥ 1e-4 .&& cons .< 1e-4
-            I2 = duals .< 1e-4 .&& cons .< 1e-4
-            I3 = duals .< 1e-4 .&& cons .≥ 1e-4
+            I1 = duals .≥ 1e-2 .&& cons .< 1e-2
+            I2 = duals .< 1e-2 .&& cons .< 1e-2
+            I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+            
             sd = primals[3]
            
             all_inds = collect(1:m1+m2)
@@ -209,10 +212,9 @@ function get_sd_ids(z, T, A1o,b1o,A2o,b2o,A3o,b3o, angles, lengths)
                 assignment2 = all_inds[I1]
             end
             IDs[t,e] = (assignment1, assignment2)
-            SDs[t,e] = sd
         end
     end
-    SDs, IDs
+    IDs
 end
 
 function setup(; T = 1,
@@ -268,7 +270,7 @@ function setup(; T = 1,
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
 
-    F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false))[2]
+    F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
     sd_F_funcs = Dict()
     sd_Js = Dict()
@@ -284,7 +286,8 @@ function setup(; T = 1,
     #    sd = sds[k]
 
     #for (k,sd) in sds  
-    sd_F_funcs = map(1:length(sd_keys)) do ii
+    @info "Generating symbolic solutions to sd calculation"
+    sd_F_funcs = @showprogress map(1:length(sd_keys)) do ii
         k = sd_keys[ii]
         sd = sds[k]
         t = k[1]
@@ -302,8 +305,8 @@ function setup(; T = 1,
 
         F1 = [lag1; zeros(Num, length(cons_nom)); cons1]
         F2 = [lag2; zeros(Num, length(cons_nom)); cons2]
-        get_F1 = Symbolics.build_function(F1, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false))[2]
-        get_F2 = Symbolics.build_function(F2, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false))[2]
+        get_F1 = Symbolics.build_function(F1, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false), parallel=Symbolics.SerialForm())[2]
+        get_F2 = Symbolics.build_function(F2, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false), parallel=Symbolics.SerialForm())[2]
     
         J1 = Symbolics.sparsejacobian(F1, θ)
         J2 = Symbolics.sparsejacobian(F2, θ)
@@ -315,7 +318,7 @@ function setup(; T = 1,
         union!(J_pattern, J1_pattern)
         union!(J_pattern, J2_pattern)
         
-        @info "$ii / $num_sds"
+        #@info "$ii / $num_sds"
         
         #sd_Js[k] = (; loc_1=J1, loc_2=J2)
         (; loc_1=get_F1, loc_2=get_F2, loc_1J = J1, loc_2J = J2)
@@ -344,7 +347,8 @@ function setup(; T = 1,
     zero_J_pattern = sparse(J_both_rows, J_both_cols, fill(2*eps(),length(J_both_cols)), n, n)
 
     #for k in keys(sds)
-    sd_J_funcs = map(1:length(sd_keys)) do ii
+    @info "Generating derivative functions for sd calculation"
+    sd_J_funcs = @showprogress map(1:length(sd_keys)) do ii
         J1 = (collect(sd_F_funcs[ii].loc_1J) + collect(zero_J_pattern)) |> sparse
         J2 = (collect(sd_F_funcs[ii].loc_2J) + collect(zero_J_pattern)) |> sparse
         #Js = sd_Js[k]
@@ -364,10 +368,10 @@ function setup(; T = 1,
             j = findfirst([ind == (row,col) for ind in J_pattern])
             J2_vals_perm[j] = J2_vals[e]
         end
-        get_J1_vals! = Symbolics.build_function(J1_vals_perm, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false))[2]
-        get_J2_vals! = Symbolics.build_function(J2_vals_perm, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false))[2]
+        get_J1_vals! = Symbolics.build_function(J1_vals_perm, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false), parallel=Symbolics.SerialForm())[2]
+        get_J2_vals! = Symbolics.build_function(J2_vals_perm, z, A1,b1,A2,b2,A3,b3, λ_col; expression=Val(false), parallel=Symbolics.SerialForm())[2]
         #sd_J_funcs[k] = (; loc_1=get_J1_vals!, loc_2=get_J2_vals!)
-        @info "$ii / $num_sds"
+        #@info "$ii / $num_sds"
         (; loc_1=get_J1_vals!, loc_2=get_J2_vals!)
     end
     J_nom += zero_J_pattern
@@ -379,46 +383,81 @@ function setup(; T = 1,
         j = findfirst([ind == (row,col) for ind in J_pattern])
         J_vals_perm[j] = J_vals[e]
     end
-    J_vals_nom! = Symbolics.build_function(J_vals_perm, z, x0, λ_nom; expression=Val(false))[2]
+    J_vals_nom! = Symbolics.build_function(J_vals_perm, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
+    sd_F_funcs1 = map(1:length(sd_keys)) do ii
+        sd_F_funcs[ii].loc_1
+    end
+    sd_F_funcs2 = map(1:length(sd_keys)) do ii
+        sd_F_funcs[ii].loc_2
+    end
+    sd_J_funcs1 = map(1:length(sd_keys)) do ii
+        sd_J_funcs[ii].loc_1
+    end
+    sd_J_funcs2 = map(1:length(sd_keys)) do ii
+        sd_J_funcs[ii].loc_2
+    end
+
+    fv = zeros(length(F_nom)) 
+    jv = zeros(length(J_vals))
+    
+    F_nom_funcs = [F_nom!,]
+    
     F_nom_buf = zeros(length(F_nom))
     F_col1_buf = zeros(length(F_nom))
     F_col2_buf = zeros(length(F_nom))
+
+    #function @nospecializeinfer fill_buf!(@nospecialize(func),F,z_local,A1,b1,A2,b2,A3,b3,λ_col_local)
+    #    func(F,z_local,A1,b1,A2,b2,A3,b3,λ_col_local) 
+    #end
+    Base.@nospecializeinfer function fill_buf!(@nospecialize(func),F,z_local,A1,b1,A2,b2,A3,b3,λ_col_local)
+        #println("hi")
+        func(F,z_local,A1,b1,A2,b2,A3,b3,λ_col_local) 
+        nothing
+    end
+
+    function donothing(func)
+        println("hi")
+    end
     
     function F_both!(F, z_local, x0_local, A1,b1,A2,b2,A3,b3, λ_nom_local, λ_col_local)
         F .= 0.0
         F_nom_buf .= 0.0
         F_col1_buf .= 0.0
         F_col2_buf .= 0.0
-
+        F_nom_func! = F_nom_funcs[1]
         F_nom!(F_nom_buf, z_local, x0_local, λ_nom_local)
         F .+= F_nom_buf
-        sds, sd_ids = get_sd_ids(z_local, T, A1,b1,A2,b2,A3,b3, angles, lengths)
+        sd_ids = get_sd_ids(z_local,T,A1,b1,A2,b2,A3,b3,angles,lengths)
         for t in 1:T
             for e in 1:N_polys
                 assignments::Tuple{Vector{Int},Vector{Int}} = sd_ids[t,e]
-                k1 = (t,e,assignments[1])
-                k2 = (t,e,assignments[2])
+                k1 = length(assignments[1]) > 3 ? (t,e,assignments[1][1:3]) : (t,e,assignments[1])
+                k2 = length(assignments[2]) > 3 ? (t,e,assignments[2][1:3]) : (t,e,assignments[2])
                 ii1 = findfirst((sd_key == k1 for sd_key in sd_keys))
                 ii2 = findfirst((sd_key == k2 for sd_key in sd_keys))
-                F_func_1! = sd_F_funcs[ii1].loc_1
-                F_func_2! = sd_F_funcs[ii2].loc_2
-                #F_func_1! = sd_F_funcs[t,e,assignments[1]].loc_1
-                #F_func_2! = sd_F_funcs[t,e,assignments[2]].loc_2
-                F_func_1!(F_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
-                F_func_2!(F_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                #let sd_F_funcs=sd_F_funcs
+                #F_func_1! = sd_F_funcs1[ii1]
+                #F_func_2! = sd_F_funcs2[ii2]
+                #jfill_buf!(F_func_1!, F_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                #fill_buf!(F_func_2!, F_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                sd_F_funcs1[ii1](F_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                sd_F_funcs2[ii2](F_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
                 F .+= F_col1_buf
                 F .+= F_col2_buf
+                #end
             end
         end
         nothing
     end
 
-    J_nom_buf = zeros(length(J_vals))
-    J_col1_buf = zeros(length(J_vals))
-    J_col2_buf = zeros(length(J_vals))
 
     function J_both_vals!(J_vals, z_local, x0_local, A1,b1,A2,b2,A3,b3, λ_nom_local, λ_col_local)
+
+        J_nom_buf = zeros(length(J_vals))
+        J_col1_buf = zeros(length(J_vals))
+        J_col2_buf = zeros(length(J_vals))
+
         J_vals .= 0.0
         J_nom_buf .= 0.0
         J_col1_buf .= 0.0
@@ -426,16 +465,16 @@ function setup(; T = 1,
 
         J_vals_nom!(J_nom_buf, z_local, x0_local, λ_nom_local)
         J_vals .+= J_nom_buf
-        sds, sd_ids = get_sd_ids(z_local, T, A1,b1,A2,b2,A3,b3, angles, lengths)
+        sd_ids = get_sd_ids(z_local, T, A1,b1,A2,b2,A3,b3, angles, lengths)
         for t in 1:T
             for e  in 1:N_polys
                 assignments = sd_ids[t,e]
-                k1 = (t,e,assignments[1])
-                k2 = (t,e,assignments[2])
+                k1 = length(assignments[1]) > 3 ? (t,e,assignments[1][1:3]) : (t,e,assignments[1])
+                k2 = length(assignments[2]) > 3 ? (t,e,assignments[2][1:3]) : (t,e,assignments[2])
                 ii1 = findfirst((sd_key == k1 for sd_key in sd_keys))
                 ii2 = findfirst((sd_key == k2 for sd_key in sd_keys))
-                J_func_1! = sd_J_funcs[ii1].loc_1
-                J_func_2! = sd_J_funcs[ii2].loc_2
+                J_func_1! = sd_J_funcs1[ii1]
+                J_func_2! = sd_J_funcs2[ii2]
                 #J_func_1! = sd_J_funcs[t,e,assignments[1]].loc_1
                 #J_func_2! = sd_J_funcs[t,e,assignments[2]].loc_2
                 J_func_1!(J_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
@@ -447,9 +486,35 @@ function setup(; T = 1,
         nothing
     end
     
+    @info "Forcing compilation"
+    n_z = length(z)
+    n_nom = length(λ_nom)
+    n_col = length(λ_col)
+    θ = randn(n_z+n_nom+n_col)
+    @showprogress for fnc in sd_F_funcs1
+        @inbounds zz = θ[1:n_z]
+        @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
+        fnc(fv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+    end
+    @showprogress for fnc in sd_F_funcs2
+        @inbounds zz = θ[1:n_z]
+        @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
+        fnc(fv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+    end
+    @showprogress for jfnc in sd_J_funcs
+        @inbounds zz = θ[1:n_z]
+        @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
+        #@inbounds zz = @view(θ[1:length(z)])
+        #@inbounds λλ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
+        jfnc.loc_1(jv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+        jfnc.loc_2(jv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col) 
+    end
+    
     return (; F_both!, 
             J_both=(J_both_rows, J_both_cols, J_both_vals!), 
-            #J_both=(J_nom1_rows, J_nom1_cols, J_both_vals!), 
+            sd_F_funcs,
+            sd_J_funcs,
+            F_nom!,
             l, 
             u, 
             n_z=length(z), 
@@ -464,9 +529,7 @@ function setup(; T = 1,
 end
 
 function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
-    (; F_both!, J_both, l, u, n_z, n_nom, n_col, N_polys, sides_per_poly, angles, lengths, p1_max, p2_min) = prob
-
-    avoid_polys = [(P1.A, P1.b), (P2.A, P2.b), (P3.A,P3.b)]
+    (; F_both!, J_both, l, u, n_z, n_nom, n_col, N_polys, sides_per_poly, angles, lengths, p1_max, p2_min, sd_F_funcs, sd_J_funcs) = prob
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -498,6 +561,13 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
         end
     end
 
+    A1 = collect(P1.A)
+    A2 = collect(P2.A)
+    A3 = collect(P3.A)
+    b1 = collect(P1.b)
+    b2 = collect(P2.b)
+    b3 = collect(P3.b)
+
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
     J_col = J_shape.colptr[1:end-1]
     J_len = diff(J_shape.colptr)
@@ -505,19 +575,22 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
 
     function F(n, θ, result)
         result .= 0.0
-        @inbounds z = @view(θ[1:n_z])
-        @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
-        @inbounds λ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
-        F_both!(result, z, x0, P1.A,P1.b,P2.A,P2.b,P3.A,P3.b, λ_nom, λ_col)
+        #@inbounds z = @view(θ[1:n_z])
+        #@inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
+        #@inbounds λ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
+        @inbounds z = θ[1:n_z]
+        @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
+        @inbounds λ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
+        F_both!(result, z, x0, A1,b1,A2,b2,A3,b3, λ_nom, λ_col)
         Cint(0)
     end
     function J(n, nnz, θ, col, len, row, data)
         @assert nnz == nnz_total
         data .= 0.0
-        @inbounds z = @view(θ[1:n_z])
-        @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
-        @inbounds λ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
-        J_vals!(data, z, x0, P1.A,P1.b,P2.A,P2.b,P3.A,P3.b, λ_nom, λ_col)
+        @inbounds z = θ[1:n_z]
+        @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
+        @inbounds λ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
+        J_vals!(data, z, x0, A1,b1,A2,b2,A3,b3,λ_nom, λ_col)
         col .= J_col
         len .= J_len
         row .= J_row
@@ -576,6 +649,7 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
     JJnum = zeros(n,n)
     JJact = zeros(n,n)
 
+
     for i in 1:n
         dθ = randn(n)
         dθ = dθ / norm(dθ)
@@ -590,6 +664,19 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
 
     plot!(ax, self_poly; color=:blue, linestyle=:dash)
     display(fig)
+
+    #xt = z[1:3]
+    #Ae,be = poly_from(xt, angles, lengths)
+    #AA, bb, qq = gen_LP_data(Ae,be,A2,b2)
+    #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false);
+    #primals = ret.x
+    #duals = -ret.y
+    #cons = AA*primals+bb
+    #I1 = duals .≥ 1e-2 .&& cons .< 1e-2
+    #I2 = duals .< 1e-2 .&& cons .< 1e-2
+    #I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+    #sd = primals[3]
+    
 
 
     #@infiltrate status != PATHSolver.MCP_Solved

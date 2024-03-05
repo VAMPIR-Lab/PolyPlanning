@@ -7,6 +7,7 @@ using Infiltrator
 using GLMakie
 using PATHSolver
 using Symbolics
+using ProgressMeter
 using Random
 using Combinatorics
 
