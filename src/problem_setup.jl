@@ -45,7 +45,8 @@ function g_env(z, T, p1_max, p2_min)
     g = Num[]
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-π/2, π/2-xt[3]])
+        #jappend!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-2π, 2π-xt[3]])
+        append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min])
     end
     g
 end
@@ -57,8 +58,8 @@ function poly_from(x::AbstractArray{T}, angles, lengths) where T
     p1, p2, θ = x
     p = [p1,p2]
     for i in 1:m
-        #θi = θ + angles[i]
-        θi = angles[i]
+        θi = θ + angles[i]
+        #θi = angles[i]
         ai = [cos(θi), sin(θi)]
         bi = lengths[i] - ai'*p
         A[i,:] += ai
@@ -312,7 +313,6 @@ function setup(; T = 1,
     num_sds = length(sds)
 
     sd_keys = collect(keys(sds))
-
 
     #first_round = map(keys(sds)) do k
     #    sd = sds[k]
