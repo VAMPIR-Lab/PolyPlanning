@@ -24,7 +24,7 @@ function kinematic_bicycle_dyn(x, u, dt, L)
 end
 
 function identity_dyn(x, u, dt)
-    x + u
+    x + dt*u
 end
 
 function g_dyn(z, x0, T, dt, L)
@@ -41,12 +41,13 @@ function g_dyn(z, x0, T, dt, L)
     g
 end
 
-function g_env(z, T, p1_max, p2_min)
+function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     g = Num[]
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        #jappend!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-2π, 2π-xt[3]])
-        append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min])
+        ut = @view(z[(t-1)*6+4:(t-1)*6+6])
+        #append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-2π, 2π-xt[3]])
+        append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, u1_max-ut[1], ut[1]+u1_max, u2_max-ut[2], ut[2]+u2_max, u3_max-ut[3],ut[3]+u3_max, ])
     end
     g
 end
@@ -235,7 +236,9 @@ function get_sd_ids(z, T, A1o,b1o,A2o,b2o,A3o,b3o, angles, lengths)
            
             all_inds = collect(1:m1+m2)
             if sum(I2) > 1
-                error("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
+                @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
+                assignment1 = all_inds[I1 .|| I2]
+                assignment2 = all_inds[I1]
             elseif sum(I2) == 1
                 @info "two derivatives"
                 assignment1 = all_inds[I1 .|| I2]
@@ -257,6 +260,10 @@ function setup(; T = 1,
                 R = 0.01*I(2),
                 p1_max = 3.0,
                 p2_min = 0.0,
+                u1_max = 1.0,
+                u2_max = 1.0,
+                u3_max = π/2,
+                sides_per_poly=4,
                 rng = MersenneTwister(420),
                 angles = 0:2*π/5:(2π-0.01),
                 lengths = 0.5*rand(rng, 5) .+ 0.25)
@@ -265,14 +272,13 @@ function setup(; T = 1,
     #P2 = ConvexPolygon2D([randn(rng, 2) + [ 3,0] for _ in 1:8])
     #P3 = ConvexPolygon2D([randn(rng, 2) + [0,-1] for _ in 1:8])
 
-    A1 = Symbolics.@variables(A1[1:5,1:2])[1] |> Symbolics.scalarize
-    A2 = Symbolics.@variables(A2[1:5,1:2])[1] |> Symbolics.scalarize
-    A3 = Symbolics.@variables(A3[1:5,1:2])[1] |> Symbolics.scalarize
-    b1 = Symbolics.@variables(b1[1:5])[1] |> Symbolics.scalarize
-    b2 = Symbolics.@variables(b2[1:5])[1] |> Symbolics.scalarize
-    b3 = Symbolics.@variables(b3[1:5])[1] |> Symbolics.scalarize
+    A1 = Symbolics.@variables(A1[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
+    A2 = Symbolics.@variables(A2[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
+    A3 = Symbolics.@variables(A3[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
+    b1 = Symbolics.@variables(b1[1:sides_per_poly])[1] |> Symbolics.scalarize
+    b2 = Symbolics.@variables(b2[1:sides_per_poly])[1] |> Symbolics.scalarize
+    b3 = Symbolics.@variables(b3[1:sides_per_poly])[1] |> Symbolics.scalarize
 
-    sides_per_poly = 5
     avoid_polys = [ (A1,b1), (A2,b2), (A3,b3) ]
     N_polys = length(avoid_polys)
 
@@ -283,12 +289,14 @@ function setup(; T = 1,
     
     cost = f(z, T, goal_dir, R)
     cons_dyn = g_dyn(z, x0, T, dt, L)
-    cons_env = g_env(z, T, p1_max, p2_min)
+    cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     cons_simp = Num[]# collect(values(sds))[1]
 
     cons_nom = [cons_dyn; cons_env; cons_simp]
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize    
     λ_col = Symbolics.@variables(λ_col[1:T*2*N_polys])[1] |> Symbolics.scalarize
+
+    @infiltrate
 
     θ = [z; λ_nom; λ_col]
 
@@ -463,8 +471,8 @@ function setup(; T = 1,
                 #let sd_F_funcs=sd_F_funcs
                 #F_func_1! = sd_F_funcs1[ii1]
                 #F_func_2! = sd_F_funcs2[ii2]
-                sd_F_funcs1[ii1](F_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
-                sd_F_funcs2[ii2](F_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                !isempty(sd_keys) && sd_F_funcs1[ii1](F_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                !isempty(sd_keys) && sd_F_funcs2[ii2](F_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
                 F .+= F_col1_buf
                 F .+= F_col2_buf
                 #end
@@ -491,12 +499,10 @@ function setup(; T = 1,
                 k2 = length(assignments[2]) > 3 ? (t,e,assignments[2][1:3]) : (t,e,assignments[2])
                 ii1 = findfirst((sd_key == k1 for sd_key in sd_keys))
                 ii2 = findfirst((sd_key == k2 for sd_key in sd_keys))
-                J_func_1! = sd_J_funcs1[ii1]
-                J_func_2! = sd_J_funcs2[ii2]
                 #J_func_1! = sd_J_funcs[t,e,assignments[1]].loc_1
                 #J_func_2! = sd_J_funcs[t,e,assignments[2]].loc_2
-                J_func_1!(J_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
-                J_func_2!(J_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                !isempty(sd_keys) && sd_J_funcs1[ii1](J_col1_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
+                !isempty(sd_keys) && sd_J_funcs2[ii2](J_col2_buf, z_local, A1,b1,A2,b2,A3,b3, λ_col_local)
                 J_vals .+= J_col1_buf
                 J_vals .+= J_col2_buf
             end
@@ -509,23 +515,26 @@ function setup(; T = 1,
     n_nom = length(λ_nom)
     n_col = length(λ_col)
     θ = randn(n_z+n_nom+n_col)
-    @showprogress for fnc in sd_F_funcs1
+    @showprogress Threads.@threads for fnc in sd_F_funcs1
+        fvv = zeros(length(F_nom)) 
         @inbounds zz = θ[1:n_z]
         @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
-        fnc(fv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+        fnc(fvv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
     end
-    @showprogress for fnc in sd_F_funcs2
+    @showprogress Threads.@threads for fnc in sd_F_funcs2
+        fvv = zeros(length(F_nom)) 
         @inbounds zz = θ[1:n_z]
         @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
-        fnc(fv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+        fnc(fvv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
     end
-    @showprogress for jfnc in sd_J_funcs
+    @showprogress Threads.@threads for jfnc in sd_J_funcs
+        jvv = zeros(length(J_vals))
         @inbounds zz = θ[1:n_z]
         @inbounds λλ_col = θ[n_z+n_nom+1:n_z+n_nom+n_col]
         #@inbounds zz = @view(θ[1:length(z)])
         #@inbounds λλ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
-        jfnc.loc_1(jv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
-        jfnc.loc_2(jv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col) 
+        jfnc.loc_1(jvv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col)
+        jfnc.loc_2(jvv, zz, randn(5,2), randn(5), randn(5,2), randn(5), randn(5,2), randn(5), λλ_col) 
     end
     
     return (; F_both!, 
@@ -570,11 +579,12 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
     lines!(ax, [p1_max, p1_max], [p2_min, 10], color=:black)
     display(fig)
 
+    T = Int(n_z/6)
+
     if isnothing(θ0) 
         θ0 = zeros(n)
-        T = Int(n_z / 6)
         for t in 1:T
-            θ0[(t-1)*6+1:(t-1)*6+3] = x0[1:3]
+            θ0[(t-1)*6+1:(t-1)*6+3] = x0[1:3] + 0*[0.01, -0.5, 0.0*π]*t
         end
     end
 
@@ -676,10 +686,13 @@ function solve_prob(prob, x0, P1, P2, P3; θ0 = nothing)
     end
 
     sds = buf[end-n_col+1:end]
-    A,b = poly_from(θ[1:3], angles, lengths)
-    self_poly = ConvexPolygon2D(A,b)
 
-    plot!(ax, self_poly; color=:blue, linestyle=:dash)
+    for t in 1:T
+        xt = θ[(t-1)*6+1:(t-1)*6+3]
+        A,b = poly_from(xt, angles, lengths)
+        self_poly = ConvexPolygon2D(A,b)
+        plot!(ax, self_poly; color=:blue, linestyle=:dash)
+    end
     display(fig)
 
     #xt = z[1:3]
@@ -711,6 +724,9 @@ function setup_sep_planes(; T = 1,
                 R = 0.01*I(2),
                 p1_max = 3.0,
                 p2_min = 0.0,
+                u1_max = 1.0,
+                u2_max = 1.0,
+                u3_max = π/2,
                 rng = MersenneTwister(420),
                 angles = 0:2*π/5:(2π-0.01),
                 lengths = 0.5*rand(rng, 5) .+ 0.25)
@@ -731,7 +747,7 @@ function setup_sep_planes(; T = 1,
 
     cost = f(z, T, goal_dir, R)
     cons_dyn = g_dyn(z, x0, T, dt, L)
-    cons_env = g_env(z, T, p1_max, p2_min)
+    cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
 
     cons_nom = [cons_dyn; cons_env; cons_sps]
@@ -892,12 +908,14 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0 = nothing)
     #    JJnum[:,i] = (buf2-buf) / 1e-5
     #    JJact[:,i] = JJ*dθ
     #end
-
-    A,b = poly_from(θ[1:3], angles, lengths)
-    self_poly = ConvexPolygon2D(A,b)
-
-    plot!(ax, self_poly; color=:blue, linestyle=:dash)
+    for t in 1:T
+        xt = θ[(t-1)*6+1:(t-1)*6+3]
+        A,b = poly_from(xt, angles, lengths)
+        self_poly = ConvexPolygon2D(A,b)
+        plot!(ax, self_poly; color=:blue, linestyle=:dash)
+    end
     display(fig)
+
 
     #xt = z[1:3]
     #Ae,be = poly_from(xt, angles, lengths)
@@ -918,4 +936,73 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0 = nothing)
     @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
     
     (; status, info, θ, z, λ_nom)
+end
+
+function setup_meta(; T = 1,
+                dt = 1.0,
+                L = 1.0,
+                goal_dir = [0, -10.0],
+                R = 0.01*I(2),
+                p1_max = 3.0,
+                p2_min = 0.0,
+                rng = MersenneTwister(420),
+                angles = 0:2*π/5:(2π-0.01),
+                lengths = 0.5*rand(rng, 5) .+ 0.25)
+
+
+    max_sides = 6
+
+    Ao = Symbolics.@variables(Ao[1:max_sides,1:2])[1] |> Symbolics.scalarize
+    bo = Symbolics.@variables(bo[1:max_sides])[1] |> Symbolics.scalarize
+
+    z = Symbolics.@variables(z[1:6*T])[1] |> Symbolics.scalarize
+    x0 = Symbolics.@variables(x0[1:3])[1] |> Symbolics.scalarize
+
+    cost = f(z, T, goal_dir, R)
+    cons_dyn = g_dyn(z, x0, T, dt, L)
+    cons_env = g_env(z, T, p1_max, p2_min)
+    cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
+
+    cons_nom = [cons_dyn; cons_env; cons_sps]
+    λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize    
+
+    θ = [z; λ_nom]
+
+    lag = cost - cons_nom'*λ_nom
+    grad_lag = Symbolics.gradient(lag, z)
+    F_nom = [grad_lag; cons_nom]
+    F_nom! = Symbolics.build_function(F_nom, z, V1, V2, V3, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
+    
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps))]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps))]
+    n = length(l)
+
+    J_nom = Symbolics.sparsejacobian(F_nom, θ)
+    (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
+    J_vals_nom! = Symbolics.build_function(J_vals, z, V1, V2, V3, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
+
+    function F_both!(F, z_local, x0_local, V1,V2,V3, λ_nom_local)
+        F .= 0.0
+        F_nom!(F, z_local, V1, V2, V3, x0_local, λ_nom_local)
+        nothing
+    end
+
+
+    function J_both_vals!(J_vals, z_local, x0_local,V1, V2, V3, λ_nom_local)
+        J_vals .= 0.0
+        J_vals_nom!(J_vals, z_local, V1, V3, V3, x0_local, λ_nom_local)
+        nothing
+    end
+    
+    return (; F_both!, 
+            J_both=(J_rows_nom, J_cols_nom, J_both_vals!), 
+            l, 
+            u, 
+            n_z=length(z), 
+            n_nom=length(λ_nom), 
+            N_polys,
+            angles, 
+            lengths,
+            p1_max,
+            p2_min)
 end
