@@ -6,7 +6,7 @@ function f(z, T, R)
         #cost += ut'*R*ut - goal_dir'*xt[1:2]
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
-        cost += 0.5*ut'*R*ut
+        cost += 0.5*ut'*R*ut+ 0*xt[3]^2
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost
@@ -151,6 +151,9 @@ function f_pack_single(xt, Ae, be, Q, q)
     Itr = powerset(all_active_inds) |> collect
     for active_inds in Itr
         length(active_inds) > 2 && continue
+        if length(active_inds) == 2 && abs(active_inds[1]-active_inds[2])==2
+            continue
+        end
         assignment = [i ∈ active_inds for i in 1:m]
         try
             AA_active = collect(Aex[active_inds,:])
@@ -261,7 +264,7 @@ end
 function setup_quick(; T = 1,
                  dt = 1.0,
                 L = 1.0,
-                Q = [1.0 0; 0 1],
+                Q = 0.1*[1.0 0; 0 1],
                 q = [0, 0.0],
                 R = 0.01*I(3),
                 p1_max = 30.0,
@@ -284,7 +287,7 @@ function setup_quick(; T = 1,
            -1.0   0.0;
            0.0   1.0;
            1.0   0.0]
-    be = [0.5, 0.15, 0.5,0.15]
+    be = [0.75, 0.05, 0.75,0.05]
 
     z = Symbolics.@variables(z[1:6*T])[1] |> Symbolics.scalarize
     xt = Symbolics.@variables(xt[1:3])[1] |> Symbolics.scalarize
@@ -393,6 +396,9 @@ function setup_quick(; T = 1,
                 assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
                 for (ee, assignment) in enumerate(assignments_f)
                     gfv = get_gfv[assignment](xt,λ_f[ee])
+                    if any(isnan.(gfv))
+                        @infiltrate
+                    end
                     F[xt_inds] .+= gfv
                 end
             end
@@ -518,6 +524,14 @@ function gen_polys(N; side_length=4)
         end
         P
     end
+end
+
+function gen_hallway()
+    P1 = PolyPlanning.ConvexPolygon2D([[-5.0,0],[-5,-2], [-1,-2], [-1,0]]);
+    P2 = PolyPlanning.ConvexPolygon2D([[5.0,0],[5,-3.8], [0.4,-3.8], [0.4,0]]);
+    P3 = PolyPlanning.ConvexPolygon2D([[-5.0,-3.8],[5,-3.8], [-5,-8], [5,-8]]);
+    P4 = PolyPlanning.ConvexPolygon2D([[-5.0,0],[-5,-8], [-6,-8], [-6,0]]);
+    [P1,P2,P3,P4]
 end
 
 
