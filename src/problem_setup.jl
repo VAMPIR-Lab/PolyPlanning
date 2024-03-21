@@ -283,11 +283,15 @@ function setup_quick(; T = 1,
     Ao = Symbolics.@variables(Ao[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
 
-    Ae =  [0.0  -1.0;
-           -1.0   0.0;
-           0.0   1.0;
-           1.0   0.0]
-    be = [0.75, 0.05, 0.75,0.05]
+
+    Ae = [1.0   0.0;
+        0.0   1.0;
+        -1.0   0.0;
+        0.0  -1.0]
+    be = [ 0.05
+            0.75
+            0.05
+            0.75]
 
     z = Symbolics.@variables(z[1:6*T])[1] |> Symbolics.scalarize
     xt = Symbolics.@variables(xt[1:3])[1] |> Symbolics.scalarize
