@@ -409,21 +409,18 @@ function setup_quick(; T = 1,
                     get_lag[assignment](lag_buf, xt,Ao,bo,λte[ee]) 
                     sd = get_sd[assignment](xt,Ao,bo,λte[ee])
                     F[xt_inds] .+= lag_buf
-                    #F[λte_inds[ee] + offset] += sd
-                    F[λte_inds .+ offset] .+= sd*λ_normalized[ee]
+                    F[λte_inds[ee] + offset] += sd
+                    #F[λte_inds .+ offset] .+= sd*λ_normalized[ee]
                 end
             end
             
-            #if t == T
-            #    assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
-            #    for (ee, assignment) in enumerate(assignments_f)
-            #        gfv = get_gfv[assignment](xt,λ_f[ee])
-            #        if any(isnan.(gfv))
-            #            @infiltrate
-            #        end
-            #        F[xt_inds] .+= gfv
-            #    end
-            #end
+            if t == T
+                assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
+                for (ee, assignment) in enumerate(assignments_f)
+                    gfv = get_gfv[assignment](xt,λ_f[ee])
+                    F[xt_inds] .+= gfv
+                end
+            end
         end
         nothing
     end
