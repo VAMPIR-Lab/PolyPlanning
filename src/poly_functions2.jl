@@ -91,6 +91,22 @@ function plot!(ax, P::ConvexPolygon2D; kwargs...)
     vi = V[N]
     lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
 end
+function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
+    N = length(P[].V) 
+    V = @lift($P.V)
+    for i in 1:N-1
+        vii = @lift($V[i+1])
+        vi = @lift($V[i])
+        xs = @lift([$vi[1], $vii[1]])
+        ys = @lift([$vi[2], $vii[2]])
+        lines!(ax, xs, ys; kwargs...)
+    end
+    vii = @lift($V[1])
+    vi = @lift($V[N])
+    xs = @lift([$vi[1], $vii[1]])
+    ys = @lift([$vi[2], $vii[2]])
+    lines!(ax, xs, ys; kwargs...)
+end
 
 function signed_distance(P1::ConvexPolygon2D, 
                          P2::ConvexPolygon2D)
