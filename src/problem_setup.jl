@@ -1,12 +1,12 @@
 function f(z, T, R)
     cost = 0.0
     for t in 1:T
-        xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        ut = @view(z[(t-1)*6+4:(t-1)*6+6])
+        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
+        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
         #cost += ut'*R*ut - goal_dir'*xt[1:2]
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
-        cost += 0.5*ut'*R*ut+ 0*xt[3]^2
+        cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost
@@ -26,15 +26,16 @@ function kinematic_bicycle_dyn(x, u, dt, L)
 end
 
 function identity_dyn(x, u, dt)
-    x + dt*u
+    x + dt*[x[4:6]; u[1:2]; u[3]/10.0]
+    #x + dt*u
 end
 
 function g_dyn(z, x0, T, dt, L)
     g = Num[] 
     x_prev = x0
     for t in 1:T
-        xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        ut = @view(z[(t-1)*6+4:(t-1)*6+6])
+        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
+        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
         #append!(g, xt - kinematic_bicycle_dyn(x_prev, ut, dt, L))
         #append!(g, xt - pointmass_dyn(x_prev, ut, dt))
         append!(g, xt - identity_dyn(x_prev, ut, dt))
@@ -46,8 +47,8 @@ end
 function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     g = Num[]
     for t in 1:T
-        xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        ut = @view(z[(t-1)*6+4:(t-1)*6+6])
+        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
+        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
         #append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-2π, 2π-xt[3]])
         append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, u1_max-ut[1], ut[1]+u1_max, u2_max-ut[2], ut[2]+u2_max, u3_max-ut[3],ut[3]+u3_max, ])
     end
@@ -58,8 +59,8 @@ function poly_from(x::AbstractArray{T}, angles, lengths) where T
     m = length(angles)
     A = zeros(T, m, 2)
     b = zeros(T, m)
-    p1, p2, θ = x
-    p = [p1,p2]
+    p = x[1:2]
+    θ = x[3]
     for i in 1:m
         θi = θ + angles[i]
         #θi = angles[i]
@@ -68,16 +69,16 @@ function poly_from(x::AbstractArray{T}, angles, lengths) where T
         A[i,:] += ai
         b[i] += bi
     end
-   
     A, b
 end
 
 function shift_to(A,b,x)
-    p1,p2,θ = x
+    p = x[1:2]
+    θ = x[3]
     R = [cos(θ) sin(θ);
          -sin(θ) cos(θ)]
     At = A*R'
-    bt = b-At*x[1:2]
+    bt = b-At*p
     At,bt
 end
 
@@ -262,42 +263,41 @@ end
 
 
 function setup_quick(; T = 1,
-                 dt = 1.0,
-                L = 1.0,
-                Q = 0.1*[1.0 0; 0 1],
-                q = [0, 0.0],
-                R = 0.01*I(3),
-                p1_max = 30.0,
-                p2_min = -30.0,
-                u1_max = 1.0,
-                u2_max = 1.0,
-                u3_max = π/4,
-                sides_per_poly=4,
-                derivs_per_sd=4,
-                derivs_per_fv=4,
-                N_polys=4,
-                rng = MersenneTwister(420))
+                     dt = 0.1,
+                     L = 1.0,
+                     Q = 0.1*[1.0 0; 0 1],
+                     q = [0, 0.0],
+                     R = 0.01*I(3),
+                     p1_max = 500.0,
+                     p2_min = -500.0,
+                     u1_max = 1.0,
+                     u2_max = 1.0,
+                     u3_max = π/4,
+                     sides_per_poly=4,
+                     derivs_per_sd=4,
+                     derivs_per_fv=4,
+                     N_polys=4,
+                     rng = MersenneTwister(420))
     
     #Ae = Symbolics.@variables(Ae[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
     #be = Symbolics.@variables(be[1:sides_per_poly])[1] |> Symbolics.scalarize
     Ao = Symbolics.@variables(Ao[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
 
-
     Ae = [1.0   0.0;
-        0.0   1.0;
-        -1.0   0.0;
-        0.0  -1.0]
+          0.0   1.0;
+         -1.0   0.0;
+          0.0  -1.0]
     be = [ 0.05
-            0.75
-            0.05
-            0.75]
+           0.75
+           0.05
+           0.75]
 
-    z = Symbolics.@variables(z[1:6*T])[1] |> Symbolics.scalarize
-    xt = Symbolics.@variables(xt[1:3])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:9*T])[1] |> Symbolics.scalarize
+    xt = Symbolics.@variables(xt[1:6])[1] |> Symbolics.scalarize
     λsd = Symbolics.@variables(λsd)
     α = Symbolics.@variables(α)
-    x0 = Symbolics.@variables(x0[1:3])[1] |> Symbolics.scalarize
+    x0 = Symbolics.@variables(x0[1:6])[1] |> Symbolics.scalarize
 
     #sds = g_col_all(z, T, A1,b1,A2,b2,A3,b3, angles, lengths)
     sds = g_col_single(xt, Ae, be, Ao, bo)
@@ -329,8 +329,9 @@ function setup_quick(; T = 1,
 
     Jnom = Symbolics.sparsejacobian(F_nom, θ)
     (Jnom_rows, Jnom_cols, Jnom_vals) = findnz(Jnom)
+    Jnom_buf = zeros(length(Jnom_vals))
     get_Fnom! = Symbolics.build_function(F_nom, z, x0, λ_nom, λ_f; expression=Val(false))[2]
-    get_Jnom_vals = Symbolics.build_function(Jnom_vals, z, x0, λ_nom, λ_f; expression=Val(false))[1]
+    get_Jnom_vals = Symbolics.build_function(Jnom_vals, z, x0, λ_nom, λ_f; expression=Val(false))[2]
 
     sd_grad_xt_lag_funcs = []
     sd_funcs = []
@@ -349,39 +350,55 @@ function setup_quick(; T = 1,
         lag = Symbolics.gradient(-sd*λsd[1], xt; simplify=false)
         #get_lag[k] = Symbolics.build_function(lag, xt,Ae,be,Ao,bo,λsd; expression=Val(false))[1] 
         #get_sd[k] = Symbolics.build_function(sd, xt, Ae,be,Ao,bo,λsd; expression=Val(false))
-        get_lag[k] = Symbolics.build_function(lag, xt,Ao,bo,λsd; expression=Val(false))[1] 
+        get_lag[k] = Symbolics.build_function(lag, xt,Ao,bo,λsd; expression=Val(false))[2] 
         get_sd[k] = Symbolics.build_function(sd, xt, Ao,bo,λsd; expression=Val(false))
 
-        Jlag = Symbolics.jacobian(lag, [xt; λsd]; simplify=false)
-        Jsd = Symbolics.jacobian([sd], xt; simplify=false)
+        Jlag = Symbolics.sparsejacobian(lag, [xt; λsd]; simplify=false)
+        Jsd = Symbolics.sparsejacobian([sd], xt; simplify=false)
 
+        Jlag_rows, Jlag_cols, Jlag_vals = findnz(Jlag)
+        if length(Jlag_vals) == 0
+            Jlag_rows = [1]
+            Jlag_cols = [1]
+            Jlag_vals = Num[0.0]
+        end
+        Jsd_rows, Jsd_cols, Jsd_vals = findnz(Jsd)
+        if length(Jsd_vals) == 0
+            Jsd_rows = [1]
+            Jsd_cols = [1]
+            Jsd_vals = Num[0.0]
+        end
         #get_Jlag[k] = Symbolics.build_function(Jlag,xt,Ae,be,Ao,bo,λsd; expression=Val(false))[1]
         #get_Jsd[k] = Symbolics.build_function(Jsd,xt,Ae,be,Ao,bo,λsd; expression=Val(false))[1]
-        get_Jlag[k] = Symbolics.build_function(Jlag,xt,Ao,bo,λsd; expression=Val(false))[1]
-        get_Jsd[k] = Symbolics.build_function(Jsd,xt,Ao,bo,λsd; expression=Val(false))[1]
+        get_Jlag[k] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals,xt,Ao,bo,λsd; expression=Val(false))[2], zeros(length(Jlag_rows)))
+        get_Jsd[k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals,xt,Ao,bo,λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
     end
     @info "Generating symbolic solutions to f calculation"
     @showprogress for (k, fv) in fvals
         gfv = Symbolics.gradient(fv*α[1], xt; simplify=false)
         get_gfv[k] = Symbolics.build_function(gfv,xt,α; expression=Val(false))[1] 
 
-        Jfv = Symbolics.jacobian(gfv, [xt; α]; simplify=false)
-        get_Jfv[k] = Symbolics.build_function(Jfv,xt,α; expression=Val(false))[1]
+        Jfv = Symbolics.sparsejacobian(gfv, [xt; α]; simplify=false)
+        Jfv_rows, Jfv_cols, Jfv_vals = findnz(Jfv)
+        get_Jfv[k] = (Jfv_rows, Jfv_cols, Symbolics.build_function(Jfv_vals,xt,α; expression=Val(false))[2], zeros(length(Jfv_rows)))
     end
 
     offset = length(z) + length(λ_f) + 1 + length(λ_nom)
+    lag_buf = zeros(6)
     function fill_F!(F,z,x0,Ae,be,polys,λ_f,λ_nom,λ_col)
         F .= 0.0
         get_Fnom!(F,z,x0,λ_nom,λ_f)
         for t in 1:T
             
-            xt_inds = (t-1)*6+1:(t-1)*6+3
-            xt = @view(z[xt_inds])
+            xt_inds = (t-1)*9+1:(t-1)*9+6
+            @inbounds xt = @view(z[xt_inds])
             for (e,P) in enumerate(polys)
                 Ao = P.A
                 bo = P.b
                 λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
-                λte = λ_col[λte_inds]
+                @inbounds λte = λ_col[λte_inds]
+                λ_norm = norm(λte)
+                λ_normalized =  λ_norm > 1.0 ? λte / λ_norm : ones(length(λte))/length(λte)
                 assignments = get_single_sd_ids(xt,Ae,be,Ao,bo,derivs_per_sd)
                 for (ee,assignment) in enumerate(assignments)
                     if length(assignment) > 3
@@ -389,30 +406,31 @@ function setup_quick(; T = 1,
                     end
                     #lag = get_lag[assignment](xt,Ae,be,Ao,bo,λte[ee]) 
                     #sd = get_sd[assignment](xt,Ae,be,Ao,bo,λte[ee])
-                    lag = get_lag[assignment](xt,Ao,bo,λte[ee]) 
+                    get_lag[assignment](lag_buf, xt,Ao,bo,λte[ee]) 
                     sd = get_sd[assignment](xt,Ao,bo,λte[ee])
-                    F[xt_inds] .+= lag
-                    F[λte_inds[ee] + offset] += sd
+                    F[xt_inds] .+= lag_buf
+                    #F[λte_inds[ee] + offset] += sd
+                    F[λte_inds .+ offset] .+= sd*λ_normalized[ee]
                 end
             end
             
-            if t == T
-                assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
-                for (ee, assignment) in enumerate(assignments_f)
-                    gfv = get_gfv[assignment](xt,λ_f[ee])
-                    if any(isnan.(gfv))
-                        @infiltrate
-                    end
-                    F[xt_inds] .+= gfv
-                end
-            end
+            #if t == T
+            #    assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
+            #    for (ee, assignment) in enumerate(assignments_f)
+            #        gfv = get_gfv[assignment](xt,λ_f[ee])
+            #        if any(isnan.(gfv))
+            #            @infiltrate
+            #        end
+            #        F[xt_inds] .+= gfv
+            #    end
+            #end
         end
         nothing
     end
 
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)),n,n)
     for t in 1:T
-        xt_inds = (t-1)*6+1:(t-1)*6+3
+        xt_inds = (t-1)*9+1:(t-1)*9+6
         for e in 1:N_polys
             λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
             J_example[xt_inds,xt_inds] .= 1.0
@@ -426,20 +444,23 @@ function setup_quick(; T = 1,
         end
     end
 
-    function get_J_both(z, x0, Ae,be, polys,λ_f,λ_nom,λ_col)
-        JJ = similar(J_example)
+
+    function get_J_both(JJ, z, x0, Ae,be, polys,λ_f,λ_nom,λ_col)
         JJ.nzval .= 1e-16
-        vals = get_Jnom_vals(z, x0, λ_nom, λ_f)
-        JJ += sparse(Jnom_rows, Jnom_cols, vals, n, n)
+        get_Jnom_vals(Jnom_buf, z, x0, λ_nom, λ_f)
+        #vals = get_Jnom_vals(z, x0, λ_nom, λ_f)
+        JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
         for t in 1:T
-            xt_inds = (t-1)*6+1:(t-1)*6+3
-            xt = z[xt_inds]
+            xt_inds = (t-1)*9+1:(t-1)*9+6
+            @inbounds xt = z[xt_inds]
             for (e,P) in enumerate(polys)
                 Ao = collect(P.A)
                 bo = P.b
                 λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
-                λte = λ_col[λte_inds]
+                @inbounds λte = λ_col[λte_inds]
+                λ_norm = norm(λte)
+                λ_normalized =  λ_norm > 1.0 ? λte / λ_norm : ones(length(λte))/length(λte)
                 assignments = get_single_sd_ids(xt,Ae,be,Ao,bo,derivs_per_sd)
                 for (ee, assignment) in enumerate(assignments)
                     if length(assignment) > 3
@@ -447,23 +468,28 @@ function setup_quick(; T = 1,
                     end
                     #Jlag = get_Jlag[assignment](xt,Ae,be,Ao,bo,λte[ee])
                     #Jsd = get_Jsd[assignment](xt,Ae,be,Ao,bo,λte[ee])
-                    Jlag = get_Jlag[assignment](xt,Ao,bo,λte[ee])
-                    Jsd = get_Jsd[assignment](xt,Ao,bo,λte[ee])
-                    JJ[xt_inds,xt_inds] += Jlag[1:3,1:3]
-                    JJ[xt_inds,λte_inds[ee]+offset] += Jlag[1:3,end]
-                    JJ[λte_inds[ee]+offset, xt_inds] .+= Jsd[:]
+                    Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[assignment]
+                    Jlag_vals(Jlag_buf, xt,Ao,bo,λte[ee])
+                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6,7)
+                    Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[assignment]
+                    Jsd_vals(Jsd_buf, xt,Ao,bo,λte[ee])
+                    Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1,6)
+                    @inbounds JJ[xt_inds,xt_inds] .+= Jlag[1:6,1:6]
+                    @inbounds JJ[xt_inds,λte_inds[ee]+offset] .+= Jlag[1:6,end]
+                    @inbounds JJ[λte_inds[ee]+offset, xt_inds] .+= Jsd[:]
                 end
             end
-            if t == T
-                assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
-                for (ee, assignment) in enumerate(assignments_f)
-                    Jfv = get_Jfv[assignment](xt,λ_f[ee]) 
-                    JJ[xt_inds,xt_inds] += Jfv[:,1:length(xt_inds)]
-                    JJ[xt_inds,length(z)+ee] += Jfv[:,end]
-                end
-            end
+            #if t == T
+            #    assignments_f = get_single_f_pack_ids(xt, Ae, be, Q, q, derivs_per_fv, fkeys)
+            #    for (ee, assignment) in enumerate(assignments_f)
+            #        Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[assignment]
+            #        Jfv_vals(Jfv_buf, xt,λ_f[ee])
+            #        Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6,7)
+            #        @inbounds JJ[xt_inds,xt_inds] .+= Jfv[:,1:length(xt_inds)]
+            #        @inbounds JJ[xt_inds,length(z)+ee] .+= Jfv[:,end]
+            #    end
+            #end
         end
-        JJ
     end
     
     @info "Forcing compilation"
@@ -471,18 +497,19 @@ function setup_quick(; T = 1,
     n_nom = length(λ_nom)
     n_f = length(λ_f) 
     n_col = length(λ_col)
-    xtr = randn(3)
+    xtr = randn(6)
     Aer = randn(sides_per_poly, 2)
     ber = randn(sides_per_poly)
     Aor = randn(sides_per_poly, 2)
     bor = randn(sides_per_poly)
+    lag_buf = zeros(6)
     λsdr = randn()
     α = randn()
     @showprogress for k in collect(keys(sds))
-        ll = get_lag[k](xtr,Aor,bor, λsdr)
+        get_lag[k](lag_buf, xtr,Aor,bor, λsdr)
         ss = get_sd[k](xtr,Aor,bor, λsdr)
-        J1 = get_Jlag[k](xtr,Aor,bor,λsdr)
-        J2 = get_Jsd[k](xtr,Aor,bor,λsdr)
+        get_Jlag[k][3](get_Jlag[k][4],xtr,Aor,bor,λsdr)
+        get_Jsd[k][3](get_Jsd[k][4],xtr,Aor,bor,λsdr)
         #ll = get_lag[k](xtr,Aer,ber,Aor,bor, λsdr)
         #ss = get_sd[k](xtr,Aer,ber,Aor,bor, λsdr)
         #J1 = get_Jlag[k](xtr,Aer,ber,Aor,bor,λsdr)
@@ -490,7 +517,7 @@ function setup_quick(; T = 1,
     end
     @showprogress for k in collect(keys(fvals))
         gfv = get_gfv[k](xtr,α)
-        Jfv = get_Jfv[k](xtr,α)
+        Jfv = get_Jfv[k][3](get_Jfv[k][4],xtr,α)
     end
     
     return (; fill_F!, 
@@ -531,9 +558,9 @@ function gen_polys(N; side_length=4)
 end
 
 function gen_hallway()
-    P1 = PolyPlanning.ConvexPolygon2D([[-5.0,0],[-5,-2], [-1,-2], [-1,0]]);
-    P2 = PolyPlanning.ConvexPolygon2D([[5.0,0],[5,-3.8], [0.4,-3.8], [0.4,0]]);
-    P3 = PolyPlanning.ConvexPolygon2D([[-5.0,-3.8],[5,-3.8], [-5,-8], [5,-8]]);
+    P1 = PolyPlanning.ConvexPolygon2D([[-5.0,0],[-5,-2], [-0.4,-2], [-0.4,0]]);
+    P2 = PolyPlanning.ConvexPolygon2D([[5.0,0],[5,-2.8], [0.4,-2.8], [0.4,0]]);
+    P3 = PolyPlanning.ConvexPolygon2D([[-5.0,-2.8],[5,-2.8], [-5,-8], [5,-8]]);
     P4 = PolyPlanning.ConvexPolygon2D([[-5.0,0],[-5,-8], [-6,-8], [-6,0]]);
     [P1,P2,P3,P4]
 end
@@ -567,7 +594,7 @@ function solve_quick(prob, x0, polys, Pe; θ0 = nothing)
     if isnothing(θ0) 
         θ0 = zeros(n)
         for t in 1:T
-            θ0[(t-1)*6+1:(t-1)*6+3] = x0[1:3]
+            θ0[(t-1)*9+1:(t-1)*9+6] = x0
         end
         θ0[n_z+1:n_z+n_f] .= 1.0/n_f
     end
@@ -597,11 +624,11 @@ function solve_quick(prob, x0, polys, Pe; θ0 = nothing)
         @inbounds λ_f = θ[n_z+1:n_z+n_f]
         @inbounds λ_nom = θ[n_z+n_f+1+1:n_z+n_f+1+n_nom]
         @inbounds λ_col = θ[n_z+n_f+1+n_nom+1:n_z+n_f+1+n_nom+n_col]
-        J_mat = get_J_both(z, x0, Pe.A, Pe.b, polys, λ_f, λ_nom, λ_col)
+        get_J_both(JJ, z, x0, Pe.A, Pe.b, polys, λ_f, λ_nom, λ_col)
         col .= J_col
         len .= J_len
         row .= J_row
-        data .= J_mat.nzval
+        data .= JJ.nzval
         Cint(0)
     end
 
@@ -630,8 +657,8 @@ function solve_quick(prob, x0, polys, Pe; θ0 = nothing)
          #convergence_tolerance=1e-8
         )
 
-    for t in 1:T
-        xt = θ[(t-1)*6+1:(t-1)*6+3]
+    for t in 10:10:T
+        xt = θ[(t-1)*9+1:(t-1)*9+6]
         Ae,be = shift_to(Pe.A, Pe.b, xt)
         self_poly = ConvexPolygon2D(Ae,be)
         plot!(ax, self_poly; color=:blue, linestyle=:dash)
