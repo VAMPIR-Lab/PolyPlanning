@@ -345,7 +345,7 @@ function setup_quick(ego_polys;
     F_nom = [grad_lag; zeros(Num, num_f_mults+num_sd_mults); simplex_cons; cons_nom; zeros(Num, num_sd_cons)]
 
     l = [fill(-Inf, length(grad_lag)); fill(0.0, num_f_mults+num_sd_mults); fill(-Inf, length(simplex_cons)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(num_sd_cons)]
-    u = [fill(+Inf, length(grad_lag)); fill(1.0, num_f_mults+num_sd_mults); fill(Inf, length(simplex_cons)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, num_sd_cons)]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, num_f_mults+num_sd_mults); fill(Inf, length(simplex_cons)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, num_sd_cons)]
     n = length(l)
 
     Jnom = Symbolics.sparsejacobian(F_nom, θ)
@@ -414,7 +414,7 @@ function setup_quick(ego_polys;
         F .= 0.0
         get_Fnom!(F,z,x0,λ_nom,α_f,β_sd)
         for i in 1:N_ego_polys
-
+            i == 2 && continue
             for t in 1:T
                 xt_inds = (t-1)*9+1:(t-1)*9+6
                 @inbounds xt = z[xt_inds]
@@ -438,15 +438,15 @@ function setup_quick(ego_polys;
                     end
                 end
                 
-                if t == T && i == 1
-                    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
-                    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
-                    @inbounds αi = α_f[α_inds]
-                    for (ee, assignment) in enumerate(assignments_f)
-                        get_gfv[i,assignment](lag_buf,xt,αi[ee])
-                        F[xt_inds] .+= lag_buf 
-                    end
-                end
+                #if t == T
+                #    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
+                #    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
+                #    @inbounds αi = α_f[α_inds]
+                #    for (ee, assignment) in enumerate(assignments_f)
+                #        get_gfv[i,assignment](lag_buf,xt,αi[ee])
+                #        F[xt_inds] .+= lag_buf 
+                #    end
+                #end
             end
         end
         nothing
@@ -458,6 +458,7 @@ function setup_quick(ego_polys;
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
     
         for i in 1:N_ego_polys
+            i == 2 && continue
             for t in 1:T
                 xt_inds = (t-1)*9+1:(t-1)*9+6
                 @inbounds xt = z[xt_inds]
@@ -490,18 +491,18 @@ function setup_quick(ego_polys;
                         @inbounds JJ[λ_ind+col_offset, β_inds[ee]+β_offset] += Jsd[7]
                     end
                 end
-                if t == T && i == 1
-                    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
-                    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
-                    @inbounds αi = α_f[α_inds]
-                    for (ee, assignment) in enumerate(assignments_f)
-                        Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[i,assignment]
-                        Jfv_vals(Jfv_buf, xt, αi[ee])
-                        Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6,7)
-                        @inbounds JJ[xt_inds,xt_inds] .+= Jfv[:,1:length(xt_inds)]
-                        @inbounds JJ[xt_inds,length(z)+α_inds[ee]] .+= Jfv[:,end]
-                    end
-                end
+                #if t == T
+                #    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
+                #    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
+                #    @inbounds αi = α_f[α_inds]
+                #    for (ee, assignment) in enumerate(assignments_f)
+                #        Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[i,assignment]
+                #        Jfv_vals(Jfv_buf, xt, αi[ee])
+                #        Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6,7)
+                #        @inbounds JJ[xt_inds,xt_inds] .+= Jfv[:,1:length(xt_inds)]
+                #        @inbounds JJ[xt_inds,length(z)+α_inds[ee]] .+= Jfv[:,end]
+                #    end
+                #end
             end
         end
         nothing
@@ -509,6 +510,7 @@ function setup_quick(ego_polys;
 
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)),n,n)
     for i in 1:N_ego_polys
+        i == 2 && continue
         for t in 1:T
             xt_inds = (t-1)*9+1:(t-1)*9+6
             for e in 1:N_polys
@@ -560,6 +562,8 @@ function setup_quick(ego_polys;
             Jfv = get_Jfv[i,k][3](get_Jfv[i,k][4],xtr,αr)
         end
     end
+    
+    @infiltrate
  
     return (; fill_F!, 
             get_J_both,
@@ -658,7 +662,7 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
 
     if isnothing(θ0) 
         θ0 = zeros(n)
-        derivs_per_sd = Int(n_β/(T*N_polys))
+        derivs_per_sd = Int(n_β/(T*length(ego_polys)*N_polys))
         for t in 1:T
             θ0[(t-1)*9+1:(t-1)*9+6] = x0
         end
