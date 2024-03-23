@@ -332,13 +332,15 @@ function setup_quick(ego_polys;
 
     simplex_cons = Num[]
     for i in 1:N_ego_polys
-        push!(simplex_cons, 1.0-sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
+        #push!(simplex_cons, 1.0-sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
+        push!(simplex_cons, 0.0)
     end
     for i in 1:N_ego_polys
         offset = (i-1)*T*N_polys*derivs_per_sd
         for t in 1:T
             for j in 1:N_polys
                 push!(simplex_cons, 1.0 - sum(β_sd[(1:derivs_per_sd) .+ (offset+(t-1)*N_polys*derivs_per_sd+(j-1)*derivs_per_sd)]))
+                #push!(simplex_cons, 0.0)
             end
         end
     end
@@ -414,7 +416,6 @@ function setup_quick(ego_polys;
         F .= 0.0
         get_Fnom!(F,z,x0,λ_nom,α_f,β_sd)
         for i in 1:N_ego_polys
-            i == 2 && continue
             for t in 1:T
                 xt_inds = (t-1)*9+1:(t-1)*9+6
                 @inbounds xt = z[xt_inds]
@@ -458,7 +459,6 @@ function setup_quick(ego_polys;
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
     
         for i in 1:N_ego_polys
-            i == 2 && continue
             for t in 1:T
                 xt_inds = (t-1)*9+1:(t-1)*9+6
                 @inbounds xt = z[xt_inds]
@@ -510,7 +510,6 @@ function setup_quick(ego_polys;
 
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)),n,n)
     for i in 1:N_ego_polys
-        i == 2 && continue
         for t in 1:T
             xt_inds = (t-1)*9+1:(t-1)*9+6
             for e in 1:N_polys
@@ -524,9 +523,9 @@ function setup_quick(ego_polys;
                     J_example[col_offset+λ_ind,β_offset+l] = 1.0
                 end
             end
-            if t==T
-                J_example[xt_inds,length(z)+1:length(z)+length(α_f)] .= 1.0
-            end
+            #if t==T
+            #    J_example[xt_inds,length(z)+1:length(z)+length(α_f)] .= 1.0
+            #end
         end
     end
     
@@ -641,7 +640,7 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1],Aeb[2])
         plot!(ax, self_poly; color=:blue)
-        for t in 1:T
+        for t in 5:5:T
             xxts[i,t] = Observable(x0[1:3])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i,t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1],$(Aeb)[2]))
@@ -689,7 +688,7 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         fill_F!(result, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         #for t in 10:10:T
         for i in 1:length(ego_polys)
-            for t in 1:T
+            for t in 5:5:T
                 xxts[i,t][] = θ[(t-1)*9+1:(t-1)*9+6] 
             end
         end
@@ -710,6 +709,8 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         data .= JJ.nzval
         Cint(0)
     end
+
+    @infiltrate
 
     buf = zeros(n)
     buf2 = zeros(n)
