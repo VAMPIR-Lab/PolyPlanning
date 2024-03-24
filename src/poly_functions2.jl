@@ -66,6 +66,14 @@ struct ConvexPolygon2D
         end
         
         A = hcat(A...)' 
+        θs = map(1:size(A,1)) do i
+            ai = A[i,:]
+            θ = atan(ai[2],ai[1])
+        end
+        I = sortperm(θs) |> reverse 
+        A = A[I,:]
+        b = b[I]
+        
         supporting_verts = Set(supporting_verts) |> collect
         V = V[supporting_verts]
         c = sum(V) / length(V)

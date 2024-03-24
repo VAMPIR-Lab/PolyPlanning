@@ -332,15 +332,13 @@ function setup_quick(ego_polys;
 
     simplex_cons = Num[]
     for i in 1:N_ego_polys
-        #push!(simplex_cons, 1.0-sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
-        push!(simplex_cons, 0.0)
+        push!(simplex_cons, 1.0-sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
     end
     for i in 1:N_ego_polys
         offset = (i-1)*T*N_polys*derivs_per_sd
         for t in 1:T
             for j in 1:N_polys
                 push!(simplex_cons, 1.0 - sum(β_sd[(1:derivs_per_sd) .+ (offset+(t-1)*N_polys*derivs_per_sd+(j-1)*derivs_per_sd)]))
-                #push!(simplex_cons, 0.0)
             end
         end
     end
@@ -439,15 +437,15 @@ function setup_quick(ego_polys;
                     end
                 end
                 
-                #if t == T
-                #    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
-                #    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
-                #    @inbounds αi = α_f[α_inds]
-                #    for (ee, assignment) in enumerate(assignments_f)
-                #        get_gfv[i,assignment](lag_buf,xt,αi[ee])
-                #        F[xt_inds] .+= lag_buf 
-                #    end
-                #end
+                if t == T
+                    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
+                    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
+                    @inbounds αi = α_f[α_inds]
+                    for (ee, assignment) in enumerate(assignments_f)
+                        get_gfv[i,assignment](lag_buf,xt,αi[ee])
+                        F[xt_inds] .+= lag_buf 
+                    end
+                end
             end
         end
         nothing
@@ -491,18 +489,18 @@ function setup_quick(ego_polys;
                         @inbounds JJ[λ_ind+col_offset, β_inds[ee]+β_offset] += Jsd[7]
                     end
                 end
-                #if t == T
-                #    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
-                #    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
-                #    @inbounds αi = α_f[α_inds]
-                #    for (ee, assignment) in enumerate(assignments_f)
-                #        Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[i,assignment]
-                #        Jfv_vals(Jfv_buf, xt, αi[ee])
-                #        Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6,7)
-                #        @inbounds JJ[xt_inds,xt_inds] .+= Jfv[:,1:length(xt_inds)]
-                #        @inbounds JJ[xt_inds,length(z)+α_inds[ee]] .+= Jfv[:,end]
-                #    end
-                #end
+                if t == T
+                    assignments_f = get_single_f_pack_ids(xt, Aes[i], bes[i], Q, q, derivs_per_fv, fkeys[i])
+                    α_inds = (i-1)*derivs_per_fv+1:i*derivs_per_fv
+                    @inbounds αi = α_f[α_inds]
+                    for (ee, assignment) in enumerate(assignments_f)
+                        Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[i,assignment]
+                        Jfv_vals(Jfv_buf, xt, αi[ee])
+                        Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6,7)
+                        @inbounds JJ[xt_inds,xt_inds] .+= Jfv[:,1:length(xt_inds)]
+                        @inbounds JJ[xt_inds,length(z)+α_inds[ee]] .+= Jfv[:,end]
+                    end
+                end
             end
         end
         nothing
@@ -523,9 +521,9 @@ function setup_quick(ego_polys;
                     J_example[col_offset+λ_ind,β_offset+l] = 1.0
                 end
             end
-            #if t==T
-            #    J_example[xt_inds,length(z)+1:length(z)+length(α_f)] .= 1.0
-            #end
+            if t==T
+                J_example[xt_inds,length(z)+1:length(z)+length(α_f)] .= 1.0
+            end
         end
     end
     
@@ -640,12 +638,17 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1],Aeb[2])
         plot!(ax, self_poly; color=:blue)
-        for t in 5:5:T
+        for t in 5:5:T-1
             xxts[i,t] = Observable(x0[1:3])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i,t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1],$(Aeb)[2]))
             plot!(ax, self_poly; color=:blue, linestyle=:dash)
         end
+        t = T
+        xxts[i,t] = Observable(x0[1:3])
+        Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i,t])))
+        self_poly = @lift(ConvexPolygon2D($(Aeb)[1],$(Aeb)[2]))
+        plot!(ax, self_poly; color=:blue, linewidth=3)
     end
 
     #colors = [:red, :orange, :yellow, :green]
@@ -661,11 +664,12 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
 
     if isnothing(θ0) 
         θ0 = zeros(n)
+        derivs_per_fv = Int(n_α/length(ego_polys))
         derivs_per_sd = Int(n_β/(T*length(ego_polys)*N_polys))
         for t in 1:T
             θ0[(t-1)*9+1:(t-1)*9+6] = x0
         end
-        θ0[n_z+1:n_z+n_α] .= 1.0/n_α
+        θ0[n_z+1:n_z+n_α] .= 1.0/derivs_per_fv
         θ0[n_z+n_α+1:n_z+n_α+n_β] .= 1.0 / derivs_per_sd
     end
 
@@ -689,7 +693,7 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         #for t in 10:10:T
         for i in 1:length(ego_polys)
             for t in 5:5:T
-                xxts[i,t][] = θ[(t-1)*9+1:(t-1)*9+6] 
+                xxts[i,t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
             end
         end
         Cint(0)
@@ -710,14 +714,31 @@ function solve_quick(prob, x0, polys; θ0 = nothing)
         Cint(0)
     end
 
-    @infiltrate
 
     buf = zeros(n)
     buf2 = zeros(n)
     Jbuf = zeros(nnz_total)
 
-    F(n, θ0, buf)
-    J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    w = randn(length(θ0))
+    w = copy(θ0)
+
+    F(n, w, buf)
+    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+
+    Jrows, Jcols, _ = findnz(J_example)
+
+    Jnum = sparse(Jrows, Jcols, Jbuf)
+    Jnum2 = spzeros(n,n)
+    #@info "Testing Jacobian accuracy numerically"
+    #@showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-5
+    #    F(n, wi, buf2)
+    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    #end
+    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
+    
+    @infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
