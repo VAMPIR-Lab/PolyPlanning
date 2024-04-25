@@ -430,7 +430,18 @@ function setup_quick(ego_polys;
                             assignment = assignment[1:3]
                         end
                         get_lag[i, assignment](lag_buf, xt, Ao, bo, βte[ee], λte)
+                        #@infiltrate any(isnan.(βte[ee]))
                         βsd = get_sd[i, assignment](xt, Ao, bo, βte[ee], λte)
+
+                        #if any(isnan.(lag_buf))
+                        #    # lag_buf can be nan
+                        #    # needs permanent solution
+                        #    #@infiltrate
+                        #    xt[3] += 1e-15;
+                        #    get_lag[i, assignment](lag_buf, xt, Ao, bo, βte[ee], λte)
+                        #    @infiltrate any(isnan.(lag_buf))
+                        #end
+
                         F[xt_inds] .+= lag_buf
                         F[λ_ind+col_offset] += βsd
                         #F[λte_inds .+ offset] .+= sd*λ_normalized[ee]
@@ -477,11 +488,27 @@ function setup_quick(ego_polys;
                         #Jlag = get_Jlag[assignment](xt,Ae,be,Ao,bo,λte[ee])
                         #Jsd = get_Jsd[assignment](xt,Ae,be,Ao,bo,λte[ee])
                         Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i, assignment]
-                        Jlag_vals(Jlag_buf, xt, Ao, bo, βte[ee], λte)
-                        Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
                         Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
+                        Jlag_buf .= 0.
+                        Jsd_buf .= 0.
+                        Jlag_vals(Jlag_buf, xt, Ao, bo, βte[ee], λte)
                         Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
+                        Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
                         Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1, 7)
+
+                        @infiltrate any(isnan.(Jlag))
+
+                        #if any(isnan.(Jlag_buf))
+                        #    # Jlag and Jsd can be nan
+                        #    # needs permanent solution
+                        #    @infiltrate
+                        #    xt[3] += 1e-15;
+                        #    Jlag_vals(Jlag_buf, xt, Ao, bo, βte[ee], λte)
+                        #    Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
+                        #    @infiltrate any(isnan.(Jlag_buf))
+                        #    @infiltrate any(isnan.(Jsd_buf))
+                        #end
+                        
                         @inbounds JJ[xt_inds, xt_inds] .+= Jlag[1:6, 1:6]
                         @inbounds JJ[xt_inds, β_inds[ee]+β_offset] .+= Jlag[1:6, 7]
                         @inbounds JJ[xt_inds, λ_ind+col_offset] .+= Jlag[1:6, 8]
@@ -497,6 +524,8 @@ function setup_quick(ego_polys;
                         Jfv_rows, Jfv_cols, Jfv_vals, Jfv_buf = get_Jfv[i, assignment]
                         Jfv_vals(Jfv_buf, xt, αi[ee])
                         Jfv = sparse(Jfv_rows, Jfv_cols, Jfv_buf, 6, 7)
+                        @infiltrate any(isnan.(Jfv))
+
                         @inbounds JJ[xt_inds, xt_inds] .+= Jfv[:, 1:length(xt_inds)]
                         @inbounds JJ[xt_inds, length(z)+α_inds[ee]] .+= Jfv[:, end]
                     end
@@ -560,7 +589,7 @@ function setup_quick(ego_polys;
         end
     end
 
-    @infiltrate
+    #@infiltrate
 
     return (; fill_F!,
         get_J_both,
@@ -648,7 +677,7 @@ function gen_ego_L(; a=0.5)
     p2 = ConvexPolygon2D([[0, a + offset], [0, h_multip * a], [a, h_multip * a], [a - offset, a]])
     [p1, p2]
 end
-# x0 = [-5.5,0,pi/2+.2,0,0,0]
+# x0 = [-5.5,0,pi/2,0,0,0]
 
 function gen_hallway()
     P1 = PolyPlanning.ConvexPolygon2D([[-5.0, 0], [-5, -2], [-0.4, -2], [-0.4, 0]])
@@ -746,7 +775,9 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         @inbounds β_sd = θ[n_z+n_α+1:n_z+n_α+n_β]
         @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
         @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
+        #@infiltrate any(isnan.(z))
         get_J_both(JJ, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
+        #@infiltrate any(isnan.(JJ))
         col .= J_col
         len .= J_len
         row .= J_row
