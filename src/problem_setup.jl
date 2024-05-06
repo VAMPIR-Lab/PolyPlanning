@@ -818,7 +818,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         l,
         u,
         θ0;
-        silent=false,
+        silent=true,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",
@@ -891,7 +891,7 @@ end
 #    rng=MersenneTwister(420)
 
 function setup_sep_planes(;
-    T=2,
+    T=40,
     dt=0.2,
     L=1.0,
     #goal_dir=[0, -10.0],
@@ -970,6 +970,7 @@ function setup_sep_planes(;
         J_both=(J_rows_nom, J_cols_nom, J_both_vals!),
         l,
         u,
+        T,
         n_z=length(z),
         n_nom=length(λ_nom),
         N_polys,
@@ -981,7 +982,7 @@ end
 
 
 function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
-    (; F_both!, J_both, l, u, n_z, n_nom, N_polys, angles, lengths, p1_max, p2_min) = prob
+    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, angles, lengths, p1_max, p2_min) = prob
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -991,19 +992,52 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
+    #@infiltrate
     A, b = poly_from(x0, angles, lengths)
     self_poly = ConvexPolygon2D(A, b)
+    polys = [P1, P2, P3];
+    @assert length(polys) == N_polys
 
-    plot!(ax, self_poly; color=:blue)
+    ego_polys = [self_poly];
+    #@infiltrate
+    #plot!(ax, self_poly; color=:blue)
 
-    plot!(ax, P1; color=:red)
-    plot!(ax, P2; color=:red)
-    plot!(ax, P3; color=:red)
+    #plot!(ax, P1; color=:red)
+    #plot!(ax, P2; color=:red)
+    #plot!(ax, P3; color=:red)
 
-    lines!(ax, [-p1_max, p1_max], [p2_min, p2_min], color=:black)
-    lines!(ax, [-p1_max, -p1_max], [p2_min, 10], color=:black)
-    lines!(ax, [p1_max, p1_max], [p2_min, 10], color=:black)
+    #lines!(ax, [-p1_max, p1_max], [p2_min, p2_min], color=:black)
+    #lines!(ax, [-p1_max, -p1_max], [p2_min, 10], color=:black)
+    #lines!(ax, [p1_max, p1_max], [p2_min, 10], color=:black)
+    
+    xxts = Dict()
+    #for t in 10:10:T
+    for i in 1:length(ego_polys)
+        xx = x0[1:3]
+        Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
+        self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
+        plot!(ax, self_poly; color=:blue)
+        for t in 5:5:T-1
+            xxts[i, t] = Observable(x0[1:3])
+            Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+            self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
+            plot!(ax, self_poly; color=:blue, linestyle=:dash)
+        end
+        t = T
+        xxts[i, t] = Observable(x0[1:3])
+        Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+        self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
+        plot!(ax, self_poly; color=:blue, linewidth=3)
+    end
+
+    #colors = [:red, :orange, :yellow, :green]
+    colors = [:red for _ in 1:N_polys]
+    for (P, c) in zip(polys, colors)
+        plot!(ax, P; color=c)
+    end
+
     display(fig)
+    
 
 
     if isnothing(θ0)
@@ -1074,8 +1108,9 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         preprocess=1,
         output_warnings="no",
         jacobian_data_contiguous=true,
-        cumulative_iteration_limit=50_000
+        cumulative_iteration_limit=50_000,
         #convergence_tolerance=1e-8
+        convergence_tolerance=5e-4
     )
 
     #buf = zeros(n)
