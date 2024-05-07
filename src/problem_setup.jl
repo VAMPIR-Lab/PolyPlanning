@@ -95,6 +95,18 @@ function verts_from(x::AbstractArray{T}, angles, lengths) where {T}
     V
 end
 
+function verts_from(A::AbstractArray{T}, b) where {T}
+    m = length(b)
+    V = zeros(T, m, 2)
+
+    for i in 1:m-1
+        V[i, :] = -A[i:i+1, :] \ b[i:i+1]
+    end
+    V[m, :] = -A[[m, 1], :] \ b[[m, 1]]
+    V
+end
+
+
 function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
     m1 = length(b1)
     m2 = length(b2)
@@ -646,6 +658,16 @@ function gen_polys(N; side_length=4)
     end
 end
 
+#  _______ a
+# |______|  
+# <-----> l*a
+function gen_ego_rect(; a=0.5)
+    offset = a / 20
+    l_multip = 2
+    p1 = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
+    [p1]
+end
+
 # <-> a
 # ---  ---
 # | |__| |
@@ -707,7 +729,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
         plot!(ax, self_poly; color=:blue)
-        for t in 5:5:T-1
+        for t in 5:1:T-1
             xxts[i, t] = Observable(x0[1:3])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
@@ -851,11 +873,13 @@ end
 
 
 
-function g_col_sps(z, T, V1, V2, V3, angles, lengths)
+function g_col_sps(z, T, V1, V2, V3, Ae, be)
     cons = Num[]
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        verts = verts_from(xt, angles, lengths)
+        Aex, bex = shift_to(Ae, be, xt)
+        verts = verts_from(Aex, bex)
+        #@infiltrate
         m = size(verts, 1)
         for (e, V) in enumerate([V1, V2, V3])
             ate = @view(z[6*T+(t-1)*9+(e-1)*3+1:6*T+(t-1)*9+(e-1)*3+2])
@@ -890,7 +914,7 @@ end
 #    N_polys=4,
 #    rng=MersenneTwister(420)
 
-function setup_sep_planes(;
+function setup_sep_planes(ego_polys;
     T=40,
     dt=0.2,
     L=1.0,
@@ -933,7 +957,16 @@ function setup_sep_planes(;
     cost = f(z, T, R)
     cons_dyn = g_dyn(z, x0, T, dt, L)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
-    cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
+
+    #cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
+    cons_sps = map(ego_polys) do P
+        Ae = collect(P.A)
+        be = P.b
+        g_col_sps(z, T, V1, V2, V3, Ae, be)
+    end
+    cons_sps = cons_sps[1] # fix this later
+    #@infiltrate
+
 
     cons_nom = [cons_dyn; cons_env; cons_sps]
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
@@ -974,15 +1007,14 @@ function setup_sep_planes(;
         n_z=length(z),
         n_nom=length(λ_nom),
         N_polys,
-        angles,
-        lengths,
+        ego_polys,
         p1_max,
         p2_min)
 end
 
 
 function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, angles, lengths, p1_max, p2_min) = prob
+    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min) = prob
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -993,12 +1025,12 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
     #@infiltrate
-    A, b = poly_from(x0, angles, lengths)
-    self_poly = ConvexPolygon2D(A, b)
-    polys = [P1, P2, P3];
+    #A, b = poly_from(x0, angles, lengths)
+    #self_poly = ConvexPolygon2D(A, b)
+    polys = [P1, P2, P3]
     @assert length(polys) == N_polys
 
-    ego_polys = [self_poly];
+    #ego_polys = [self_poly]
     #@infiltrate
     #plot!(ax, self_poly; color=:blue)
 
@@ -1009,7 +1041,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     #lines!(ax, [-p1_max, p1_max], [p2_min, p2_min], color=:black)
     #lines!(ax, [-p1_max, -p1_max], [p2_min, 10], color=:black)
     #lines!(ax, [p1_max, p1_max], [p2_min, 10], color=:black)
-    
+
     xxts = Dict()
     #for t in 10:10:T
     for i in 1:length(ego_polys)
@@ -1037,7 +1069,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     end
 
     display(fig)
-    
+
 
 
     if isnothing(θ0)
@@ -1132,13 +1164,13 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     #    JJnum[:,i] = (buf2-buf) / 1e-5
     #    JJact[:,i] = JJ*dθ
     #end
-    for t in 1:T
-        xt = θ[(t-1)*6+1:(t-1)*6+3]
-        A, b = poly_from(xt, angles, lengths)
-        self_poly = ConvexPolygon2D(A, b)
-        plot!(ax, self_poly; color=:blue, linestyle=:dash)
-    end
-    display(fig)
+    #for t in 1:T
+    #    xt = θ[(t-1)*6+1:(t-1)*6+3]
+    #    A, b = poly_from(xt, angles, lengths)
+    #    self_poly = ConvexPolygon2D(A, b)
+    #    plot!(ax, self_poly; color=:blue, linestyle=:dash)
+    #end
+    #display(fig)
 
 
     #xt = z[1:3]
