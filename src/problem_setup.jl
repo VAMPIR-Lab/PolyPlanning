@@ -875,15 +875,18 @@ end
 
 function g_col_sps(z, T, V1, V2, V3, Ae, be)
     cons = Num[]
+    xdim = 6
+    #N_polys = 3
+
     for t in 1:T
-        xt = @view(z[(t-1)*6+1:(t-1)*6+3])
+        xt = @view(z[(t-1)*9+1:(t-1)*9+xdim])
         Aex, bex = shift_to(Ae, be, xt)
         verts = verts_from(Aex, bex)
         #@infiltrate
         m = size(verts, 1)
         for (e, V) in enumerate([V1, V2, V3])
-            ate = @view(z[6*T+(t-1)*9+(e-1)*3+1:6*T+(t-1)*9+(e-1)*3+2])
-            bte = z[6*T+(t-1)*9+(e-1)*3+3]
+            ate = @view(z[9*T+(t-1)*9+(e-1)*3+1:9*T+(t-1)*9+(e-1)*3+2])
+            bte = z[9*T+(t-1)*9+(e-1)*3+3]
             for i in 1:m
                 push!(cons, ate' * verts[i, :] + bte)
                 push!(cons, -ate' * V[i, :] - bte)
@@ -935,9 +938,7 @@ function setup_sep_planes(ego_polys;
     sides_per_poly=4,
     derivs_per_sd=4,
     derivs_per_fv=4,
-    N_polys=4,
-    angles=0:2*π/sides_per_poly:(2π-0.01),
-    lengths=0.5 * rand(rng, sides_per_poly) .+ 0.25)
+    N_polys=4)
 
     #P1 = ConvexPolygon2D([randn(rng, 2) + [-3,0] for _ in 1:8])
     #P2 = ConvexPolygon2D([randn(rng, 2) + [ 3,0] for _ in 1:8])
@@ -951,7 +952,7 @@ function setup_sep_planes(ego_polys;
     avoid_polys = [V1, V2, V3]
     N_polys = length(avoid_polys)
 
-    z = Symbolics.@variables(z[1:xdim*T+length(avoid_polys)*3*T])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:9*T+length(avoid_polys)*3*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
     cost = f(z, T, R)
@@ -959,14 +960,11 @@ function setup_sep_planes(ego_polys;
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
     #cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
-    cons_sps = map(ego_polys) do P
+    cons_sps = mapreduce(vcat, ego_polys) do P
         Ae = collect(P.A)
         be = P.b
         g_col_sps(z, T, V1, V2, V3, Ae, be)
     end
-    cons_sps = cons_sps[1] # fix this later
-    #@infiltrate
-
 
     cons_nom = [cons_dyn; cons_env; cons_sps]
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
@@ -986,16 +984,16 @@ function setup_sep_planes(ego_polys;
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
     J_vals_nom! = Symbolics.build_function(J_vals, z, V1, V2, V3, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    function F_both!(F, z_local, x0_local, V1, V2, V3, λ_nom_local)
+    function F_both!(F, z_local, x0_local, V1_local, V2_local, V3_local, λ_nom_local)
         F .= 0.0
-        F_nom!(F, z_local, V1, V2, V3, x0_local, λ_nom_local)
+        F_nom!(F, z_local, V1_local, V2_local, V3_local, x0_local, λ_nom_local)
         nothing
     end
 
 
-    function J_both_vals!(J_vals, z_local, x0_local, V1, V2, V3, λ_nom_local)
+    function J_both_vals!(J_vals, z_local, x0_local, V1_local, V2_local, V3_local, λ_nom_local)
         J_vals .= 0.0
-        J_vals_nom!(J_vals, z_local, V1, V3, V3, x0_local, λ_nom_local)
+        J_vals_nom!(J_vals, z_local, V1_local, V2_local, V3_local, x0_local, λ_nom_local)
         nothing
     end
 
@@ -1074,12 +1072,12 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
 
     if isnothing(θ0)
         θ0 = zeros(n)
-        T = Int(n_z / (6 + 3 * 3))
+        T = Int(n_z / (9 + 3 * 3))
         for t in 1:T
-            θ0[(t-1)*6+1:(t-1)*6+3] = x0[1:3]
+            θ0[(t-1)*9+1:(t-1)*9+6] = x0[1:6]
             for e in 1:3
-                θ0[6*T+(t-1)*9+(e-1)*3+1:6*T+(t-1)*9+(e-1)*3+2] = [0.0, 1]
-                θ0[6*T+(t-1)*9+(e-1)*3+3] = x0[2] - 2.0
+                θ0[9*T+(t-1)*9+(e-1)*3+1:9*T+(t-1)*9+(e-1)*3+2] = [0.0, 1]
+                θ0[9*T+(t-1)*9+(e-1)*3+3] = x0[2] - 2.0
             end
         end
     end
@@ -1103,6 +1101,11 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         @inbounds z = θ[1:n_z]
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
         F_both!(result, z, x0, V1, V2, V3, λ_nom)
+        for i in 1:length(ego_polys)
+            for t in 5:5:T
+                xxts[i, t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
+            end
+        end
         Cint(0)
     end
     function J(n, nnz, θ, col, len, row, data)
@@ -1145,47 +1148,11 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         convergence_tolerance=5e-4
     )
 
-    #buf = zeros(n)
-    #buf2 = zeros(n)
-    #F(n, θ, buf)
-    #J(n, nnz_total, θ, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-    #JJ = sparse(J_rows, J_cols, Jbuf, n, n) |> collect
-    #
-    #Jbuf = zeros(nnz_total)
-    #J(n, nnz_total, θ, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-    #JJ = sparse(J_rows, J_cols, Jbuf, n, n) |> collect
-    #JJnum = zeros(n,n)
-    #JJact = zeros(n,n)
 
-    #for i in 1:n
-    #    dθ = randn(n)
-    #    dθ = dθ / norm(dθ)
-    #    F(n,θ+1e-5*dθ, buf2)
-    #    JJnum[:,i] = (buf2-buf) / 1e-5
-    #    JJact[:,i] = JJ*dθ
-    #end
-    #for t in 1:T
-    #    xt = θ[(t-1)*6+1:(t-1)*6+3]
-    #    A, b = poly_from(xt, angles, lengths)
-    #    self_poly = ConvexPolygon2D(A, b)
-    #    plot!(ax, self_poly; color=:blue, linestyle=:dash)
-    #end
-    #display(fig)
+    fres = zeros(n)
 
-
-    #xt = z[1:3]
-    #Ae,be = poly_from(xt, angles, lengths)
-    #AA, bb, qq = gen_LP_data(Ae,be,A2,b2)
-    #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false);
-    #primals = ret.x
-    #duals = -ret.y
-    #cons = AA*primals+bb
-    #I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-    #I2 = duals .< 1e-2 .&& cons .< 1e-2
-    #I3 = duals .< 1e-2 .&& cons .≥ 1e-2
-    #sd = primals[3]
-
-
+    F(n, θ, fres)
+    display(fig)
 
     #@infiltrate status != PATHSolver.MCP_Solved
     @inbounds z = @view(θ[1:n_z])
