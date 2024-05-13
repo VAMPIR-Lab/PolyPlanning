@@ -1,26 +1,28 @@
 struct ConvexPolygon2D
     A::SparseMatrixCSC{Float64, Int64}
-    l::Vector{Float64}
-    u::Vector{Float64}
+    b::Vector{Float64}
     V::Vector{Vector{Float64}}
-    c::Vector{Float64}
-    function ConvexPolygon2D(A,l,u; tol=1e-5)
+    function ConvexPolygon2D(A,b,V)
+        new(A,b,V)
+    end
+    function ConvexPolygon2D(A,b; tol=1e-5)
         # Convert from Hrep to Vrep
-        m = length(l)
+        m = length(b)
         V = Vector{Float64}[]
+        for i in 1:m
+            nm = norm(A[i,:])
+            A[i,:] ./= nm
+            b[i] /= nm
+        end
         for i1 = 1:m
             a1 = A[i1,:]
             for i2 = i1+1:m
                 a2 = A[i2,:]
-                rhs = [l[i1] l[i1] u[i1] u[i1];
-                       l[i2] u[i2] l[i2] u[i2]]
+                rhs = [b[i1], b[i2]]
                 try
-                    v = [a1'; a2'] \ rhs
-                    for j in 1:4
-                        vj = v[:,j]
-                        if all(l .- tol .≤ A*vj .≤ u .+ tol)
-                            push!(V, vj)
-                        end
+                    v = [a1'; a2'] \ -rhs
+                    if all(- tol .≤ A*v+b)
+                        push!(V, v)
                     end
                 catch
                 end
@@ -28,52 +30,66 @@ struct ConvexPolygon2D
         end
         n_verts = length(V)
         c = sum(V) ./ n_verts
-        new(A,l,u,V,c)
+    
+        θs = map(V) do vi
+            d = vi-c
+            atan(d[2],d[1])
+        end
+        I = sortperm(θs) |> reverse
+        V = V[I]
+
+        new(A,b,V)
     end
     function ConvexPolygon2D(V; tol=1e-5)
         # Convert from Vrep to Hrep
+
         A = []
-        l = Float64[]
-        u = Float64[]
+        b = Float64[]
         N = length(V)
-        for i1 = 1:N
-            v1 = V[i1]
-            for i2 = i1+1:N
-                v2 = V[i2]
+        supporting_verts = Int[]
+        for i = 1:N
+            for j = 1:N
+                j == i && continue
+                v1 = V[i]
+                v2 = V[j]
                 t = v2-v1
-                ai = [-t[2], t[1]]
-                li = ai'*v1
-                if all(ai'*v ≥ li - tol for v in V)
+                t ./= norm(t)
+                ai = [t[2], -t[1]]
+                bi = -(ai'*v1)
+                if all( -tol .≤ ai'*v+bi for v in V)
                     push!(A,ai)
-                    push!(l,li)
-                else
-                    ai = -ai
-                    li = ai'*v1
-                    if all(ai'*v ≥ li - tol for v in V)
-                        push!(A,ai)
-                        push!(l,li)
-                    end
+                    push!(b,bi)
+                    push!(supporting_verts, i)
+                    push!(supporting_verts, j)
                 end
             end
         end
+        
         A = hcat(A...)' 
-        u = fill(Inf, length(l))
-        c = sum(V) ./ N
-        new(sparse(A),l,u,V,c)
+        θs = map(1:size(A,1)) do i
+            ai = A[i,:]
+            θ = atan(ai[2],ai[1])
+        end
+        I = sortperm(θs) |> reverse 
+        A = A[I,:]
+        b = b[I]
+        
+        supporting_verts = Set(supporting_verts) |> collect
+        V = V[supporting_verts]
+        c = sum(V) / length(V)
+        θs = map(V) do vi
+            d = vi-c
+            atan(d[2],d[1])
+        end
+        I = sortperm(θs) |> reverse
+        V = V[I]
+        new(sparse(A),b,V)
     end
 end
 
 function plot!(ax, P::ConvexPolygon2D; kwargs...)
     N = length(P.V) 
     V = P.V
-    c = P.c
-    VV = Vector{Float64}[]
-    θs = map(V) do vi
-        d = vi-c
-        atan(d[2],d[1])
-    end
-    I = sortperm(θs) |> reverse
-    V = V[I]
     for i in 1:N-1
         vii = V[i+1]
         vi = V[i]
@@ -82,152 +98,50 @@ function plot!(ax, P::ConvexPolygon2D; kwargs...)
     vii = V[1]
     vi = V[N]
     lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
-    scatter!(ax, [P.c[1],], [P.c[2],]; kwargs...)
+end
+function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
+    N = length(P[].V) 
+    V = @lift($P.V)
+    for i in 1:N-1
+        vii = @lift($V[i+1])
+        vi = @lift($V[i])
+        xs = @lift([$vi[1], $vii[1]])
+        ys = @lift([$vi[2], $vii[2]])
+        lines!(ax, xs, ys; kwargs...)
+    end
+    vii = @lift($V[1])
+    vi = @lift($V[N])
+    xs = @lift([$vi[1], $vii[1]])
+    ys = @lift([$vi[2], $vii[2]])
+    lines!(ax, xs, ys; kwargs...)
 end
 
 function signed_distance(P1::ConvexPolygon2D, 
-                         P2::ConvexPolygon2D;
-                         ax = nothing,
-                         phase_1_tol=1e-6)
-    I2 = sparse(1.0I, 2, 2)
-    P = [I2 -I2;
-            -I2 I2]
-    m1 = length(P1.l)
-    m2 = length(P2.l)
-    Z1 = spzeros(m1,2)
-    Z2 = spzeros(m2,2)
-    A = [P1.A Z1;
-            Z2 P2.A]
-    l = [P1.l; P2.l]
-    u = [P1.u; P2.u]
-    ret = solve_qp(OSQPSolver(); P, A, l, u, verbose=false, polish=true)
-    
-    if ret.info.obj_val > phase_1_tol
-        if !isnothing(ax)
-            x1 = ret.x[1:2]
-            x2 = ret.x[3:4]
-            scatter!(ax, [x1[1],], [x1[2],], color=:black)
-            scatter!(ax, [x2[1],], [x2[2],], color=:black)
-        end
-        return (; sd = ret.info.obj_val, ret)
-    else
-        
-        V = P2.V
-        c = P2.c
-        VV = Vector{Float64}[]
-        θs = map(V) do vi
-            d = vi-c
-            atan(d[2],d[1])
-        end
-        I = reverse(sortperm(θs))
-        V = V[I]
-        N = length(I)
-        for i in 1:N-1
-            t = V[i+1]-V[i]
-            t ./= norm(t)
-            n = [-t[2], t[1]]
-        end
-        return (; sd=0.0)
-        ## phase 2
-        #d = P1.c-P2.c
-        #d ./= norm(d)
-        #q = [d; -d] 
-        #A = [P1.A Z1;
-        #     P2.A Z2;
-        #     Z1 P1.A;
-        #     Z2 P2.A]
-        #l = [l; l]
-        #u = [u; u]
-        #ret = solve_qp(OSQPSolver(); q, A, l, u, verbose=false, polish=true, eps_abs=1e-8, eps_rel=1e-8)
-        #if !isnothing(ax)
-        #    x1 = ret.x[1:2]
-        #    x2 = ret.x[3:4]
-        #    scatter!(ax, [x1[1],], [x1[2],], color=:black)
-        #    scatter!(ax, [x2[1],], [x2[2],], color=:black)
-        #end
-        #return (; sd = ret.info.obj_val, ret)
-    end
+                         P2::ConvexPolygon2D)
+    A1 = P1.A
+    b1 = P1.b
+    A2 = P2.A
+    b2 = P2.b
+
+    m1 = length(b1)
+    m2 = length(b2)
+    M = [spzeros(m1,m1) A1 spzeros(m1,m2) sparse(-ones(m1,1));
+         -A1'  spzeros(2, 2) -A2' spzeros(2,1);
+         spzeros(m2, m1) A2 spzeros(m2,m2) spzeros(m2,1);
+         sparse(ones(1,m1)) spzeros(1,2) spzeros(1,m2) spzeros(1,1)]
+    q = [b1; zeros(2); b2; -1]
+    l = [zeros(m1); fill(-Inf, 2); zeros(m2); fill(-Inf, 1)]
+    u = fill(Inf, m1+m2+3)
+    ret = solve_lmcp(UsePATHSolver(), M, q, l, u) 
+    z = ret.z
+    num_weak = sum(z .< (l .+ 1e-4) .&& (M*z+q .< 1e-4))
+    y = ret.z[1:m1]
+    x = ret.z[m1+1:m1+2]
+    sd = y'*(A1*x+b1)
+    (; sd, y, x, ret.solve_status, ret.info, num_weak)
 end
 
-function signed_distance(P::ConvexPolygon2D, p::Vector{Float64})
-    V = P.V
-    c = P.c
-    VV = Vector{Float64}[]
-    θs = map(V) do vi
-        d = vi-c
-        atan(d[2],d[1])
-    end
-    I = reverse(sortperm(θs))
-    V = V[I]
-    N = length(I)
-    sds = Float64[]
-    for i in 1:N-1
-        t = V[i+1]-V[i]
-        t ./= norm(t)
-        ni = [-t[2], t[1]]
-        push!(sds, ni'*(p-V[i]))
-    end
-    t = V[1]-V[N]
-    t ./= norm(t)
-    ni = [-t[2], t[1]]
-    push!(sds, ni'*(p-V[N]))
-    id = argmax(sds)
-    return (; sd=sds[id], id)
-end
-
-
-
-function test_psd()
-    P = ConvexPolygon2D([[0.0,0], [1,0], [-0.5,1], [1.5,1], [0.5,2.5]])
-    G = [Vector{Float64}[] for _ in 1:5] 
-    H = [Vector{Float64}[] for _ in 1:5] 
-    res = 0.01
-    for t1 in -1:res:2
-        for t2 in -0.5:res:3
-            t = [t1,t2]
-            ret = signed_distance(P, t)
-            if ret.sd > 0
-                push!(G[ret.id], t)
-            else
-                push!(H[ret.id], t)
-            end
-        end
-    end
-    f = Figure()
-    ax = Axis(f[1,1], aspect=DataAspect())
-    colors = [:blue, :red, :green, :yellow, :pink]
-    for i in 1:5
-        xpts = [g[1] for g in G[i]]
-        ypts = [g[2] for g in G[i]]
-        scatter!(ax, xpts, ypts, color=colors[i], markersize=2)
-        xpts = [g[1] for g in H[i]]
-        ypts = [g[2] for g in H[i]]
-        scatter!(ax, xpts, ypts, color=colors[i], marker='*', markersize=2)
-    end
-    plot!(ax, P; color=:black)
-
-    display(f)
-end
-
-
-function test_sd(;trange=-5:0.1:5, plot_iters=[])
-    P1 = ConvexPolygon2D([[1.0,0],[0,2],[-1,0],[0,-1]])
-    sds = Float64[]
-    for (e,t) in enumerate(trange)
-        P2 = ConvexPolygon2D([[-0.2,3+t],[-0.1,-0.5+t],[1.3,2+t]])
-        if e in plot_iters
-            f = Figure(); ax = Axis(f[1,1], aspect=DataAspect())
-            plot!(ax, P1; color=:blue)
-            plot!(ax, P2; color=:red)
-            lines!(ax, [P1.c[1], P2.c[1]], [P1.c[2], P2.c[2]], color=:black)
-            (; sd) = signed_distance(P1, P2; ax)
-            display(f)
-        else
-            (; sd) = signed_distance(P1, P2)
-        end
-        push!(sds, sd)
-    end
-    f = Figure(); ax = Axis(f[1,1])
-    scatter!(ax, trange, sds)
-    display(f)
+function sym_signed_distance(P1::ConvexPolygon2D,
+                             P2::ConvexPolygon2D)
+    signed_distance(P1,P2) + signed_distance(P2,P1)
 end

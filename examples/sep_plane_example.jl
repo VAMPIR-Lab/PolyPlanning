@@ -1,7 +1,7 @@
 using PolyPlanning
 
 N_polys = 3
-#polys = PolyPlanning.gen_polys(N_polys);
+polys = PolyPlanning.gen_polys(N_polys);
 # to display:
 PolyPlanning.plot_polys(polys);
 x0 = [0.0, -5.0, 0.1, 0, 0, 0];
