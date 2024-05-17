@@ -645,7 +645,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         l,
         u,
         θ0;
-        silent=false,
+        silent=true,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",

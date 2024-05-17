@@ -1,3 +1,20 @@
+function poly_from(x::AbstractArray{T}, angles, lengths) where {T}
+    m = length(angles)
+    A = zeros(T, m, 2)
+    b = zeros(T, m)
+    p = x[1:2]
+    θ = x[3]
+    for i in 1:m
+        θi = θ + angles[i]
+        #θi = angles[i]
+        ai = [cos(θi), sin(θi)]
+        bi = lengths[i] - ai' * p
+        A[i, :] += ai
+        b[i] += bi
+    end
+    A, b
+end
+
 function verts_from(x::AbstractArray{T}, angles, lengths) where {T}
     m = length(angles)
     V = zeros(T, m, 2)
@@ -26,7 +43,7 @@ function g_col_sps(z, T, V1, V2, V3, Ae, be; n_xu=9, n_sps=9)
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
         Aex, bex = shift_to(Ae, be, xt)
-        verts = verts_from(Aex, bex)
+        verts = verts_from(Aex, bex) # I think this is the source of the bottleneck
         #@infiltrate
         m = size(verts, 1)
         for (e, V) in enumerate([V1, V2, V3])
@@ -62,7 +79,9 @@ end
 #    N_polys=4,
 #    rng=MersenneTwister(420)
 
-function setup_sep_planes(ego_polys;
+function setup_sep_planes(
+    ego_polys,
+    polys;
     T=40,
     dt=0.2,
     L=1.0,
@@ -83,25 +102,27 @@ function setup_sep_planes(ego_polys;
     sides_per_poly=4,
     derivs_per_sd=4,
     derivs_per_fv=4,
-    N_polys=4)
-
-    #P1 = ConvexPolygon2D([randn(rng, 2) + [-3,0] for _ in 1:8])
-    #P2 = ConvexPolygon2D([randn(rng, 2) + [ 3,0] for _ in 1:8])
-    #P3 = ConvexPolygon2D([randn(rng, 2) + [0,-1] for _ in 1:8])
+    N_polys=3)
     xdim = 6
     udim = 3
     n_xu = xdim + udim
 
+    (P1, P2, P3) = polys
+    V1 = hcat(P1.V...)' |> collect
+    V2 = hcat(P2.V...)' |> collect
+    V3 = hcat(P3.V...)' |> collect
     #V1 = Symbolics.@variables(V1[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     #V2 = Symbolics.@variables(V2[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     #V3 = Symbolics.@variables(V3[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
- 
-    avoid_polys = [V1, V2, V3]
-    N_polys = length(avoid_polys)
-    N_ego_polys = size(ego_polys)
-    n_sps = 3 * sides_per_poly * length(avoid_polys)
 
-    z = Symbolics.@variables(z[1:n_xu*T])[1] |> Symbolics.scalarize
+    #avoid_polys = [V1, V2, V3]
+    #@assert N_polys == length(avoid_polys)
+    N_polys = length(polys) # override
+    N_ego_polys = length(ego_polys)
+    n_sps = 3 * sides_per_poly * length(polys)
+
+    #Main.@infiltrate
+    z = Symbolics.@variables(z[1:n_xu*T+n_sps*T*N_ego_polys])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
     cost_nom = f(z, T, R)
@@ -109,76 +130,44 @@ function setup_sep_planes(ego_polys;
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
     #cons_sps = g_col_sps(z, T, V1, V2, V3, angles, lengths)
-    #cons_sps = map(ego_polys) do P
-    #    Ae = collect(P.A)
-    #    be = P.b
-    #    g_col_sps(z, T, V1, V2, V3, Ae, be; n_xu, n_sps)
-    #end
-    #cons_sps = cons_sps[1] # fix this later
-    #cons_nom = [cons_dyn; cons_env; cons_sps]
+    cons_sps = map(ego_polys) do P
+        Ae = collect(P.A)
+        be = P.b
+        g_col_sps(z, T, V1, V2, V3, Ae, be; n_xu, n_sps)
+    end
+    cons_sps = cons_sps[1] # fix this later
+    cons_nom = [cons_dyn; cons_env; cons_sps]
 
-    cons_nom = [cons_dyn; cons_env]
+    #cons_nom = [cons_dyn; cons_env]
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
-    λ_sps = Symbolics.@variables(λ_col[1:n_sps*T*N_ego_polys])[1] |> Symbolics.scalarize
 
-    θ = [z; λ_nom; λ_sps]
+    θ = [z; λ_nom]
 
     lag = cost_nom - cons_nom' * λ_nom
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; cons_nom]
     F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env))]
-    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env))]
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps))]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps))]
     n = length(l)
 
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
     J_vals_nom! = Symbolics.build_function(J_vals, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    function F_both!(F, z, x0, polys, λ_nom, λ_sps)
+    function F_both!(F, z_local, x0_local, λ_nom_local)
         F .= 0.0
-        F_nom!(F, z, x0, λ_nom)
-
-        for i in 1:N_ego_polys
-            Ae = collect(ego_polys[i].A)
-            be = ego_polys[i].b
-
-            for t in 1:T
-                # ???
-                xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+xdim
-                @inbounds xt = z[xt_inds]
-                Aex, bex = shift_to(Ae, be, xt)
-                verts = verts_from(Aex, bex)
-
-                for (e, V) in enumerate(polys)
-                    λ_ind = n_xu*T+(i-1)*n_sps*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(i-1)*n_sps*T+(t-1)*n_sps+(e-1)*3+3
-
-                    ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
-                    bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
-
-                    for i in 1:sides_per_poly
-
-                        F[n_xu*T+(t-1)*n_sps+(e-1)*3+1] .+= λ_ind[i]
-                        F[n_xu*T+(t-1)*n_sps+(e-1)*3+2] .+=
-                            F[n_xu*T+(t-1)*n_sps+(e-1)*3+1] .+=
-                                push!(cons, ate' * verts[i, :] + bte)
-                        push!(cons, -ate' * V[i, :] - bte)
-                    end
-                    #push!(cons, 1.0-ate'*ate)
-                    push!(cons, ate' * ate)
-                end
-            end
-        end
+        F_nom!(F, z_local, x0_local, λ_nom_local)
         nothing
     end
 
-
-    function J_both_vals!(J_vals, z_local, x0_local, V1, V2, V3, λ_nom_local)
+    function J_both_vals!(J_vals, z_local, x0_local, λ_nom_local)
         J_vals .= 0.0
-        J_vals_nom!(J_vals, z_local, V1, V2, V3, x0_local, λ_nom_local)
+        J_vals_nom!(J_vals, z_local, x0_local, λ_nom_local)
         nothing
     end
+
 
     return (; F_both!,
         J_both=(J_rows_nom, J_cols_nom, J_both_vals!),
@@ -192,13 +181,14 @@ function setup_sep_planes(ego_polys;
         p1_max,
         p2_min,
         n_xu,
-        n_sps
+        n_sps,
+        P1, P2, P3
     )
 end
 
 
 function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min, n_xu, n_sps) = prob
+    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min, n_xu, n_sps, P1, P2, P3) = prob
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -251,9 +241,9 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         end
     end
 
-    V1 = hcat(P1.V...)' |> collect
-    V2 = hcat(P2.V...)' |> collect
-    V3 = hcat(P3.V...)' |> collect
+    #V1 = hcat(P1.V...)' |> collect
+    #V2 = hcat(P2.V...)' |> collect
+    #V3 = hcat(P3.V...)' |> collect
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
     J_col = J_shape.colptr[1:end-1]
     J_len = diff(J_shape.colptr)
@@ -263,12 +253,12 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         result .= 0.0
         @inbounds z = θ[1:n_z]
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
-        F_both!(result, z, x0, V1, V2, V3, λ_nom)
-        for i in 1:length(ego_polys)
-            for t in 5:5:T
-                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-            end
-        end
+        F_both!(result, z, x0, λ_nom)
+        #for i in 1:length(ego_polys)
+        #    for t in 5:5:T
+        #        xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
+        #    end
+        #end
         Cint(0)
     end
     function J(n, nnz, θ, col, len, row, data)
@@ -276,7 +266,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         data .= 0.0
         @inbounds z = θ[1:n_z]
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
-        J_vals!(data, z, x0, V1, V2, V3, λ_nom)
+        J_vals!(data, z, x0, λ_nom)
         col .= J_col
         len .= J_len
         row .= J_row
@@ -300,7 +290,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         l,
         u,
         θ0;
-        silent=false,
+        silent=true,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",
