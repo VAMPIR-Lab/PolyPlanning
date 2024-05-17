@@ -7,7 +7,7 @@ function f(z, T, R)
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
         #cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
-        cost += 0.5 * ut' * R * ut + 0.001 * xt[1:2]' * xt[1:2]
+        cost += 0.5 * ut' * R * ut + 0.01 * xt[1:2]' * xt[1:2]
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost

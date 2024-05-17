@@ -636,6 +636,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
     #@info "Jacobian error is $(norm(Jnum2-Jnum))"
 
     #@infiltrate
+    #Main.@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
@@ -644,7 +645,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         l,
         u,
         θ0;
-        silent=true,
+        silent=false,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",
