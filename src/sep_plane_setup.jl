@@ -38,19 +38,32 @@ function verts_from(A::AbstractArray{T}, b) where {T}
     V
 end
 
-function g_col_sps(z, T, V1, V2, V3, Ae, be; n_xu=9, n_sps=9)
+function shift_to(V, x::AbstractArray{T}) where {T}
+    p = x[1:2]
+    θ = x[3]
+    R = [cos(θ) sin(θ)
+        -sin(θ) cos(θ)]
+    #Main.@infiltrate
+    m = size(V, 1)
+    Vx = zeros(T, m, 2)
+    for i in 1:m
+        Vx[i, :] = V[i, :] .+ R * p
+    end
+    Vx
+end
+
+
+function g_col_sps(z, T, V1, V2, V3, Ve; n_xu=9, n_sps=9)
     cons = Num[]
     for t in 1:T
         xt = @view(z[(t-1)*6+1:(t-1)*6+3])
-        Aex, bex = shift_to(Ae, be, xt)
-        verts = verts_from(Aex, bex) # I think this is the source of the bottleneck
-        #@infiltrate
-        m = size(verts, 1)
+        Vex = shift_to(Ve, xt)
+        m = size(Vex, 1)
         for (e, V) in enumerate([V1, V2, V3])
             ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
             bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
             for i in 1:m
-                push!(cons, ate' * verts[i, :] + bte)
+                push!(cons, ate' * Vex[i, :] + bte)
                 push!(cons, -ate' * V[i, :] - bte)
             end
             #push!(cons, 1.0-ate'*ate)
@@ -133,7 +146,8 @@ function setup_sep_planes(
     cons_sps = map(ego_polys) do P
         Ae = collect(P.A)
         be = P.b
-        g_col_sps(z, T, V1, V2, V3, Ae, be; n_xu, n_sps)
+        Ve = verts_from(Ae, be)
+        g_col_sps(z, T, V1, V2, V3, Ve; n_xu, n_sps)
     end
     cons_sps = cons_sps[1] # fix this later
     cons_nom = [cons_dyn; cons_env; cons_sps]
