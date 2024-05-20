@@ -56,33 +56,6 @@ function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     g
 end
 
-function poly_from(x::AbstractArray{T}, angles, lengths) where {T}
-    m = length(angles)
-    A = zeros(T, m, 2)
-    b = zeros(T, m)
-    p = x[1:2]
-    θ = x[3]
-    for i in 1:m
-        θi = θ + angles[i]
-        #θi = angles[i]
-        ai = [cos(θi), sin(θi)]
-        bi = lengths[i] - ai' * p
-        A[i, :] += ai
-        b[i] += bi
-    end
-    A, b
-end
-
-function shift_to(A, b, x)
-    p = x[1:2]
-    θ = x[3]
-    R = [cos(θ) sin(θ)
-        -sin(θ) cos(θ)]
-    At = A * R'
-    bt = b - At * p
-    At, bt
-end
-
 function plot_polys(polys)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())

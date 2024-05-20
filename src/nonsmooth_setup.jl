@@ -1,3 +1,13 @@
+function shift_to(A, b, x)
+    p = x[1:2]
+    θ = x[3]
+    R = [cos(θ) sin(θ)
+        -sin(θ) cos(θ)]
+    At = A * R'
+    bt = b - At * p
+    At, bt
+end
+
 function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
     m1 = length(b1)
     m2 = length(b2)
