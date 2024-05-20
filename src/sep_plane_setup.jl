@@ -19,12 +19,15 @@ function g_col_sps(z, T, V1, V2, V3, Ve; n_xu=9, n_sps=9)
             ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
             bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
             for i in 1:m
-                #Main.@infiltrate
                 push!(cons, ate' * Vex[i] + bte)
-                push!(cons, -ate' * V[i, :] - bte)
+                push!(cons, -ate' * V[i, :] - bte) # assuming number of vertices are equal between ego and obstacles
+                # why doesn't this work:
+                # a' x >= b, x ∈ C
+                # a' x <= b, x ∈ D 
+                #push!(cons, ate' * Vex[i] - bte)
+                #push!(cons, -ate' * V[i, :] + bte) 
             end
-            #push!(cons, 1.0-ate'*ate)
-            push!(cons, ate' * ate - .5)
+            push!(cons, ate' * ate - 0.5)
         end
     end
     cons
@@ -85,10 +88,9 @@ function setup_sep_planes(
         Ve = P.V
         g_col_sps(z, T, V1, V2, V3, Ve; n_xu, n_sps)
     end
-    cons_sps = cons_sps[1] # fix this later
-    cons_nom = [cons_dyn; cons_env; cons_sps]
+    cons_nom = [cons_dyn; cons_env; cons_sps...]
+    #Main.@infiltrate
 
-    #cons_nom = [cons_dyn; cons_env]
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
 
     θ = [z; λ_nom]
@@ -98,8 +100,8 @@ function setup_sep_planes(
     F_nom = [grad_lag; cons_nom]
     F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps))]
-    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps))]
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps...))]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps...))]
     n = length(l)
 
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
@@ -137,7 +139,7 @@ function setup_sep_planes(
 end
 
 
-function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
+function solve_prob_sep_planes(prob, x0; θ0=nothing)
     (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min, n_xu, n_sps, P1, P2, P3) = prob
 
     J_rows, J_cols, J_vals! = J_both
@@ -154,6 +156,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
     @assert length(polys) == N_polys
 
     xxts = Dict()
+    abts = Dict()
     for i in 1:length(ego_polys)
         xx = x0[1:3]
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
@@ -164,12 +167,29 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
             plot!(ax, self_poly; color=:blue, linestyle=:dash)
+
+            for e in 1:N_polys
+                abts[i, t, e] = Observable([0.5, 0.5, 1.0])
+                # a' x + b = 0
+                xs = @lift($(xxts[i, t])[1] .+ (-1:0.1:1))
+                ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
+
+                #GLMakie.lines!(ax, xs, ys; color=:green, linestyle=:dash)
+            end
         end
         t = T
         xxts[i, t] = Observable(x0[1:3])
         Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
         self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
         plot!(ax, self_poly; color=:blue, linewidth=3)
+
+        for e in 1:N_polys
+            abts[i, t, e] = Observable([0.5, 0.5, 1.0])
+            # a' x + b = 0
+            xs = @lift($(xxts[i, t])[1].+ (-1:0.1:1))
+            ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
+            GLMakie.lines!(ax, xs, ys; color=:green, linewidth=3)
+        end
     end
 
 
@@ -184,9 +204,10 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
-            for e in 1:3
-                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2] = [0.0, 1]
-                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+3] = x0[2] - 2.0
+            for e in 1:N_polys # warning assumes 3 obstacles
+                # make it based on the initial pos
+                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2] = [0.5, 0.5]
+                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+3] = 1.0
             end
         end
     end
@@ -207,6 +228,9 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         for i in 1:length(ego_polys)
             for t in 5:5:T
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
+                for e in 1:N_polys
+                    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
+                end
             end
         end
         Cint(0)
@@ -247,7 +271,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0=nothing)
         preprocess=1,
         output_warnings="no",
         jacobian_data_contiguous=true,
-        cumulative_iteration_limit=50_000,
+        cumulative_iteration_limit=100_000,
         #convergence_tolerance=1e-8
         convergence_tolerance=5e-4
     )
