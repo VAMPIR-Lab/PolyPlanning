@@ -543,7 +543,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
         plot!(ax, self_poly; color=:blue)
-        for t in 5:1:T-1
+        for t in 1:T#5:1:T-1
             xxts[i, t] = Observable(x0[1:3])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
@@ -597,7 +597,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         fill_F!(result, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         #for t in 10:10:T
         for i in 1:length(ego_polys)
-            for t in 5:5:T
+            for t in 1:T #5:5:T
                 xxts[i, t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
             end
         end

@@ -7,7 +7,7 @@ function f(z, T, R)
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
         #cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
-        cost += 0.5 * ut' * R * ut + 0.001 * xt[1:2]' * xt[1:2]
+        cost += 0.5 * ut' * R * ut + 0.1 * xt[1:2]' * xt[1:2]
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost
@@ -27,9 +27,14 @@ function kinematic_bicycle_dyn(x, u, dt, L)
 end
 
 function identity_dyn(x, u, dt)
-    x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
+    #v = dt * [u[1:2]; u[3] / 10.0]
+    #x + [dt * x[4:6] + dt * v / 2; v]
+    #x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
+    x + [u; u[1:2]; u[3] / 10.0] 
     #x + dt*u
 end
+
+
 
 function g_dyn(z, x0, T, dt, L)
     g = Num[]
