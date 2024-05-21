@@ -77,8 +77,6 @@ function setup_sep_planes(
     F_nom = [grad_lag; cons_nom]
     F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-#Main.@infiltrate
-
     l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps...))]
     u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps...))]
     n = length(l)
@@ -98,8 +96,6 @@ function setup_sep_planes(
         J_vals_nom!(J_vals, z_local, x0_local, λ_nom_local)
         nothing
     end
-
-    #Main.@infiltrate
 
     return (; F_both!,
         J_both=(J_rows_nom, J_cols_nom, J_both_vals!),
@@ -144,7 +140,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
         Vex = self_poly.V
-
 
         plot!(ax, self_poly; color=:blue)
         for t in 1:T# 5:5:T-1
@@ -252,9 +247,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
 
     F(n, θ0, buf)
     J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-
-    #@infiltrate
-    Main.@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(

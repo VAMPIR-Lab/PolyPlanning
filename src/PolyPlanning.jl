@@ -16,6 +16,8 @@ include("poly_functions.jl")
 include("problem_setup.jl")
 include("nonsmooth_setup.jl")
 include("sep_plane_setup.jl")
+include("direct_kkt_setup.jl")
+
 
 export ConvexPolygon2D
 
