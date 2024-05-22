@@ -4,7 +4,6 @@ prob = PolyPlanning.setup_quick(
     ego_L;
     T=50,
     dt=0.2,
-    L=1.0,
     Q=0.01 * [1.0 0; 0 1],
     q=[0, 0.0],
     R=0.01 * PolyPlanning.I(3),

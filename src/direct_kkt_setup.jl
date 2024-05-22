@@ -1,91 +1,101 @@
-function g_direct_kkt(z, T, Pe, polys)
-    cons = Num[]
+function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+
+    cons_kkt = Num[]
+    l_kkt = Float64[]
+    u_kkt = Float64[]
 
     for t in 1:T
+        n_per_t = n_per_col * n_obs * n_ego
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
-        Aex, bex = shift_to(Ae, be, xt)
+        yt = @view(z[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
 
-        for P in polys
-            Ao = P.A
-            bo = P.b
+        for (i, Pi) in enumerate(ego_polys)
+            n_per_ego = n_per_col * n_obs
+            yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
+            Ae = Pi.A
+            be = Pi.b
+            Aex, bex = shift_to(Ae, be, xt)
 
-            AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+            for (k, Pk) in enumerate(obs_polys)
+                xxt = @view(yti[(k-1)*n_per_col+1:(k-1)*n_per_col+3])
+                λt = @view(yti[(k-1)*n_per_col+4:(k-1)*n_per_col+n_per_col])
+                Ao = Matrix(Pk.A)
+                bo = Pk.b
 
-			#...
+                # min x' q, s.t. A x >= b
+                AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+
+                push!(cons_kkt, λt' * (AA * xxt + bb)) # = 0 (1)
+                push!(l_kkt, 0.)
+                push!(u_kkt, 0.)
+
+                append!(cons_kkt, qq - AA' * λt) # = 0 (3)
+                append!(l_kkt, zeros(3))
+                append!(u_kkt, zeros(3))
+
+                append!(cons_kkt, AA * xxt + bb) # >= 0  (m1 + m2)
+                append!(l_kkt, zeros(length(bb)))
+                append!(u_kkt, fill(Inf, length(bb)))
+
+                append!(cons_kkt, λt)  # >= 0 (m1 + m2)
+                append!(l_kkt, zeros(length(bb)))
+                append!(u_kkt, fill(Inf, length(bb)))
+
+				push!(cons_kkt, xxt[3])
+				append!(l_kkt, 0.)
+                append!(u_kkt, Inf)
+            end
         end
     end
-
-    #for t in 1:T
-    #    xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
-    #    Vex = shift_to(Ve, xt)
-    #    m = length(Vex)
-    #    for (e, V) in enumerate(Vos)
-    #        ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
-    #        bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
-    #        for i in 1:m # assuming number of vertices are equal between ego and obstacles
-    #            push!(cons, ate' * Vex[i] + bte)
-    #            push!(cons, -ate' * V[i, :] - bte)
-    #        end
-    #        push!(cons, ate' * ate - 0.5)
-    #    end
-    #end
-    cons
+    (cons_kkt, l_kkt, u_kkt)
 end
 
 function setup_direct_kkt(
     ego_polys,
-    polys;
-    T=40,
+    obs_polys;
+    T=1,
     dt=0.2,
-    L=1.0,
-    Q=0.01 * [1.0 0; 0 1],
-    q=[0, 0.0],
     R=0.01 * I(3),
     p1_max=500.0,
     p2_min=-500.0,
     u1_max=1.0,
     u2_max=1.0,
     u3_max=π / 4,
-    sides_per_poly=4)
+    sides_per_obs=4,
+    sides_per_ego=4
+)
     xdim = 6
     udim = 3
     n_xu = xdim + udim
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+    n_per_col = sides_per_obs + sides_per_ego + 3
 
-    N_polys = length(polys) # override
-    N_ego_polys = length(ego_polys)
-    n_kkt = 3 * sides_per_poly * length(polys)
-
-    z = Symbolics.@variables(z[1:n_xu*T+n_kkt*T*N_ego_polys])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:n_xu*T+n_per_col*n_obs*n_ego*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
+
     cost_nom = f(z, T, R)
-    cons_dyn = g_dyn(z, x0, T, dt, L)
+    cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
+    cons_kkt, l_kkt, u_kkt = get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
 
-    #Main.@infiltrate
-
-
-
-    cons_direct_kkt = map(ego_polys) do PermutedDimsArray
-        g_col_single(z, T, Pe, polys)
-    end
-
-
-    cons_nom = [cons_dyn; cons_env; cons_direct_kkt...]
+    cons_nom = [cons_dyn; cons_env; cons_kkt]
 
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
-
-    θ = [z; λ_nom]
-
     lag = cost_nom - cons_nom' * λ_nom
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; cons_nom]
     F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps...))]
-    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps...))]
-    n = length(l)
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); l_kkt]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); u_kkt]
 
+    θ = [z; λ_nom]
+
+	Main.@infiltrate
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
     J_vals_nom! = Symbolics.build_function(J_vals, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
@@ -109,19 +119,20 @@ function setup_direct_kkt(
         T,
         n_z=length(z),
         n_nom=length(λ_nom),
-        N_polys,
-        ego_polys,
         p1_max,
         p2_min,
         n_xu,
-        n_sps,
-        polys
+		n_per_col,
+        obs_polys,
+        ego_polys
     )
 end
 
 
 function solve_prob_direct_kkt(prob, x0; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min, n_xu, n_sps, polys) = prob
+    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, n_per_col, obs_polys) = prob
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -132,9 +143,9 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
-    @assert length(polys) == N_polys
+    @assert length(obs_polys) == n_obs
 
-    Vos = map(polys) do P
+    Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
     end
 
@@ -160,8 +171,8 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         plot!(ax, self_poly; color=:blue, linewidth=3)
     end
 
-    colors = [:red for _ in 1:N_polys]
-    for (P, c) in zip(polys, colors)
+    colors = [:red for _ in 1:n_obs]
+    for (P, c) in zip(obs_polys, colors)
         plot!(ax, P; color=c)
     end
 
@@ -171,14 +182,14 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
+			#θ0[T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+1:T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+3] .= 1.
         end
+
+		#θ0[T*n_xu+1:end] = randn(length(θ0[T*n_xu+1:end]))
 
         for i in 1:length(ego_polys)
             for t in 1:T
                 xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for e in 1:N_polys
-                    abts[i, t, e][] = copy(θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
-                end
             end
         end
     end
@@ -197,9 +208,9 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         for i in 1:length(ego_polys)
             for t in 1:T
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for e in 1:N_polys
-                    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
-                end
+                #for e in 1:n_obs
+                #    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
+                #end
             end
         end
         Cint(0)
@@ -223,6 +234,8 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
     F(n, θ0, buf)
     J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
+
+
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
@@ -242,13 +255,8 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         convergence_tolerance=5e-4
     )
 
-    fres = zeros(n)
+	Main.@infiltrate
 
-    F(n, θ, fres)
-
-    display(fig)
-
-    #@infiltrate status != PATHSolver.MCP_Solved
     @inbounds z = @view(θ[1:n_z])
     @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
 

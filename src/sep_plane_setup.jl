@@ -9,7 +9,7 @@ function shift_to(V, x::AbstractArray{T}) where {T}
     Vx
 end
 
-function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=9)
+function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=12)
     cons = Num[]
     for t in 1:T
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
@@ -33,9 +33,6 @@ function setup_sep_planes(
     polys;
     T=40,
     dt=0.2,
-    L=1.0,
-    Q=0.01 * [1.0 0; 0 1],
-    q=[0, 0.0],
     R=0.01 * I(3),
     p1_max=500.0,
     p2_min=-500.0,
@@ -55,7 +52,7 @@ function setup_sep_planes(
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
     cost_nom = f(z, T, R)
-    cons_dyn = g_dyn(z, x0, T, dt, L)
+    cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
     Vos = map(polys) do P

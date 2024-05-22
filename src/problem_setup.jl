@@ -30,20 +30,16 @@ function identity_dyn(x, u, dt)
     #v = dt * [u[1:2]; u[3] / 10.0]
     #x + [dt * x[4:6] + dt * v / 2; v]
     #x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
-    x + [u; u[1:2]; u[3] / 10.0] 
+    x + [u; u[1:2]; u[3] / 10.0]
     #x + dt*u
 end
 
-
-
-function g_dyn(z, x0, T, dt, L)
+function g_dyn(z, x0, T, dt)
     g = Num[]
     x_prev = x0
     for t in 1:T
         xt = @view(z[(t-1)*9+1:(t-1)*9+6])
         ut = @view(z[(t-1)*9+7:(t-1)*9+9])
-        #append!(g, xt - kinematic_bicycle_dyn(x_prev, ut, dt, L))
-        #append!(g, xt - pointmass_dyn(x_prev, ut, dt))
         append!(g, xt - identity_dyn(x_prev, ut, dt))
         x_prev = xt
     end
@@ -88,10 +84,23 @@ end
 
 function gen_polys(N; side_length=4)
     polys = map(1:N) do i
-        offset = 3.5 * randn(2)
+        offset = 4 * randn(2)
         P = PolyPlanning.ConvexPolygon2D([2 * randn(2) + offset for _ in 1:side_length])
+
         while length(P.V) != side_length
             P = PolyPlanning.ConvexPolygon2D([2 * randn(2) + offset for _ in 1:side_length])
+        end
+
+        function mean(v)
+            sum(v) / length(v)
+        end
+        # move it closer to origin
+        max_dist = 2
+        dist_from_origin = sqrt(mean(P.V)'mean(P.V))
+        if dist_from_origin >= max_dist
+            s = (dist_from_origin - max_dist)/dist_from_origin
+            Aeb = shift_to(P.A, P.b, [-s.*mean(P.V); 0])
+            P = ConvexPolygon2D(Aeb[1], Aeb[2])
         end
         P
     end

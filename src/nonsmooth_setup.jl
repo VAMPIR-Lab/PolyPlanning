@@ -178,7 +178,6 @@ end
 function setup_quick(ego_polys;
     T=50,
     dt=0.2,
-    L=1.0,
     Q=0.01 * [1.0 0; 0 1],
     q=[0, 0.0],
     R=0.01 * I(3),
@@ -190,11 +189,8 @@ function setup_quick(ego_polys;
     sides_per_poly=4,
     derivs_per_sd=4,
     derivs_per_fv=4,
-    N_polys=4,
-    rng=MersenneTwister(420))
-
-    #Ae = Symbolics.@variables(Ae[1:sides_per_poly,1:2])[1] |> Symbolics.scalarize
-    #be = Symbolics.@variables(be[1:sides_per_poly])[1] |> Symbolics.scalarize
+    N_polys=4
+    )
 
     N_ego_polys = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
@@ -227,7 +223,7 @@ function setup_quick(ego_polys;
     num_f_mults = derivs_per_fv * N_ego_polys
 
     cost_nom = f(z, T, R)
-    cons_dyn = g_dyn(z, x0, T, dt, L)
+    cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     cons_nom = [cons_dyn; cons_env]
 
