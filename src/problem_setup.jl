@@ -97,10 +97,10 @@ function gen_polys(N; side_length=4)
         # move it closer to origin
         max_dist = 2
         dist_from_origin = sqrt(mean(P.V)'mean(P.V))
-        if dist_from_origin >= max_dist
-            s = (dist_from_origin - max_dist)/dist_from_origin
-            Aeb = shift_to(P.A, P.b, [-s.*mean(P.V); 0])
+        while dist_from_origin >= max_dist
+            Aeb = shift_to(P.A, P.b, [1.5 .* -mean(P.V) ./ dist_from_origin; 0])
             P = ConvexPolygon2D(Aeb[1], Aeb[2])
+            dist_from_origin = sqrt(mean(P.V)'mean(P.V))
         end
         P
     end

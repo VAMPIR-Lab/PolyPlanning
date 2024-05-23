@@ -1,18 +1,18 @@
 function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
 
     cons_kkt = Num[]
     l_kkt = Float64[]
     u_kkt = Float64[]
 
     for t in 1:T
-        n_per_t = n_per_col * n_obs * n_ego
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
         yt = @view(z[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
 
         for (i, Pi) in enumerate(ego_polys)
-            n_per_ego = n_per_col * n_obs
             yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
             Ae = Pi.A
             be = Pi.b
@@ -28,12 +28,12 @@ function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
                 AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
 
                 push!(cons_kkt, λt' * (AA * xxt + bb)) # = 0 (1)
-                push!(l_kkt, 0.)
-                push!(u_kkt, 0.)
+                push!(l_kkt, -Inf)
+                push!(u_kkt, Inf)
 
                 append!(cons_kkt, qq - AA' * λt) # = 0 (3)
-                append!(l_kkt, zeros(3))
-                append!(u_kkt, zeros(3))
+                append!(l_kkt, fill(-Inf, 3))
+                append!(u_kkt, fill(+Inf, 3))
 
                 append!(cons_kkt, AA * xxt + bb) # >= 0  (m1 + m2)
                 append!(l_kkt, zeros(length(bb)))
@@ -43,8 +43,8 @@ function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
                 append!(l_kkt, zeros(length(bb)))
                 append!(u_kkt, fill(Inf, length(bb)))
 
-				push!(cons_kkt, xxt[3])
-				append!(l_kkt, 0.)
+                push!(cons_kkt, xxt[3])
+                append!(l_kkt, 0.0)
                 append!(u_kkt, Inf)
             end
         end
@@ -72,14 +72,17 @@ function setup_direct_kkt(
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_col = sides_per_obs + sides_per_ego + 3
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
 
-    z = Symbolics.@variables(z[1:n_xu*T+n_per_col*n_obs*n_ego*T])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:n_xu*T+n_per_t*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
 
     cost_nom = f(z, T, R)
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
+
     cons_kkt, l_kkt, u_kkt = get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
 
     cons_nom = [cons_dyn; cons_env; cons_kkt]
@@ -95,7 +98,6 @@ function setup_direct_kkt(
 
     θ = [z; λ_nom]
 
-	Main.@infiltrate
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
     J_vals_nom! = Symbolics.build_function(J_vals, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
@@ -122,7 +124,7 @@ function setup_direct_kkt(
         p1_max,
         p2_min,
         n_xu,
-		n_per_col,
+        n_per_col,
         obs_polys,
         ego_polys
     )
@@ -182,10 +184,10 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
-			#θ0[T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+1:T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+3] .= 1.
+            #θ0[T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+1:T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+3] .= 1.
         end
 
-		#θ0[T*n_xu+1:end] = randn(length(θ0[T*n_xu+1:end]))
+        #θ0[T*n_xu+1:end] = randn(length(θ0[T*n_xu+1:end]))
 
         for i in 1:length(ego_polys)
             for t in 1:T
@@ -255,7 +257,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         convergence_tolerance=5e-4
     )
 
-	Main.@infiltrate
 
     @inbounds z = @view(θ[1:n_z])
     @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])

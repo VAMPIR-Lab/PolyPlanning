@@ -203,7 +203,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
             end
         end
     end
-    #Main.@infiltrate
 
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
     J_col = J_shape.colptr[1:end-1]
@@ -270,7 +269,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
 
     display(fig)
 
-    #@infiltrate status != PATHSolver.MCP_Solved
     @inbounds z = @view(θ[1:n_z])
     @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
 
