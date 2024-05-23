@@ -104,7 +104,7 @@ function g_col_all(z, T, A1o,b1o,A2o,b2o,A3o,b3o, angles, lengths)
                     if err isa LinearAlgebra.SingularException
                         continue
                     else
-                        @infiltrate
+                        #@infiltrate
                     end
                 end
             end
@@ -734,7 +734,7 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0 = nothing)
     V2 = hcat(P2.V...)' |> collect
     V3 = hcat(P3.V...)' |> collect
     
-    @infiltrate
+    #@infiltrate
     
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
     J_col = J_shape.colptr[1:end-1]
@@ -770,8 +770,8 @@ function solve_prob_sep_planes(prob, x0, P1, P2, P3; θ0 = nothing)
     F(n, θ0, buf)
     J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    @infiltrate
-
+    #@infiltrate
+#
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
          F,

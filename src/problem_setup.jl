@@ -7,7 +7,7 @@ function f(z, T, R)
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
         #cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
-        cost += 0.5 * ut' * R * ut + 0.1 * xt[1:2]' * xt[1:2]
+        cost += 0.5 * ut' * R * ut + 0.001 * xt[1:2]' * xt[1:2]
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost
@@ -29,8 +29,8 @@ end
 function identity_dyn(x, u, dt)
     #v = dt * [u[1:2]; u[3] / 10.0]
     #x + [dt * x[4:6] + dt * v / 2; v]
-    #x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
-    x + [u; u[1:2]; u[3] / 10.0]
+    x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
+    #x + [u; u[1:2]; u[3] / 10.0]
     #x + dt*u
 end
 
@@ -84,7 +84,7 @@ end
 
 function gen_polys(N; side_length=4)
     polys = map(1:N) do i
-        offset = 4 * randn(2)
+        offset = 3.5 * randn(2)
         P = PolyPlanning.ConvexPolygon2D([2 * randn(2) + offset for _ in 1:side_length])
 
         while length(P.V) != side_length

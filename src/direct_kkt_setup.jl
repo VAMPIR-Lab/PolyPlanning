@@ -157,7 +157,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         xx = x0[1:3]
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
-        Vex = self_poly.V
 
         plot!(ax, self_poly; color=:blue)
         for t in 1:T# 5:5:T-1
@@ -184,10 +183,7 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
-            #θ0[T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+1:T*n_xu+(t-1)*n_per_col*n_obs*n_ego*T+3] .= 1.
         end
-
-        #θ0[T*n_xu+1:end] = randn(length(θ0[T*n_xu+1:end]))
 
         for i in 1:length(ego_polys)
             for t in 1:T
@@ -210,9 +206,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         for i in 1:length(ego_polys)
             for t in 1:T
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                #for e in 1:n_obs
-                #    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
-                #end
             end
         end
         Cint(0)

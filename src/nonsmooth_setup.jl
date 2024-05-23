@@ -396,12 +396,14 @@ function setup_quick(ego_polys;
                         #Jlag = get_Jlag[assignment](xt,Ae,be,Ao,bo,λte[ee])
                         #Jsd = get_Jsd[assignment](xt,Ae,be,Ao,bo,λte[ee])
                         Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i, assignment]
-                        Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
-                        Jlag_buf .= 0.0
-                        Jsd_buf .= 0.0
+                        #Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
+                        #Jlag_buf .= 0.0
+                        #Jsd_buf .= 0.0
                         Jlag_vals(Jlag_buf, xt, Ao, bo, βte[ee], λte)
-                        Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
+                        #Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
                         Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
+                        Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
+                        Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
                         Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1, 7)
 
                         #@infiltrate any(isnan.(Jlag))
