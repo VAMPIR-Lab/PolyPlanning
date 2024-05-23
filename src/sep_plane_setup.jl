@@ -10,7 +10,9 @@ function shift_to(V, x::AbstractArray{T}) where {T}
 end
 
 function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=12)
-    cons = Num[]
+    cons_sps = Num[]
+    l_sps = Float64[]
+    u_sps = Float64[]
     for t in 1:T
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
         Vex = shift_to(Ve, xt)
@@ -19,51 +21,111 @@ function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=12)
             ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
             bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
             for i in 1:m # assuming number of vertices are equal between ego and obstacles
-                push!(cons, ate' * Vex[i] + bte)
-                push!(cons, -ate' * V[i, :] - bte)
+                push!(cons_sps, ate' * Vex[i] + bte)
+                push!(l_sps, 0.0)
+                push!(u_sps, Inf)
             end
-            push!(cons, ate' * ate - 0.5)
+            for i in 1:m
+                push!(cons_sps, -ate' * V[i, :] - bte)
+                push!(l_sps, 0.0)
+                push!(u_sps, Inf)
+            end
+            push!(cons_sps, ate' * ate - 0.5)
+            push!(l_sps, 0.0)
+            push!(u_sps, Inf)
         end
     end
-    cons
+    (cons_sps, l_sps, u_sps)
 end
+
+function get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
+    sides_per_obs = length(obs_polys[1].b)
+    sides_per_ego = length(ego_polys[1].b)
+
+    cons_sps = Num[]
+    l_sps = Float64[]
+    u_sps = Float64[]
+
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
+        yt = @view(z[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
+
+        for (i, Pi) in enumerate(ego_polys)
+            yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
+            Ve = Pi.V
+            Vex = shift_to(Ve, xt)
+
+            for (k, Pk) in enumerate(obs_polys)
+                ate = @view(yti[(k-1)*n_per_col+1:(k-1)*n_per_col+2])
+                bte = yti[(k-1)*n_per_col+3]
+                Vo = Pk.V
+
+                for j in 1:sides_per_ego
+                    push!(cons_sps, ate' * Vex[j] + bte) # >= 0 
+                    push!(l_sps, 0.0)
+                    push!(u_sps, Inf)
+                end
+
+                for j in 1:sides_per_obs
+                    push!(cons_sps, -ate' * Vo[j] - bte) # >= 0 
+                    push!(l_sps, 0.0)
+                    push!(u_sps, Inf)
+                end
+
+                push!(cons_sps, ate' * ate - 0.5) # >= 0 
+                push!(l_sps, 0.0)
+                push!(u_sps, Inf)
+            end
+        end
+    end
+    (cons_sps, l_sps, u_sps)
+end
+
+
 
 function setup_sep_planes(
     ego_polys,
-    polys;
-    T=40,
+    obs_polys;
+    T=1,
     dt=0.2,
     R=0.01 * I(3),
     p1_max=500.0,
     p2_min=-500.0,
     u1_max=1.0,
     u2_max=1.0,
-    u3_max=π / 4,
-    sides_per_poly=4)
+    u3_max=π / 4
+)
     xdim = 6
     udim = 3
     n_xu = xdim + udim
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+    sides_per_obs = length(obs_polys[1].b)
+    sides_per_ego = length(ego_polys[1].b)
+    n_per_col = 3
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
 
-    N_polys = length(polys) # override
-    N_ego_polys = length(ego_polys)
-    n_sps = 3 * sides_per_poly * length(polys)
-
-    z = Symbolics.@variables(z[1:n_xu*T+n_sps*T*N_ego_polys])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:n_xu*T+n_per_t*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
     cost_nom = f(z, T, R)
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
-    Vos = map(polys) do P
+    Ve = ego_polys[1].V
+    Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
     end
 
-    cons_sps = map(ego_polys) do Pe
-        Ve = Pe.V
-        g_col_sps(z, T, Vos, Ve; n_xu, n_sps)
-    end
-    cons_nom = [cons_dyn; cons_env; cons_sps...]
+    #cons_sps2, l_sps2, u_sps2 = g_col_sps(z, T, Vos, Ve)
+    cons_sps, l_sps, u_sps = get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
+
+    cons_nom = [cons_dyn; cons_env; cons_sps]
 
     λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
 
@@ -74,9 +136,8 @@ function setup_sep_planes(
     F_nom = [grad_lag; cons_nom]
     F_nom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
-    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(length(cons_sps...))]
-    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, length(cons_sps...))]
-    n = length(l)
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); l_sps]
+    u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); u_sps]
 
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
     (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
@@ -101,32 +162,38 @@ function setup_sep_planes(
         T,
         n_z=length(z),
         n_nom=length(λ_nom),
-        N_polys,
         ego_polys,
         p1_max,
         p2_min,
         n_xu,
-        n_sps,
-        polys
+        obs_polys,
+        n_per_col,
+        n_per_ego,
+        n_per_t
     )
 end
 
 
 function solve_prob_sep_planes(prob, x0; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, N_polys, ego_polys, p1_max, p2_min, n_xu, n_sps, polys) = prob
+    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, obs_polys, n_per_col) = prob
+
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
     n = length(l)
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+    sides_per_obs = length(obs_polys[1].b)
+    sides_per_ego = length(ego_polys[1].b)
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
 
     @assert n == n_z + n_nom "did you forget to update l/u"
 
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
-    @assert length(polys) == N_polys
-
-    Vos = map(polys) do P
+    Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
     end
 
@@ -161,7 +228,7 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
         plot!(ax, self_poly; color=:blue, linewidth=3)
 
-        for e in 1:N_polys
+        for e in 1:n_obs
             abts[i, t, e] = Observable([0.5, 0.5, 1.0])
             # a' x + b = 0
             xs = @lift($(xxts[i, t])[1] .+ (-10:5:10))
@@ -172,8 +239,8 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
     end
 
 
-    colors = [:red for _ in 1:N_polys]
-    for (P, c) in zip(polys, colors)
+    colors = [:red for _ in 1:n_obs]
+    for (P, c) in zip(obs_polys, colors)
         plot!(ax, P; color=c)
     end
 
@@ -183,22 +250,32 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
-            for (e, Vo) in enumerate(Vos)
-                Vo_center = sum(Vo; dims=1) ./ size(Vo, 1)
-                a = x0[1:2] - Vo_center[1:2]
-                z = (x0[1:2] + Vo_center[1:2]) / 2
-                b = -a'z
-                #b = (a'*a - Vo_center[1:2]'*Vo_center[1:2])/2
-                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2] = a
-                θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+3] = b
+
+            for t in 1:T
+                yt = @view(θ0[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
+
+                for (i, Pi) in enumerate(ego_polys)
+                    yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
+
+                    for (k, Pk) in enumerate(obs_polys)
+                        Vo = hcat(Pk.V...)' |> collect
+                        Vo_center = sum(Vo; dims=1) ./ size(Vo, 1)
+                        a = x0[1:2] - Vo_center[1:2]
+                        z = (x0[1:2] + Vo_center[1:2]) / 2
+                        b = -a'z
+
+                        yti[(k-1)*n_per_col+1:(k-1)*n_per_col+2] = a
+                        yti[(k-1)*n_per_col+3] = b
+                    end
+                end
             end
         end
 
-        for i in 1:length(ego_polys)
-            for t in 1:T
+        for t in 1:T
+            for i in 1:n_ego
                 xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for e in 1:N_polys
-                    abts[i, t, e][] = copy(θ0[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
+                for k in 1:n_obs
+                    abts[i, t, k][] = copy(θ0[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
                 end
             end
         end
@@ -215,11 +292,11 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
         F_both!(result, z, x0, λ_nom)
 
-        for i in 1:length(ego_polys)
+        for i in 1:n_ego
             for t in 1:T
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for e in 1:N_polys
-                    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+3])
+                for e in 1:n_obs
+                    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_per_t+(e-1)*3+1:n_xu*T+(t-1)*n_per_t+(e-1)*3+3])
                 end
             end
         end
@@ -259,7 +336,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         output_warnings="no",
         jacobian_data_contiguous=true,
         cumulative_iteration_limit=100_000,
-        #convergence_tolerance=1e-8
         convergence_tolerance=5e-4
     )
 

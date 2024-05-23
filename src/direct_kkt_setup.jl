@@ -62,15 +62,15 @@ function setup_direct_kkt(
     p2_min=-500.0,
     u1_max=1.0,
     u2_max=1.0,
-    u3_max=π / 4,
-    sides_per_obs=4,
-    sides_per_ego=4
+    u3_max=π / 4
 )
     xdim = 6
     udim = 3
     n_xu = xdim + udim
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
+    sides_per_obs = length(obs_polys[1].b)
+    sides_per_ego = length(ego_polys[1].b)
     n_per_col = sides_per_obs + sides_per_ego + 3
     n_per_ego = n_per_col * n_obs
     n_per_t = n_per_col * n_obs * n_ego
