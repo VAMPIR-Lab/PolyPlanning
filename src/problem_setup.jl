@@ -82,6 +82,36 @@ function gen_gap(; width=1.25, length=0.25)
     [p1, p2]
 end
 
+# .| <- width -> | 
+# ^origin
+function gen_packing_wall(n_obs, n_sides; width=0.5, length=2.0)
+    @assert n_sides > 2
+    @assert n_obs > 0
+
+    l = length / 2
+    #n_prot = n_obs - 1
+    base_y_size = length / n_obs
+    #base_y_offsets = range(-l, l, n_obs - 1) # -1 for backstop
+
+
+    polys = map(1:n_obs) do i
+        #if i > 1
+        base_y_min = -l + (i - 1) * base_y_size
+        base_y_max = -l + i * base_y_size
+
+        base = [[0, base_y_min], [0, base_y_max]]
+        #base = [[0, base_y_min + (base_y_max - base_y_min) * rand()] for _ in 1:2]
+
+        prot = [[width * rand(), base_y_min + (base_y_max - base_y_min) * rand()] for _ in 1:n_sides-2]
+        P = ConvexPolygon2D([base; prot])
+        #else
+        #    backstop = [[0, -l], [0, l], [-0.5, l], [-0.5, -l]]
+        #    P = ConvexPolygon2D(backstop)
+        #end
+    end
+end
+
+
 function gen_polys(N; side_length=4)
     polys = map(1:N) do i
         offset = 3.5 * randn(2)
