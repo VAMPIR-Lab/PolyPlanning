@@ -13,6 +13,8 @@ using Combinatorics
 
 include("solvers.jl")
 include("poly_functions.jl")
+include("poly_functions_point_shrunk.jl")
+include("poly_functions_translation_rotation.jl")
 include("problem_setup.jl")
 include("nonsmooth_setup.jl")
 include("sep_plane_setup.jl")
