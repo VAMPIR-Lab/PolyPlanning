@@ -4,7 +4,9 @@ n_obs = 3
 obs_polys = PolyPlanning.gen_polys(n_obs, side_length=4); PolyPlanning.plot_polys(obs_polys);
 x0 = [.5, -1, .1, 0, 0, 0];
 
-ego_rect = PolyPlanning.gen_ego_rect()
+#x0 = [-5.5, 0, pi / 2, 0, 0, 0];
+#obs_polys = PolyPlanning.gen_gap()
+#ego_rect = PolyPlanning.gen_ego_U()
 
 direct_prob = PolyPlanning.setup_direct_kkt(
     ego_rect,
@@ -16,9 +18,7 @@ direct_prob = PolyPlanning.setup_direct_kkt(
     p2_min=-500.0,
     u1_max=1.0,
     u2_max=1.0,
-    u3_max=1*π / 4,
-    sides_per_obs=length(obs_polys[1].b),
-    sides_per_ego=length(ego_rect[1].b)
+    u3_max=1*π / 4
 );
 
 direct_sol = PolyPlanning.solve_prob_direct_kkt(direct_prob, x0);
