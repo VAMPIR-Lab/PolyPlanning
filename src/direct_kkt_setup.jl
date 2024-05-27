@@ -57,7 +57,8 @@ function setup_direct_kkt(
     obs_polys;
     T=1,
     dt=0.2,
-    R=0.01 * I(3),
+    Rf=0.01 * I(3),
+    Qf=0.01 * I(3),
     p1_max=500.0,
     p2_min=-500.0,
     u1_max=1.0,
@@ -79,7 +80,7 @@ function setup_direct_kkt(
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
 
-    cost_nom = f(z, T, R)
+    cost_nom = f(z, T, Rf, Qf)
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 

@@ -1,13 +1,3 @@
-function shift_to(A, b, x)
-    p = x[1:2]
-    θ = x[3]
-    R = [cos(θ) sin(θ)
-        -sin(θ) cos(θ)]
-    At = A * R'
-    bt = b - At * p
-    At, bt
-end
-
 function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
     m1 = length(b1)
     m2 = length(b2)
@@ -180,7 +170,8 @@ function setup_quick(ego_polys;
     dt=0.2,
     Q=0.01 * [1.0 0; 0 1],
     q=[0, 0.0],
-    R=0.01 * I(3),
+    Rf=1e-3 * I(3),
+    Qf=1e-3 * I(2),
     p1_max=500.0,
     p2_min=-500.0,
     u1_max=1.0,
@@ -222,7 +213,7 @@ function setup_quick(ego_polys;
     end
     num_f_mults = derivs_per_fv * N_ego_polys
 
-    cost_nom = f(z, T, R)
+    cost_nom = f(z, T, Rf, Qf)
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     cons_nom = [cons_dyn; cons_env]

@@ -1,4 +1,4 @@
-function f(z, T, R)
+function f(z, T, Rf, Qf)
     cost = 0.0
     for t in 1:T
         xt = @view(z[(t-1)*9+1:(t-1)*9+6])
@@ -7,7 +7,7 @@ function f(z, T, R)
         #cost += xt[1:2]'*xt[1:2]
         #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
         #cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
-        cost += 0.5 * ut' * R * ut + 0.001 * xt[1:2]' * xt[1:2]
+        cost += ut' * Rf * ut + xt[1:2]' * Qf * xt[1:2]
         #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
     end
     cost
@@ -29,7 +29,7 @@ end
 function identity_dyn(x, u, dt)
     #v = dt * [u[1:2]; u[3] / 10.0]
     #x + [dt * x[4:6] + dt * v / 2; v]
-    x + dt * [x[4:6]; u[1:2]; u[3] / 10.0]
+    x + dt * [x[4:6]; u[1:2]; u[3] / 10]
     #x + [u; u[1:2]; u[3] / 10.0]
     #x + dt*u
 end
@@ -57,6 +57,16 @@ function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     g
 end
 
+function shift_to(A, b, x)
+    p = x[1:2]
+    θ = x[3]
+    R = [cos(θ) sin(θ)
+        -sin(θ) cos(θ)]
+    At = A * R'
+    bt = b - At * p
+    At, bt
+end
+
 function plot_polys(polys)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
@@ -82,32 +92,29 @@ function gen_gap(; width=1.25, length=0.25)
     [p1, p2]
 end
 
-# .| <- width -> | 
+# .| <- w -> | 
 # ^origin
-function gen_packing_wall(n_obs, n_sides; width=0.5, length=2.0)
+function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0)
     @assert n_sides > 2
     @assert n_obs > 0
 
-    l = length / 2
-    #n_prot = n_obs - 1
-    base_y_size = length / n_obs
-    #base_y_offsets = range(-l, l, n_obs - 1) # -1 for backstop
-
+    y_nom = 2 * l / n_obs
 
     polys = map(1:n_obs) do i
-        #if i > 1
-        base_y_min = -l + (i - 1) * base_y_size
-        base_y_max = -l + i * base_y_size
+        y_min = -l + (i - 1) * y_nom
+        y_max = -l + i * y_nom
 
-        base = [[0, base_y_min], [0, base_y_max]]
-        #base = [[0, base_y_min + (base_y_max - base_y_min) * rand()] for _ in 1:2]
+        #base = [[0, y_min], [0, y_max]]
+        base = [[0, y_min], [0, y_max + max_overlap * rand()]]
 
-        prot = [[width * rand(), base_y_min + (base_y_max - base_y_min) * rand()] for _ in 1:n_sides-2]
+        prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
         P = ConvexPolygon2D([base; prot])
-        #else
-        #    backstop = [[0, -l], [0, l], [-0.5, l], [-0.5, -l]]
-        #    P = ConvexPolygon2D(backstop)
-        #end
+
+        while length(P.V) != n_sides
+            prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
+            P = ConvexPolygon2D([base; prot])
+        end
+        P
     end
 end
 
@@ -136,14 +143,25 @@ function gen_polys(N; side_length=4)
     end
 end
 
+function gen_rect_obs(; a=0.25)
+    offset = a / 20
+    l_multip = 5
+    P = ConvexPolygon2D([[0, -l_multip * a], [0, l_multip * a], [-a, l_multip * a + offset], [-a, -l_multip * a - offset]])
+    [P]
+end
+
 #  _______ a
 # |______|  
 # <-----> l*a
-function gen_ego_rect(; a=0.5)
+function gen_ego_rect(; a=0.5, l_multip=2.0)
     offset = a / 20
-    l_multip = 2
-    p1 = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
-    [p1]
+    P = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
+
+    # shift center of mass to the origin
+    c = sum(P.V) / length(P.V)
+    Ab = shift_to(P.A, P.b, [-c; 0])
+    P = ConvexPolygon2D(Ab[1], Ab[2])
+    [P]
 end
 
 # <-> a
@@ -173,9 +191,17 @@ function gen_ego_L(; a=0.5)
     l_multip = 4
     h_multip = 4
     offset = a / 20
-    p1 = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
-    p2 = ConvexPolygon2D([[0, a + offset], [0, h_multip * a], [a, h_multip * a], [a - offset, a]])
-    [p1, p2]
+    P1 = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
+    P2 = ConvexPolygon2D([[0, a + offset], [0, h_multip * a], [a, h_multip * a], [a - offset, a]])
+
+    # shift center of mass to the origin
+    c = sum([P1.V; P2.V]) / length([P1.V; P2.V])
+    Ab1 = shift_to(P1.A, P1.b, [-c; 0])
+    Ab2 = shift_to(P2.A, P2.b, [-c; 0])
+    P1 = ConvexPolygon2D(Ab1[1], Ab1[2])
+    P2 = ConvexPolygon2D(Ab2[1], Ab2[2])
+
+    [P1, P2]
 end
 # x0 = [-5.5,0,pi/2,0,0,0]
 
