@@ -180,8 +180,8 @@ function setup_quick(ego_polys;
     sides_per_poly=4,
     derivs_per_sd=4,
     derivs_per_fv=4,
-    N_polys=4
-    )
+    n_obs=4
+)
 
     N_ego_polys = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
@@ -200,8 +200,8 @@ function setup_quick(ego_polys;
         g_col_single(xt, Ae, be, Ao, bo)
     end
 
-    num_sd_cons = T * N_polys * N_ego_polys
-    num_sd_mults = T * N_polys * derivs_per_sd * N_ego_polys
+    num_sd_cons = T * n_obs * N_ego_polys
+    num_sd_mults = T * n_obs * derivs_per_sd * N_ego_polys
 
     fvals = map(ego_polys) do P
         Ae = collect(P.A)
@@ -234,10 +234,10 @@ function setup_quick(ego_polys;
         push!(simplex_cons, 1.0 - sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
     end
     for i in 1:N_ego_polys
-        offset = (i - 1) * T * N_polys * derivs_per_sd
+        offset = (i - 1) * T * n_obs * derivs_per_sd
         for t in 1:T
-            for j in 1:N_polys
-                push!(simplex_cons, 1.0 - sum(β_sd[(1:derivs_per_sd).+(offset+(t-1)*N_polys*derivs_per_sd+(j-1)*derivs_per_sd)]))
+            for j in 1:n_obs
+                push!(simplex_cons, 1.0 - sum(β_sd[(1:derivs_per_sd).+(offset+(t-1)*n_obs*derivs_per_sd+(j-1)*derivs_per_sd)]))
             end
         end
     end
@@ -319,8 +319,8 @@ function setup_quick(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
-                    λ_ind = (i - 1) * T * N_polys + (t - 1) * N_polys + e
-                    β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * N_polys * derivs_per_sd) + (t - 1) * N_polys * derivs_per_sd + (e - 1) * derivs_per_sd)
+                    λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
+                    β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, derivs_per_sd)
@@ -373,8 +373,8 @@ function setup_quick(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = collect(P.A)
                     bo = P.b
-                    λ_ind = (i - 1) * T * N_polys + (t - 1) * N_polys + e
-                    β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * N_polys * derivs_per_sd) + (t - 1) * N_polys * derivs_per_sd + (e - 1) * derivs_per_sd)
+                    λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
+                    β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     #λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
@@ -440,9 +440,9 @@ function setup_quick(ego_polys;
     for i in 1:N_ego_polys
         for t in 1:T
             xt_inds = (t-1)*9+1:(t-1)*9+6
-            for e in 1:N_polys
-                λ_ind = (i - 1) * T * N_polys + (t - 1) * N_polys + e
-                β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * N_polys * derivs_per_sd) + (t - 1) * N_polys * derivs_per_sd + (e - 1) * derivs_per_sd)
+            for e in 1:n_obs
+                λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
+                β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                 J_example[xt_inds, xt_inds] .= 1.0
                 J_example[xt_inds, col_offset+λ_ind] .= 1.0
                 J_example[col_offset+λ_ind, xt_inds] .= 1.0
@@ -504,30 +504,23 @@ function setup_quick(ego_polys;
         n_s,
         n_nom,
         n_col,
-        N_polys,
+        n_obs,
         ego_polys,
         sides_per_poly,
         p1_max,
         p2_min)
 end
 
-
-
-function solve_quick(prob, x0, polys; θ0=nothing)
-    (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, N_polys, sides_per_poly, p1_max, p2_min) = prob
-
-    @assert length(polys) == N_polys
-
-    n = length(l)
-    @assert n == n_z + n_α + n_β + n_s + n_nom + n_col
+function visualize_quick(x0, T, ego_polys, obs_polys)
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
 
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
-
     xxts = Dict()
     #for t in 10:10:T
-    for i in 1:length(ego_polys)
+    for i in 1:n_ego
         xx = x0[1:3]
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
@@ -546,20 +539,38 @@ function solve_quick(prob, x0, polys; θ0=nothing)
     end
 
     #colors = [:red, :orange, :yellow, :green]
-    colors = [:red for _ in 1:N_polys]
-    for (P, c) in zip(polys, colors)
+    colors = [:red for _ in 1:n_obs]
+    for (P, c) in zip(obs_polys, colors)
         plot!(ax, P; color=c)
     end
 
-    #lines!(ax, [-p1_max, p1_max],[p2_min,p2_min], color=:black)
-    #lines!(ax, [-p1_max, -p1_max], [p2_min, 10], color=:black)
-    #lines!(ax, [p1_max, p1_max], [p2_min, 10], color=:black)
-    display(fig)
+    function update_fig(θ)
+        for i in 1:n_ego
+            for t in 1:T #5:5:T
+                xxts[i, t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
+            end
+        end
+    end
+
+    (fig, update_fig)
+end
+
+function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
+    (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
+
+    @assert length(obs_polys) == n_obs
+
+    n = length(l)
+    @assert n == n_z + n_α + n_β + n_s + n_nom + n_col
+
+    if is_displaying
+        (fig, update_fig) = visualize_quick(x0, T, ego_polys, obs_polys)
+    end
 
     if isnothing(θ0)
         θ0 = zeros(n)
         derivs_per_fv = Int(n_α / length(ego_polys))
-        derivs_per_sd = Int(n_β / (T * length(ego_polys) * N_polys))
+        derivs_per_sd = Int(n_β / (T * length(ego_polys) * n_obs))
         for t in 1:T
             θ0[(t-1)*9+1:(t-1)*9+6] = x0
         end
@@ -575,21 +586,17 @@ function solve_quick(prob, x0, polys; θ0=nothing)
 
     function F(n, θ, result)
         result .= 0.0
-        #@inbounds z = @view(θ[1:n_z])
-        #@inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
-        #@inbounds λ_col = @view(θ[n_z+n_nom+1:n_z+n_nom+n_col])
         @inbounds z = θ[1:n_z]
         @inbounds α_f = θ[n_z+1:n_z+n_α]
         @inbounds β_sd = θ[n_z+n_α+1:n_z+n_α+n_β]
         @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
         @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
-        fill_F!(result, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
-        #for t in 10:10:T
-        for i in 1:length(ego_polys)
-            for t in 1:T #5:5:T
-                xxts[i, t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
-            end
+        fill_F!(result, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
+
+        if is_displaying
+            update_fig(θ)
         end
+
         Cint(0)
     end
     function J(n, nnz, θ, col, len, row, data)
@@ -600,9 +607,7 @@ function solve_quick(prob, x0, polys; θ0=nothing)
         @inbounds β_sd = θ[n_z+n_α+1:n_z+n_α+n_β]
         @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
         @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
-        #@infiltrate any(isnan.(z))
-        get_J_both(JJ, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
-        #@infiltrate any(isnan.(JJ))
+        get_J_both(JJ, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
         col .= J_col
         len .= J_len
         row .= J_row
@@ -633,8 +638,6 @@ function solve_quick(prob, x0, polys; θ0=nothing)
     #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
     #end
     #@info "Jacobian error is $(norm(Jnum2-Jnum))"
-
-    #@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
@@ -667,7 +670,9 @@ function solve_quick(prob, x0, polys; θ0=nothing)
 
     F(n, θ, fres)
 
-    display(fig)
+    if is_displaying
+        display(fig)
+    end
 
     @inbounds z = @view(θ[1:n_z])
 

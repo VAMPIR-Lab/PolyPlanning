@@ -131,22 +131,14 @@ function setup_direct_kkt(
     )
 end
 
-
-function solve_prob_direct_kkt(prob, x0; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, n_per_col, obs_polys) = prob
+function visualize_direct_kkt(x0, T, ego_polys, obs_polys)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
-
-    J_rows, J_cols, J_vals! = J_both
-    nnz_total = length(J_rows)
-    n = length(l)
-
-    @assert n == n_z + n_nom "did you forget to update l/u"
+    n_xu = 9
 
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
-    @assert length(obs_polys) == n_obs
 
     Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
@@ -178,7 +170,34 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         plot!(ax, P; color=c)
     end
 
-    display(fig)
+    function update_fig(θ)
+        for i in 1:n_ego
+            for t in 1:T
+                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
+            end
+        end
+    end
+
+    (fig, update_fig)
+end
+
+
+function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
+    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, n_per_col, obs_polys) = prob
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+
+    @assert length(obs_polys) == n_obs
+
+    J_rows, J_cols, J_vals! = J_both
+    nnz_total = length(J_rows)
+    n = length(l)
+
+    @assert n == n_z + n_nom "did you forget to update l/u"
+
+    if is_displaying
+        (fig, update_fig) = visualize_quick(x0, T, ego_polys, obs_polys)
+    end
 
     if isnothing(θ0)
         θ0 = zeros(n)
@@ -186,11 +205,11 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
         end
 
-        for i in 1:length(ego_polys)
-            for t in 1:T
-                xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
-            end
-        end
+        #for i in 1:length(ego_polys)
+        #    for t in 1:T
+        #        xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
+        #    end
+        #end
     end
 
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
@@ -204,11 +223,15 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
         F_both!(result, z, x0, λ_nom)
 
-        for i in 1:length(ego_polys)
-            for t in 1:T
-                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-            end
+
+        if is_displaying
+            update_fig(θ)
         end
+        #for i in 1:length(ego_polys)
+        #    for t in 1:T
+        #        xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
+        #    end
+        #end
         Cint(0)
     end
     function J(n, nnz, θ, col, len, row, data)
@@ -230,8 +253,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
     F(n, θ0, buf)
     J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-
-
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
@@ -251,9 +272,15 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing)
         convergence_tolerance=5e-4
     )
 
+    fres = zeros(n)
+    F(n, θ, fres)
+
+    if is_displaying
+        display(fig)
+    end
 
     @inbounds z = @view(θ[1:n_z])
-    @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
+    #@inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
 
-    (; status, info, θ, z, λ_nom)
+    (; status, info, θ, z, fres)
 end

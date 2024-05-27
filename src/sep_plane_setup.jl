@@ -92,7 +92,8 @@ function setup_sep_planes(
     obs_polys;
     T=1,
     dt=0.2,
-    R=0.01 * I(3),
+    Rf=1e-3 * I(3),
+    Qf=1e-3 * I(2),
     p1_max=500.0,
     p2_min=-500.0,
     u1_max=1.0,
@@ -113,7 +114,7 @@ function setup_sep_planes(
     z = Symbolics.@variables(z[1:n_xu*T+n_per_t*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
-    cost_nom = f(z, T, R)
+    cost_nom = f(z, T, Rf, Qf)
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
@@ -173,22 +174,11 @@ function setup_sep_planes(
     )
 end
 
-
-function solve_prob_sep_planes(prob, x0; θ0=nothing)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, obs_polys, n_per_col) = prob
-
-
-    J_rows, J_cols, J_vals! = J_both
-    nnz_total = length(J_rows)
-    n = length(l)
+function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
-    sides_per_obs = length(obs_polys[1].b)
-    sides_per_ego = length(ego_polys[1].b)
-    n_per_ego = n_per_col * n_obs
     n_per_t = n_per_col * n_obs * n_ego
-
-    @assert n == n_z + n_nom "did you forget to update l/u"
+    n_xu = 9
 
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
@@ -238,13 +228,42 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         end
     end
 
-
     colors = [:red for _ in 1:n_obs]
     for (P, c) in zip(obs_polys, colors)
         plot!(ax, P; color=c)
     end
 
-    display(fig)
+    function update_fig(θ)
+        for i in 1:n_ego
+            for t in 1:T
+                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
+                for k in 1:n_obs
+                    abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
+                end
+            end
+        end
+    end
+
+    (fig, update_fig, xxts, abts)
+end
+
+function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true)
+    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, obs_polys, n_per_col) = prob
+
+
+    J_rows, J_cols, J_vals! = J_both
+    nnz_total = length(J_rows)
+    n = length(l)
+    n_obs = length(obs_polys)
+    n_ego = length(ego_polys)
+    n_per_ego = n_per_col * n_obs
+    n_per_t = n_per_col * n_obs * n_ego
+
+    @assert n == n_z + n_nom "did you forget to update l/u"
+
+    if is_displaying
+        (fig, update_fig) = visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col)
+    end
 
     if isnothing(θ0)
         θ0 = zeros(n)
@@ -271,14 +290,14 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
             end
         end
 
-        for t in 1:T
-            for i in 1:n_ego
-                xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for k in 1:n_obs
-                    abts[i, t, k][] = copy(θ0[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
-                end
-            end
-        end
+        #for t in 1:T
+        #    for i in 1:n_ego
+        #        xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
+        #        for k in 1:n_obs
+        #            abts[i, t, k][] = copy(θ0[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
+        #        end
+        #    end
+        #end
     end
 
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
@@ -291,14 +310,8 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
         @inbounds z = θ[1:n_z]
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
         F_both!(result, z, x0, λ_nom)
-
-        for i in 1:n_ego
-            for t in 1:T
-                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for e in 1:n_obs
-                    abts[i, t, e][] = copy(θ[n_xu*T+(t-1)*n_per_t+(e-1)*3+1:n_xu*T+(t-1)*n_per_t+(e-1)*3+3])
-                end
-            end
+        if is_displaying
+            update_fig(θ)
         end
         Cint(0)
     end
@@ -343,10 +356,11 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing)
 
     F(n, θ, fres)
 
-    display(fig)
+    if is_displaying
+        display(fig)
+    end
 
     @inbounds z = @view(θ[1:n_z])
-    @inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
 
-    (; status, info, θ, z, λ_nom)
+    (; status, info, θ, z, fres)
 end

@@ -8,20 +8,23 @@ T = 20
 Rf = 1e-3 * PolyPlanning.I(3)
 Rf[3, 3] = Rf[3, 3] / 10.0
 
-sep_prob = PolyPlanning.setup_sep_planes(
-    ego_rect,
-    obs_polys;
+our_prob = PolyPlanning.setup_quick(
+    ego_rect;
     T,
     dt=0.2,
+    Q=0.0 * [1.0 0; 0 1], # disabled final cost
+    q=[0, 0.0],
     Rf,
     Qf=1e-2 * PolyPlanning.I(2),
-    u1_max = 10.0,
+    u1_max=10.0,
     u2_max=10.0,
-    u3_max=π
-)
+    u3_max=π,
+    n_obs=length(obs_polys)
+);
 
-sep_sol = PolyPlanning.solve_prob_sep_planes(sep_prob, x0; is_displaying=false)
+our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=false)
 
-(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0, T, ego_rect, obs_polys)
-update_fig(sep_sol.θ)
+(fig, update_fig) = PolyPlanning.visualize_quick(x0, T, ego_rect, obs_polys)
+update_fig(our_sol.θ)
 display(fig)
+
