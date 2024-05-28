@@ -1,7 +1,8 @@
 using PolyPlanning
 
-x0 = [2.5, 2.0, 0.1, 0, 0, 0]
-obs_polys = PolyPlanning.gen_packing_wall(n_obs, n_sides; w=1.5, l=2.0, max_overlap=0.0);
+x0 = [6.0, 2.0, 0.1, 0, 0, 0]
+obs_polys = PolyPlanning.gen_packing_wall(4, 4; w=5.0, l=5.0, max_overlap=0.0);
+PolyPlanning.plot_polys(obs_polys)
 ego_rect = PolyPlanning.gen_ego_rect(; l_multip=2.0);
 Rf = 1e-3 * PolyPlanning.I(3)
 Rf[3, 3] = Rf[3, 3] / 10.0

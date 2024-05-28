@@ -11,8 +11,8 @@
 using PolyPlanning
 using ProgressMeter
 
-n_walls = 1
-n_x0s = 10
+n_walls = 20
+n_x0s = 20
 n_sides = 4
 n_obs = 4
 T = 20
@@ -23,7 +23,7 @@ Qf = 1e-2 * PolyPlanning.I(2)
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
-init_x = 2.5
+init_x = 3.0
 init_y_max = 2.0
 n_xu = 9
 
@@ -49,10 +49,9 @@ params = (; n_walls,
 # gen experiment data
 ego_rect = PolyPlanning.gen_ego_rect(; l_multip=2.0);
 
-#walls = map(1:n_walls) do i
-#    PolyPlanning.gen_packing_wall(n_obs, n_sides; w=1.5, l=2.0, max_overlap=0.5)
-#end
-#PolyPlanning.plot_polys(walls[1])
+walls = map(1:n_walls) do i
+    PolyPlanning.gen_packing_wall(n_obs, n_sides; w=5.0, l=5.0, max_overlap=0.0)
+end
 
 x0s = map(1:n_x0s) do i
     [init_x, -init_y_max + 2 * init_y_max * rand(), -π + 2 * π * rand(), 0, 0, 0]
@@ -178,21 +177,46 @@ for (idx, our_sol) in our_sols
     end
 end
 
-Main.@infiltrate
-i_wall = 1
-j_x0 = 2
+using Statistics
+
+n_samples = length(idxs)
+
+mean_our_times = mean(our_times);
+mean_sep_times = mean(sep_plane_times);
+mean_kkt_times = mean(direct_kkt_times);
+
+mean_our_times_CI = 1.96 * std(our_times) / sqrt(n_samples);
+mean_sep_times_CI = 1.96 * std(sep_plane_times) / sqrt(n_samples);
+mean_kkt_times_CI = 1.96 * std(direct_kkt_times) / sqrt(n_samples);
+
+@info "our times wrt direct kkt: $(round(mean_our_times/mean_kkt_times*100; sigdigits=3))% (±$(round(mean_our_times_CI/mean_kkt_times*100; sigdigits=3)))"
+
+@info "sep plane times wrt direct kkt: $(round(mean_sep_times/mean_kkt_times*100; sigdigits=3))% (±$(round(mean_sep_times_CI/mean_kkt_times*100; sigdigits=3)))"
+
+mean_our_x_dists = mean(our_x_dists);
+mean_sep_x_dists = mean(sep_plane_x_dists);
+mean_kkt_x_dists = mean(direct_kkt_x_dists);
+
+mean_our_x_dists_CI = 1.96 * std(our_x_dists) / sqrt(n_samples);
+mean_sep_x_dists_CI = 1.96 * std(sep_plane_x_dists) / sqrt(n_samples);
+mean_kkt_x_dists_CI = 1.96 * std(direct_kkt_x_dists) / sqrt(n_samples);
+
+@info "our x dists wrt direct kkt: $(round(mean_our_x_dists/mean_kkt_x_dists*100; sigdigits=3))% (±$(round(mean_our_x_dists_CI/mean_kkt_x_dists*100; sigdigits=3)))"
+
+@info "sep plane x dists wrt direct kkt: $(round(mean_sep_x_dists/mean_kkt_x_dists*100; sigdigits=3))% (±$(round(mean_sep_x_dists_CI/mean_kkt_x_dists*100; sigdigits=3)))"
+
+#Main.@infiltrate
+i_wall = 4
+j_x0 = 5
+
 (fig, update_fig) = PolyPlanning.visualize_quick(x0s[j_x0], T, ego_rect, walls[i_wall])
 update_fig(our_sols[i_wall, j_x0].res.θ)
 display(fig)
 
-i_wall = 1
-j_x0 = 2
 (fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[j_x0], T, ego_rect, walls[i_wall])
 update_fig(sep_plane_sols[i_wall, j_x0].res.θ)
 display(fig)
 
-i_wall = 1
-j_x0 = 2
 (fig, update_fig) = PolyPlanning.visualize_direct_kkt(x0s[j_x0], T, ego_rect, walls[i_wall])
 update_fig(direct_kkt_sols[i_wall, j_x0].res.θ)
 display(fig)
