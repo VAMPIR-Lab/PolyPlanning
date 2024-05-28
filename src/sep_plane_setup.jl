@@ -118,10 +118,10 @@ function setup_sep_planes(
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
-    Ve = ego_polys[1].V
-    Vos = map(obs_polys) do P
-        hcat(P.V...)' |> collect
-    end
+    #Ve = ego_polys[1].V
+    #Vos = map(obs_polys) do P
+    #    hcat(P.V...)' |> collect
+    #end
 
     #cons_sps2, l_sps2, u_sps2 = g_col_sps(z, T, Vos, Ve)
     cons_sps, l_sps, u_sps = get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)

@@ -2,7 +2,6 @@ using PolyPlanning
 
 x0 = [2.5, 0.0, 0.1, 0, 0, 0]
 obs_polys = PolyPlanning.gen_rect_obs(; a=0.25);
-#obs_polys = PolyPlanning.gen_packing_wall(2, 4);
 ego_rect = PolyPlanning.gen_ego_rect(; l_multip=2.0);
 T = 20
 Rf = 1e-3 * PolyPlanning.I(3)
