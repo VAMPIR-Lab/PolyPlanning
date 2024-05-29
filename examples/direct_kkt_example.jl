@@ -14,8 +14,8 @@ direct_prob = PolyPlanning.setup_direct_kkt(
     dt=0.2,
     Rf,
     Qf=1e-2 * PolyPlanning.I(2),
-    u1_max=10.0,
-    u2_max=10.0,
+    u1_max=1.0,
+    u2_max=1.0,
     u3_max=π
 );
 

@@ -12,7 +12,7 @@ using PolyPlanning
 using ProgressMeter
 
 n_walls = 10
-n_x0s = 20
+n_x0s = 10
 n_sides = 4
 n_obs = 4
 T = 20
@@ -20,11 +20,11 @@ dt = 0.2
 Rf = 1e-3 * PolyPlanning.I(3)
 Rf[3, 3] = Rf[3, 3] / 10.0
 Qf = 1e-2 * PolyPlanning.I(2)
-u1_max = 10.0
-u2_max = 10.0
+u1_max = 1.0
+u2_max = 1.0
 u3_max = π
-init_x = 3.0
-init_y_max = 2.0
+init_x = 6.0
+init_y_max = 6.0
 n_xu = 9
 
 data_dir = "data"
@@ -169,7 +169,7 @@ direct_kkt_x_dists = []
 
 for (idx, our_sol) in our_sols
     sep_plane_sol = sep_plane_sols[idx]
-   # direct_kkt_sol = direct_kkt_sols[idx]
+    direct_kkt_sol = direct_kkt_sols[idx]
 
     if our_sol.mcp_success && sep_plane_sol.mcp_success# && direct_kkt_sol.mcp_success
         push!(idxs, idx)
@@ -177,8 +177,8 @@ for (idx, our_sol) in our_sols
         push!(our_x_dists, our_sol.x_dist)
         push!(sep_plane_times, sep_plane_sol.time)
         push!(sep_plane_x_dists, sep_plane_sol.x_dist)
-        #push!(direct_kkt_times, direct_kkt_sol.time)
-        #push!(direct_kkt_x_dists, direct_kkt_sol.x_dist)
+        push!(direct_kkt_times, direct_kkt_sol.time)
+        push!(direct_kkt_x_dists, direct_kkt_sol.x_dist)
     end
 end
 
@@ -211,17 +211,23 @@ mean_sep_x_dists_CI = 1.96 * std(sep_plane_x_dists) / sqrt(n_samples);
 @info "sep plane x dists wrt direct kkt: $(round(mean_sep_x_dists/mean_sep_x_dists*100; sigdigits=3))% (±$(round(mean_sep_x_dists_CI/mean_sep_x_dists*100; sigdigits=3)))"
 
 # visualize
-#i_wall = 4
-#j_x0 = 5
+i_wall = 10
+j_x0 = 3
 
+(fig, update_fig) = PolyPlanning.visualize_quick(x0s[j_x0], T, ego_rect, walls[i_wall])
+update_fig(our_sols[i_wall, j_x0].res.θ)
+display(fig)
+
+(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[j_x0], T, ego_rect, walls[i_wall])
+update_fig(sep_plane_sols[i_wall, j_x0].res.θ)
+display(fig)
+
+(fig, update_fig) = PolyPlanning.visualize_direct_kkt(x0s[j_x0], T, ego_rect, walls[i_wall])
+update_fig(direct_kkt_sols[i_wall, j_x0].res.θ)
+display(fig)
+
+
+#res = PolyPlanning.solve_quick(our_prob, x0s[j_x0], walls[i_wall]; is_displaying=false)
 #(fig, update_fig) = PolyPlanning.visualize_quick(x0s[j_x0], T, ego_rect, walls[i_wall])
-#update_fig(our_sols[i_wall, j_x0].res.θ)
-#display(fig)
-
-#(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[j_x0], T, ego_rect, walls[i_wall])
-#update_fig(sep_plane_sols[i_wall, j_x0].res.θ)
-#display(fig)
-
-#(fig, update_fig) = PolyPlanning.visualize_direct_kkt(x0s[j_x0], T, ego_rect, walls[i_wall])
-#update_fig(direct_kkt_sols[i_wall, j_x0].res.θ)
+#update_fig(res.θ)
 #display(fig)
