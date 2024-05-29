@@ -79,12 +79,11 @@ function plot_polys(polys)
     display(fig)
 end
 
-function gen_gap(; width=1.25, length=0.25)
+function gen_gap(; width=1.25, length=0.25, xs=-3.0)
     l = length / 2
     w = width / 2
     os = l / 10 # offset
-    xs = -3.0
-    obs_len = 5
+    obs_len = 5.0
 
     p1 = PolyPlanning.ConvexPolygon2D([[-l + xs, w], [l + xs, w], [l + os + xs, obs_len], [-l - os + xs, obs_len]])
     p2 = PolyPlanning.ConvexPolygon2D([[-l + xs, -w], [l + xs, -w], [l + os + xs, -obs_len], [-l - os + xs, -obs_len]])
