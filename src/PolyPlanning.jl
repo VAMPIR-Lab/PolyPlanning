@@ -11,6 +11,7 @@ using Random
 using Combinatorics
 using ArgCheck
 using Statistics
+using JLD2
 
 include("solvers.jl")
 include("poly_functions.jl")

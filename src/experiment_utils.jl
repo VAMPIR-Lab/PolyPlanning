@@ -105,21 +105,28 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
     sols
 end
 
-function load_results(name, date; data_dir="data")
+
+function load_experiment(name, date; data_dir="data")
     exp_file = jldopen("$data_dir/$(name)_exp_$date.jld2", "r")
-    our_file = jldopen("$data_dir/$(name)_our_sols_$date.jld2", "r")
-    sep_file = jldopen("$data_dir/$(name)_sep_sols_$date.jld2", "r")
-    kkt_file = jldopen("$data_dir/$(name)_kkt_sols_$date.jld2", "r")
 
     ego_poly = exp_file["ego_poly"]
     x0s = exp_file["x0s"]
     maps = exp_file["maps"]
     param = exp_file["param"]
+
+    (; ego_poly, x0s, maps, param)
+end
+
+function load_results(name, date; data_dir="data")
+    our_file = jldopen("$data_dir/$(name)_our_sols_$date.jld2", "r")
+    sep_file = jldopen("$data_dir/$(name)_sep_sols_$date.jld2", "r")
+    kkt_file = jldopen("$data_dir/$(name)_kkt_sols_$date.jld2", "r")
+
     our_sols = our_file["our_sols"]
     sep_sols = sep_file["sep_sols"]
     kkt_sols = kkt_file["kkt_sols"]
 
-    (; ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols)
+    (; our_sols, sep_sols, kkt_sols)
 end
 
 function filter_by_success(sols)
