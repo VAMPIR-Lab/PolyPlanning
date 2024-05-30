@@ -25,6 +25,7 @@ exp_name = "L_piano"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 @assert init_x >= wall_xs
+@assert n_obs == 2
 
 param = (; n_maps,
     n_x0s,

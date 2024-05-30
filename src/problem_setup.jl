@@ -91,6 +91,25 @@ function gen_gap(; width=1.25, length=0.25, xs=-3.0)
     [p1, p2]
 end
 
+#  ___    [  P1  ]
+#| P2 |_______     | w
+# ___| ___P3 |
+function gen_L_corridor(; width=1.0, pre_L_length=1.0, post_L_length=1.0)
+    wall_width = 0.5
+    w = width / 2
+    P1_top_left = [w, 0]
+    P2_top_left = [-wall_width - w, 0]
+    P3_top_left = [-w, -post_L_length - width]
+    #P3_top_left_y =
+    #a = 0.25
+    offset = w / 20
+    #l_multip = 5
+    P1 = ConvexPolygon2D([P1_top_left, P1_top_left + [0, -post_L_length], P1_top_left + [pre_L_length, -post_L_length], P1_top_left + [pre_L_length + offset, offset]])
+    P2 = ConvexPolygon2D([P2_top_left, P2_top_left + [-offset, -post_L_length - width - wall_width - offset], P2_top_left + [wall_width, -post_L_length - width - wall_width], P2_top_left + [wall_width, 0]])
+    P3 = ConvexPolygon2D([P3_top_left, P3_top_left + [0, -wall_width], P3_top_left + [pre_L_length + width + offset, -wall_width - offset], P3_top_left + [pre_L_length + width, 0]])
+    [P1 P2 P3]
+end
+
 # .| <- w -> | 
 # ^origin
 function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0)
