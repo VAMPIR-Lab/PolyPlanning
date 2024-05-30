@@ -91,6 +91,26 @@ function gen_gap(; width=1.25, length=0.25, xs=-3.0)
     [p1, p2]
 end
 
+#  ___    [  P1  ]
+#| P2 |_______     | w
+# ___| ___P3 |
+function gen_L_corridor(; width=1.0, pre_L_length=1.0, post_L_length=1.0)
+    wall_width = 2.0
+    w = width / 2
+    ext_multip = 2
+    P1_top_left = [w, ext_multip * post_L_length]
+    P2_top_left = [-wall_width - w, ext_multip * post_L_length]
+    P3_top_left = [-w, -post_L_length - width]
+    #P3_top_left_y =
+    #a = 0.25
+    offset = w / 20
+    #l_multip = 5
+    P1 = ConvexPolygon2D([P1_top_left, P1_top_left + [0, -(ext_multip + 1) * post_L_length], P1_top_left + [pre_L_length, -(ext_multip + 1) * post_L_length], P1_top_left + [pre_L_length + offset, offset]])
+    P2 = ConvexPolygon2D([P2_top_left, P2_top_left + [-offset, -(ext_multip + 1) * post_L_length - width - wall_width - offset], P2_top_left + [wall_width, -(ext_multip + 1) * post_L_length - width - wall_width], P2_top_left + [wall_width, 0]])
+    P3 = ConvexPolygon2D([P3_top_left, P3_top_left + [0, -wall_width], P3_top_left + [pre_L_length + width + offset, -wall_width - offset], P3_top_left + [pre_L_length + width, 0]])
+    [P1 P2 P3]
+end
+
 # .| <- w -> | 
 # ^origin
 function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0)
@@ -151,10 +171,10 @@ end
 
 #  _______ a
 # |______|  
-# <-----> l*a
-function gen_ego_rect(; a=0.5, l_multip=2.0)
+# <-----> b
+function gen_ego_rect(; a=0.5, b=1.0)
     offset = a / 20
-    P = ConvexPolygon2D([[0, 0], [0, a + offset], [l_multip * a - offset, a], [l_multip * a, 0]])
+    P = ConvexPolygon2D([[0, 0], [0, a + offset], [b - offset, a], [b, 0]])
 
     # shift center of mass to the origin
     c = sum(P.V) / length(P.V)
