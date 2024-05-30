@@ -2,10 +2,10 @@ using PolyPlanning
 using JLD2
 using Dates
 
-n_maps = 1
-n_x0s = 2
+n_maps = 10
+n_x0s = 10
 n_sides = 4
-n_obs = 4
+n_obs = 3
 n_xu = 9
 T = 20
 dt = 0.2
@@ -21,7 +21,7 @@ wall_w = 5.0
 wall_l = 5.0
 data_dir = "data"
 exp_name = "packing"
-date_now = PolyPlanning.Dates.format(PolyPlanning.Dates.now(), "YYYY-mm-dd_HHMM")
+date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 @assert init_x >= wall_w
 
@@ -42,7 +42,8 @@ param = (; n_maps,
     data_dir,
     date_now,
     wall_w,
-    wall_l
+    wall_l,
+    exp_name
 )
 
 # generate x0s and maps
@@ -56,31 +57,43 @@ maps = map(1:n_maps) do i
     PolyPlanning.gen_packing_wall(n_obs, n_sides; w=param.wall_w, l=param.wall_l, max_overlap=0.0)
 end
 
-PolyPlanning.jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
+jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
 
 # compute
 @info "Computing our solutions..."
 start_t = time()
 our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
+jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
 
 @info "Computing separating hyperplane solutions..."
 start_t = time()
 sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
+jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
 
 @info "Computing direct KKT solutions..."
 start_t = time()
 kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
+jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
 
 # load results from file
 #ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
 
 # process results
 #our_filt_by_success = PolyPlanning.filter_by_success(our_sols)
-#our_v_sep = PolyPlanning.compute_sols_Δ(param.n_maps, param.n_x0s, our_sols, sep_sols)
+our_v_sep = PolyPlanning.compute_sols_Δ(param.n_maps, param.n_x0s, our_sols, sep_sols)
+
+# visualize
+#maps_idx = 1
+#x0_idx = 3
+#(fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
+#update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
+#display(fig)
+
+#(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[x0_idx], T, ego_poly, maps[maps_idx])
+#update_fig(sep_sols[(maps_idx, x0_idx)].res.θ)
+#display(fig)
+
 

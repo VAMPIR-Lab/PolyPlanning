@@ -2,8 +2,8 @@ using PolyPlanning
 using JLD2
 using Dates
 
-n_maps = 1
-n_x0s = 2
+n_maps = 10
+n_x0s = 20
 n_sides = 4
 n_obs = 2
 n_xu = 9
@@ -17,13 +17,14 @@ u2_max = 1.0
 u3_max = π
 init_x = 5.0
 init_y_max = 3.0
-gap_min = 0.25
-gap_max = 0.5
+gap_min = 1.25
+gap_max = 2.5
+wall_xs = 3.0
 data_dir = "data"
-exp_name = "packing"
-date_now = PolyPlanning.Dates.format(PolyPlanning.Dates.now(), "YYYY-mm-dd_HHMM")
+exp_name = "L_piano"
+date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
-@assert init_x >= wall_w
+@assert init_x >= wall_xs
 
 param = (; n_maps,
     n_x0s,
@@ -42,7 +43,9 @@ param = (; n_maps,
     data_dir,
     date_now,
     gap_min,
-    gap_max
+    gap_max,
+    wall_xs,
+    exp_name
 )
 
 # generate x0s and maps
@@ -53,10 +56,10 @@ x0s = map(1:n_x0s) do i
 end
 
 maps = map(1:n_maps) do i
-    PolyPlanning.gap_polys = PolyPlanning.gen_gap(; length=gap_min + (gap_max - gap_min) * rand(), xs=3.0)
+    PolyPlanning.gap_polys = PolyPlanning.gen_gap(; width=gap_min + (gap_max - gap_min) * rand(), xs=wall_xs)
 end
 
-PolyPlanning.jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
+#PolyPlanning.jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
 
 # compute
 @info "Computing our solutions..."
@@ -65,13 +68,13 @@ our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 PolyPlanning.jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
 
-@info "Computing separating hyperplane solutions..."
+#@info "Computing separating hyperplane solutions..."
 start_t = time()
 sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 PolyPlanning.jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
 
-@info "Computing direct KKT solutions..."
+#@info "Computing direct KKT solutions..."
 start_t = time()
 kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
@@ -81,11 +84,11 @@ PolyPlanning.jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
 #ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
 
 # visualize
-x0_idx = 1
-maps_idx = 1
-(fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-display(fig)
+#maps_idx = 6
+#x0_idx = 6
+#(fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
+#update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
+#display(fig)
 
 # process results
 #our_filt_by_success = PolyPlanning.filter_by_success(our_sols)

@@ -10,6 +10,7 @@ using ProgressMeter
 using Random
 using Combinatorics
 using ArgCheck
+using Statistics
 
 include("solvers.jl")
 include("poly_functions.jl")

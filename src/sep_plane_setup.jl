@@ -283,6 +283,10 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true)
                         z = (x0[1:2] + Vo_center[1:2]) / 2
                         b = -a'z
 
+                        # make it worse?
+                        #a = [0.5, 0.5]
+                        #b = 0.5
+
                         yti[(k-1)*n_per_col+1:(k-1)*n_per_col+2] = a
                         yti[(k-1)*n_per_col+3] = b
                     end
