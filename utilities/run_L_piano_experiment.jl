@@ -2,7 +2,7 @@ using PolyPlanning
 using JLD2
 using Dates
 
-n_maps = 10
+n_maps = 1
 n_x0s = 20
 n_sides = 4
 n_obs = 2
@@ -59,26 +59,26 @@ maps = map(1:n_maps) do i
     PolyPlanning.gap_polys = PolyPlanning.gen_gap(; width=gap_min + (gap_max - gap_min) * rand(), xs=wall_xs)
 end
 
-#PolyPlanning.jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
+jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
 
 # compute
 @info "Computing our solutions..."
 start_t = time()
 our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
 @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
+jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
 
 #@info "Computing separating hyperplane solutions..."
-start_t = time()
-sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
-@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
+#start_t = time()
+#sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
+#@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+#jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
 
 #@info "Computing direct KKT solutions..."
-start_t = time()
-kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
-@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-PolyPlanning.jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
+#start_t = time()
+#kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
+#@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+#jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
 
 # load results from file
 #ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
