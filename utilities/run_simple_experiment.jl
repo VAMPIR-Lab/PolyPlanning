@@ -11,10 +11,10 @@ n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
 Rf = 1e-3 * PolyPlanning.I(3) # penality for control variable
-Rf[3, 3] = Rf[3, 3] / 10.0
-Qf = 1e-2 * PolyPlanning.I(2) # penality for translation
-u1_max = 1.0
-u2_max = 1.0
+Rf[3, 3] = Rf[3, 3] / 100.0
+Qf = 5e-3 * PolyPlanning.I(2) # penality for translation
+u1_max = 10.0
+u2_max = 10.0
 u3_max = π
 init_x = 3.0
 init_y_max = 1.0
@@ -108,9 +108,9 @@ for maps_idx in 1:n_maps
     for x0_idx in 1:n_x0s
         push!(mcp_state, our_sols[(maps_idx, x0_idx)].mcp_success)
         push!(mcp_time, our_sols[(maps_idx, x0_idx)].res.info.total_time)
-        # (fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-        # update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-        # display(GLMakie.Screen(), fig)
+        (fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
+        update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
+        display(GLMakie.Screen(), fig)
     end
 end
 @info "success rate" sum(mcp_state) length(mcp_state) sum(mcp_state) / length(mcp_state)
