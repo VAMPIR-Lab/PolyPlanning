@@ -9,7 +9,7 @@ function multi_solve_ours(ego_poly, x0s, maps, param)
         ego_poly;
         param.T,
         param.dt,
-        Q=0.0 * [1.0 0; 0 1], # disabled final cost
+        Q=0.0 * PolyPlanning.I(2), # disabled final cost
         q=[0, 0.0],
         param.Rf,
         param.Qf,
