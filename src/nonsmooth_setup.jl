@@ -1,4 +1,5 @@
-function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
+function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido) where {T}
+    @info "old version"
     m1 = length(b1)
     m2 = length(b2)
     A = [[A1; A2] ones(T, m1 + m2)]
@@ -7,10 +8,20 @@ function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
     (A, b, q)
 end
 
-function g_col_single(xt, Ae, be, Ao, bo)
+# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
+#     @info "new version"
+#     centroide = xt[1:2]
+#     A = [Ae Ae*centroide+be;
+#         Ao Ao*centroido+bo]
+#     b = [be; bo]
+#     q = [0, 0, 1.0]
+#     (A, b, q)
+# end
+
+function g_col_single(xt, Ae, be, Ao, bo, centroido)
     sds = Dict()
     Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido)
     m1 = length(bex)
     m2 = length(bo)
     M = [zeros(Num, 3, 3) -AA'
@@ -80,9 +91,9 @@ function f_pack_single(xt, Ae, be, Q, q)
     fvals
 end
 
-function get_single_sd_ids(xt, Ae, be, Ao, bo, max_derivs)
+function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs)
     Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido)
     m1 = length(bex)
     m2 = length(bo)
 
@@ -186,6 +197,7 @@ function setup_quick(ego_polys;
     N_ego_polys = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
+    centroido = Symbolics.@variables(centroido[1:2])[1] |> Symbolics.scalarize
 
     z = Symbolics.@variables(z[1:9*T])[1] |> Symbolics.scalarize
     xt = Symbolics.@variables(xt[1:6])[1] |> Symbolics.scalarize
@@ -197,7 +209,7 @@ function setup_quick(ego_polys;
     sds = map(ego_polys) do P
         Ae = collect(P.A)
         be = P.b
-        g_col_single(xt, Ae, be, Ao, bo)
+        g_col_single(xt, Ae, be, Ao, bo, centroido)
     end
 
     num_sd_cons = T * n_obs * N_ego_polys
@@ -269,8 +281,8 @@ function setup_quick(ego_polys;
     for (i, sds_i) in enumerate(sds)
         @showprogress for (k, sd) in sds_i
             lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false)
-            get_lag[i, k] = Symbolics.build_function(lag, xt, Ao, bo, β, λsd; expression=Val(false))[2]
-            get_sd[i, k] = Symbolics.build_function(β[1] * sd, xt, Ao, bo, β, λsd; expression=Val(false))
+            get_lag[i, k] = Symbolics.build_function(lag, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2]
+            get_sd[i, k] = Symbolics.build_function(β[1] * sd, xt, Ao, bo, centroido, β, λsd; expression=Val(false))
 
             Jlag = Symbolics.sparsejacobian(lag, [xt; β; λsd]; simplify=false)
             Jsd = Symbolics.sparsejacobian([β[1] * sd], [xt; β]; simplify=false)
@@ -287,8 +299,8 @@ function setup_quick(ego_polys;
                 Jsd_cols = [1]
                 Jsd_vals = Num[0.0]
             end
-            get_Jlag[i, k] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, β, λsd; expression=Val(false))[2], zeros(length(Jlag_rows)))
-            get_Jsd[i, k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals, xt, Ao, bo, β, λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
+            get_Jlag[i, k] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jlag_rows)))
+            get_Jsd[i, k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
         end
     end
     @info "Generating symbolic solutions to f calculation"
@@ -319,18 +331,19 @@ function setup_quick(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
+                    centroido = sum(P.V)/length(P.V)
                     λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
                     β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, derivs_per_sd)
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd)
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
                         end
-                        get_lag[i, assignment](lag_buf, xt, Ao, bo, βte[ee], λte)
+                        get_lag[i, assignment](lag_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         #@infiltrate any(isnan.(βte[ee]))
-                        βsd = get_sd[i, assignment](xt, Ao, bo, βte[ee], λte)
+                        βsd = get_sd[i, assignment](xt, Ao, bo, centroido, βte[ee], λte)
 
                         #if any(isnan.(lag_buf))
                         #    # lag_buf can be nan
@@ -379,7 +392,7 @@ function setup_quick(ego_polys;
                     @inbounds βte = β_sd[β_inds]
                     #λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
                     #@inbounds λte = λ_col[λte_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, derivs_per_sd)
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd)
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -390,11 +403,11 @@ function setup_quick(ego_polys;
                         #Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
                         #Jlag_buf .= 0.0
                         #Jsd_buf .= 0.0
-                        Jlag_vals(Jlag_buf, xt, Ao, bo, βte[ee], λte)
+                        Jlag_vals(Jlag_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         #Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
                         Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
                         Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
-                        Jsd_vals(Jsd_buf, xt, Ao, bo, βte[ee], λte)
+                        Jsd_vals(Jsd_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1, 7)
 
                         #@infiltrate any(isnan.(Jlag))
@@ -469,16 +482,17 @@ function setup_quick(ego_polys;
     ber = randn(sides_per_poly)
     Aor = randn(sides_per_poly, 2)
     bor = randn(sides_per_poly)
+    centroidor = randn(sides_per_poly, 2)
     lag_buf = zeros(6)
     λsdr = randn()
     αr = randn()
     βr = randn()
     for i in 1:N_ego_polys
         @showprogress for k in collect(keys(sds[i]))
-            get_lag[i, k](lag_buf, xtr, Aor, bor, βr, λsdr)
-            ss = get_sd[i, k](xtr, Aor, bor, βr, λsdr)
-            get_Jlag[i, k][3](get_Jlag[i, k][4], xtr, Aor, bor, βr, λsdr)
-            get_Jsd[i, k][3](get_Jsd[i, k][4], xtr, Aor, bor, βr, λsdr)
+            get_lag[i, k](lag_buf, xtr, Aor, bor, centroidor,βr, λsdr)
+            ss = get_sd[i, k](xtr, Aor, bor, centroidor, βr, λsdr)
+            get_Jlag[i, k][3](get_Jlag[i, k][4], xtr, Aor, bor, centroidor, βr, λsdr)
+            get_Jsd[i, k][3](get_Jsd[i, k][4], xtr, Aor, bor, centroidor, βr, λsdr)
             #ll = get_lag[k](xtr,Aer,ber,Aor,bor, λsdr)
             #ss = get_sd[k](xtr,Aer,ber,Aor,bor, λsdr)
             #J1 = get_Jlag[k](xtr,Aer,ber,Aor,bor,λsdr)
