@@ -1,22 +1,20 @@
-function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido) where {T}
-    @info "old version"
-    m1 = length(b1)
-    m2 = length(b2)
-    A = [[A1; A2] ones(T, m1 + m2)]
-    b = [b1; b2]
-    q = [0, 0, 1.0]
-    (A, b, q)
-end
-
-# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
-#     @info "new version"
-#     centroide = xt[1:2]
-#     A = [Ae Ae*centroide+be;
-#         Ao Ao*centroido+bo]
-#     b = [be; bo]
+# function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido) where {T}
+#     m1 = length(b1)
+#     m2 = length(b2)
+#     A = [[A1; A2] ones(T, m1 + m2)]
+#     b = [b1; b2]
 #     q = [0, 0, 1.0]
 #     (A, b, q)
 # end
+
+function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
+    centroide = xt[1:2]
+    A = [Ae Ae*centroide+be;
+        Ao Ao*centroido+bo]
+    b = [be; bo]
+    q = [0, 0, 1.0]
+    (A, b, q)
+end
 
 function g_col_single(xt, Ae, be, Ao, bo, centroido)
     sds = Dict()
