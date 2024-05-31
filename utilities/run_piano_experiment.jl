@@ -16,8 +16,8 @@ data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 2
-n_x0s = 2
+n_maps = 3
+n_x0s = 12
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -99,35 +99,35 @@ else
 end
 
 # visualize
-#PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix="ours")
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=4, title_prefix="ours")
 #PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
 #PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
 
 # process
-our_only_mcp_success = PolyPlanning.filter_by_mcp_success(our_sols)
-our_only_task_success = PolyPlanning.filter_by_task_success(our_sols; task_radius=0.5)
-sep_only_mcp_success = PolyPlanning.filter_by_mcp_success(sep_sols)
-sep_only_task_success = PolyPlanning.filter_by_task_success(sep_sols; task_radius=0.5)
+# our_only_mcp_success = PolyPlanning.filter_by_mcp_success(our_sols)
+# our_only_task_success = PolyPlanning.filter_by_task_success(our_sols; task_radius=0.5)
+# sep_only_mcp_success = PolyPlanning.filter_by_mcp_success(sep_sols)
+# sep_only_task_success = PolyPlanning.filter_by_task_success(sep_sols; task_radius=0.5)
 
-our_mcp_success_ratio = length(our_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
-our_task_success_ratio = length(our_only_task_success.idx) / (param.n_maps * param.n_x0s)
-sep_mcp_success_ratio = length(sep_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
-sep_task_success_ratio = length(sep_only_task_success.idx) / (param.n_maps * param.n_x0s)
+# our_mcp_success_ratio = length(our_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
+# our_task_success_ratio = length(our_only_task_success.idx) / (param.n_maps * param.n_x0s)
+# sep_mcp_success_ratio = length(sep_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
+# sep_task_success_ratio = length(sep_only_task_success.idx) / (param.n_maps * param.n_x0s)
 
-our_Δ_wrt_sep_mcp = PolyPlanning.compute_sols_Δ_mcp(param.n_maps, param.n_x0s, our_sols, sep_sols)
-our_Δ_wrt_sep_task = PolyPlanning.compute_sols_Δ_task(param.n_maps, param.n_x0s, our_sols, sep_sols)
+# our_Δ_wrt_sep_mcp = PolyPlanning.compute_sols_Δ_mcp(param.n_maps, param.n_x0s, our_sols, sep_sols)
+# our_Δ_wrt_sep_task = PolyPlanning.compute_sols_Δ_task(param.n_maps, param.n_x0s, our_sols, sep_sols)
 
-mean_x_dist_Δ_mcp = mean(our_Δ_wrt_sep_mcp.x_dist_Δ)
-mean_time_Δ_mcp = mean(our_Δ_wrt_sep_mcp.time_Δ)
-mean_x_dist_Δ_task = mean(our_Δ_wrt_sep_task.x_dist_Δ)
-mean_time_Δ_task = mean(our_Δ_wrt_sep_task.time_Δ)
+# mean_x_dist_Δ_mcp = mean(our_Δ_wrt_sep_mcp.x_dist_Δ)
+# mean_time_Δ_mcp = mean(our_Δ_wrt_sep_mcp.time_Δ)
+# mean_x_dist_Δ_task = mean(our_Δ_wrt_sep_task.x_dist_Δ)
+# mean_time_Δ_task = mean(our_Δ_wrt_sep_task.time_Δ)
 
-println("                    ours     sep ")
-println("only mcp success:")
-println("mcp success  $(round(our_mcp_success_ratio*100; sigdigits=2))%  $(round(sep_mcp_success_ratio*100; sigdigits=2))%")
-println("avg Δ x dist  $(round(mean_x_dist_Δ_mcp; sigdigits=2))  0.0")
-println("avg Δ time  $(round(mean_time_Δ_mcp; sigdigits=2))  0.0")
-println("only task success:")
-println("task success  $(round(our_task_success_ratio*100; sigdigits=2))%  $(round(sep_task_success_ratio*100; sigdigits=2))%")
-println("avg Δ x dist $(round(mean_x_dist_Δ_task; sigdigits=2))  0.0")
-println("avg Δ time  $(round(1mean_time_Δ_task; sigdigits=2))  0.0")
+# println("                    ours     sep ")
+# println("only mcp success:")
+# println("mcp success  $(round(our_mcp_success_ratio*100; sigdigits=2))%  $(round(sep_mcp_success_ratio*100; sigdigits=2))%")
+# println("avg Δ x dist  $(round(mean_x_dist_Δ_mcp; sigdigits=2))  0.0")
+# println("avg Δ time  $(round(mean_time_Δ_mcp; sigdigits=2))  0.0")
+# println("only task success:")
+# println("task success  $(round(our_task_success_ratio*100; sigdigits=2))%  $(round(sep_task_success_ratio*100; sigdigits=2))%")
+# println("avg Δ x dist $(round(mean_x_dist_Δ_task; sigdigits=2))  0.0")
+# println("avg Δ time  $(round(1mean_time_Δ_task; sigdigits=2))  0.0")
