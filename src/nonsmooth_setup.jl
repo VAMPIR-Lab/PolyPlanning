@@ -523,15 +523,11 @@ function setup_quick(ego_polys;
         p2_min)
 end
 
-function visualize_quick(x0, T, ego_polys, obs_polys)
+function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], aspect=DataAspect())
-
     xxts = Dict()
-    #for t in 10:10:T
+
     for i in 1:n_ego
         xx = x0[1:3]
         Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
@@ -564,7 +560,15 @@ function visualize_quick(x0, T, ego_polys, obs_polys)
         end
     end
 
-    (fig, update_fig)
+    if !isempty(θ)
+        update_fig(θ)
+    end
+
+    if is_displaying
+        display(fig)
+    end
+
+    (fig, update_fig, ax)
 end
 
 function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)

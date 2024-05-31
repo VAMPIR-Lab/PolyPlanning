@@ -1,42 +1,51 @@
 using PolyPlanning
 using JLD2
 using Dates
+using Statistics
 
-n_maps = 10
-n_x0s = 10
+# user options
+is_saving = false
+is_running_sep = false
+is_running_kkt = false
+is_loading_exp = false # skip experiment generation and load from file
+is_loading_res = false # skip compute and load from file
+exp_file_date = "2024-05-31_0108"
+res_file_date = "2024-05-31_0108"
+exp_name = "piano"
+data_dir = "data"
+date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
+
+# experiment parameters (ignored if is_loading_exp or is_loading_res)
+n_maps = 3
+n_x0s = 12
 n_sides = 4
 n_obs = 3
 n_xu = 9
 T = 20
 dt = 0.2
-Rf = 1e-3 * PolyPlanning.I(3)
-Rf[3, 3] = Rf[3, 3] / 10.0
+Rf = 1e-3 * PolyPlanning.I(3);
+Rf[3, 3] = Rf[3, 3] / 100.0;
 Qf = 5e-3 * PolyPlanning.I(2)
-u1_max = 1.0
-u2_max = 1.0
+u1_max = 10.0
+u2_max = 10.0
 u3_max = π
 ego_width = 0.5
 ego_length = 2.0
 corridor_w_min = sqrt(2) * ego_length / 2
 corridor_w_max = ego_length
 pre_L_length_base = 3.0
+post_L_length = 1.0
 init_x = pre_L_length_base
-init_y_mean = -1.75
-init_y_disturb_max = 0.0
+init_y_mean = -post_L_length - corridor_w_min / 2
+init_y_disturb_max = corridor_w_min / 4
 init_θ_disturb_max = π / 8
-data_dir = "data"
-exp_name = "piano"
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
-is_load_from_file = true
-load_date = "2024-05-30_1421"
 
-@assert corridor_w_min^2 >= (ego_length / 2)^2 + ego_width^2
-@assert n_obs == 3
+if is_loading_exp || is_loading_res
+    ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
+else # generate ego_poly, x0s and maps
+    @assert corridor_w_min^2 >= (ego_length / 2)^2 + ego_width^2
+    @assert n_obs == 3
 
-# generate x0s and maps
-if is_load_from_file
-    ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, load_date; data_dir)
-else
     param = (;
         n_maps,
         n_x0s,
@@ -72,51 +81,53 @@ else
 
     maps = map(1:n_maps) do i
         width = corridor_w_min + (corridor_w_max - corridor_w_min) * rand()
+        # corridor entrance starts at the same x
         pre_L_length = pre_L_length_base - width / 2
-        PolyPlanning.gen_L_corridor(; width, pre_L_length, post_L_length=1.0)
+        PolyPlanning.gen_L_corridor(; width, pre_L_length, post_L_length)
+    end
+
+    if is_saving
+        exp_file_date = date_now
+        jldsave("$data_dir/$(exp_name)_exp_$exp_file_date.jld2"; ego_poly, x0s, maps, param)
     end
 end
 
-
-jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
-
-# compute
-@info "Computing our solutions..."
-start_t = time()
-our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
-@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
-
-#@info "Computing separating hyperplane solutions..."
-#start_t = time()
-#sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
-#@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-#jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
-
-#@info "Computing direct KKT solutions..."
-#start_t = time()
-#kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
-#@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-#jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
-
-## load results from file
-#ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
-
-# process results
-our_filt_by_success = PolyPlanning.filter_by_success(our_sols)
-@info "our success rate $(length(our_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
-#sep_filt_by_success = PolyPlanning.filter_by_success(sep_sols)
-#our_v_sep = PolyPlanning.compute_sols_Δ(param.n_maps, param.n_x0s, our_sols, sep_sols)
+if is_loading_res
+    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+else
+    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+end
 
 # visualize
-maps_idx = 1
-x0_idx = 10
-(fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-display(fig)
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=4, title_prefix="ours")
+#PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
+#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
 
-#(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-#update_fig(sep_sols[(maps_idx, x0_idx)].res.θ)
-#display(fig)
+# process
+# our_only_mcp_success = PolyPlanning.filter_by_mcp_success(our_sols)
+# our_only_task_success = PolyPlanning.filter_by_task_success(our_sols; task_radius=0.5)
+# sep_only_mcp_success = PolyPlanning.filter_by_mcp_success(sep_sols)
+# sep_only_task_success = PolyPlanning.filter_by_task_success(sep_sols; task_radius=0.5)
 
+# our_mcp_success_ratio = length(our_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
+# our_task_success_ratio = length(our_only_task_success.idx) / (param.n_maps * param.n_x0s)
+# sep_mcp_success_ratio = length(sep_only_mcp_success.idx) / (param.n_maps * param.n_x0s)
+# sep_task_success_ratio = length(sep_only_task_success.idx) / (param.n_maps * param.n_x0s)
 
+# our_Δ_wrt_sep_mcp = PolyPlanning.compute_sols_Δ_mcp(param.n_maps, param.n_x0s, our_sols, sep_sols)
+# our_Δ_wrt_sep_task = PolyPlanning.compute_sols_Δ_task(param.n_maps, param.n_x0s, our_sols, sep_sols)
+
+# mean_x_dist_Δ_mcp = mean(our_Δ_wrt_sep_mcp.x_dist_Δ)
+# mean_time_Δ_mcp = mean(our_Δ_wrt_sep_mcp.time_Δ)
+# mean_x_dist_Δ_task = mean(our_Δ_wrt_sep_task.x_dist_Δ)
+# mean_time_Δ_task = mean(our_Δ_wrt_sep_task.time_Δ)
+
+# println("                    ours     sep ")
+# println("only mcp success:")
+# println("mcp success  $(round(our_mcp_success_ratio*100; sigdigits=2))%  $(round(sep_mcp_success_ratio*100; sigdigits=2))%")
+# println("avg Δ x dist  $(round(mean_x_dist_Δ_mcp; sigdigits=2))  0.0")
+# println("avg Δ time  $(round(mean_time_Δ_mcp; sigdigits=2))  0.0")
+# println("only task success:")
+# println("task success  $(round(our_task_success_ratio*100; sigdigits=2))%  $(round(sep_task_success_ratio*100; sigdigits=2))%")
+# println("avg Δ x dist $(round(mean_x_dist_Δ_task; sigdigits=2))  0.0")
+# println("avg Δ time  $(round(1mean_time_Δ_task; sigdigits=2))  0.0")
