@@ -6,12 +6,17 @@ using Dates
 is_saving = true
 is_running_sep = true
 is_running_kkt = false
-is_loading_experiment = false
-exp_file_date = "2024-05-30_1421"
+is_loading_exp = false # skip experiment generation and load from file
+is_loading_res = true # skip experiment generation, compute and load from file
+exp_file_date = "2024-05-31_0046"
+res_file_date = "2024-05-31_0046"
+exp_name = "piano"
+data_dir = "data"
+date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
-# experiment parameters (ignored if is_loading_experiment)
+# experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 2
-n_x0s = 10
+n_x0s = 2
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -28,16 +33,13 @@ ego_length = 2.0
 corridor_w_min = sqrt(2) * ego_length / 2
 corridor_w_max = ego_length
 pre_L_length_base = 3.0
-init_x = pre_L_length_base + ego_length / 2
-init_y_mean = -1.75
-init_y_disturb_max = 1.0
-init_θ_disturb_max = π / 2
-data_dir = "data"
-exp_name = "piano"
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
+post_L_length = 1.0
+init_x = pre_L_length_base
+init_y_mean = -post_L_length - corridor_w_min / 2
+init_y_disturb_max = corridor_w_min / 4
+init_θ_disturb_max = π / 8
 
-
-if is_loading_experiment
+if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
     @assert corridor_w_min^2 >= (ego_length / 2)^2 + ego_width^2
@@ -77,59 +79,27 @@ else # generate ego_poly, x0s and maps
     end
 
     maps = map(1:n_maps) do i
-        width = corridor_w_min + (corridor_w_max - corridor_w_min) * rand() * 0
+        width = corridor_w_min + (corridor_w_max - corridor_w_min) * rand()
         # corridor entrance starts at the same x
         pre_L_length = pre_L_length_base - width / 2
-        PolyPlanning.gen_L_corridor(; width, pre_L_length, post_L_length=1.0)
+        PolyPlanning.gen_L_corridor(; width, pre_L_length, post_L_length)
     end
 
     if is_saving
-        jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
+        exp_file_date = date_now
+        jldsave("$data_dir/$(exp_name)_exp_$exp_file_date.jld2"; ego_poly, x0s, maps, param)
     end
 end
 
-@info "Computing our solutions..."
-start_t = time()
-our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
-@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-our_filt_by_success = PolyPlanning.filter_by_success(our_sols)
-@info "our success rate $(length(our_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
-
-if is_saving
-    jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
+if is_loading_res
+    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+else
+    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
 end
-
-if is_running_sep
-    @info "Computing separating hyperplane solutions..."
-    start_t = time()
-    sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
-    @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-    sep_filt_by_success = PolyPlanning.filter_by_success(sep_sols)
-    @info "sep success rate $(length(sep_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
-
-    if is_saving
-        jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
-    end
-end
-
-if is_running_kkt
-    @info "Computing direct KKT solutions..."
-    start_t = time()
-    kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
-    @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-    kkt_filt_by_success = PolyPlanning.filter_by_success(kkt_sols)
-    @info "kkt success rate $(length(kkt_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
-
-    if is_saving
-        jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
-    end
-end
-
-# load results from file
-#our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
 
 # visualize
-PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=2, n_cols=2, title_prefix = "ours")
-PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=2, n_cols=2)
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix="ours")
+#PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
+#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
 
-# easier table
+# process
