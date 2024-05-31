@@ -7,7 +7,7 @@ is_saving = false
 is_running_sep = false
 is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false ## skip experiment generation, compute and load from file
+is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
 res_file_date = "2024-05-30_2351"
 exp_name = "L_piano"
@@ -15,8 +15,8 @@ data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 10
-n_x0s = 10
+n_maps = 2
+n_x0s = 2
 n_sides = 4
 n_obs = 2
 n_xu = 9

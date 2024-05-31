@@ -130,12 +130,12 @@ end
 function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, data_dir="data", date_now="", exp_file_date="")
     n_maps = length(maps)
     n_x0s = length(x0s)
-    @info "Computing our solutions..."
+    @info "Computing nonsmooth solutions..."
     start_t = time()
     our_sols = multi_solve_ours(ego_poly, x0s, maps, param)
     @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-    our_filt_by_success = filter_by_success(our_sols)
-    @info "our success rate $(length(our_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
+    our_only_mcp_success = filter_by_mcp_success(our_sols)
+    @info "$(length(our_only_mcp_success.idx)/(n_maps*n_x0s)*100)% nonsmooth success rate"
 
     if is_saving
         jldsave("$data_dir/$(exp_name)_our_sols_$(date_now)_exp_$exp_file_date.jld2"; our_sols)
@@ -149,8 +149,8 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         start_t = time()
         sep_sols = multi_solve_sep(ego_poly, x0s, maps, param)
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-        sep_filt_by_success = filter_by_success(sep_sols)
-        @info "sep success rate $(length(sep_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
+        sep_only_mcp_success = filter_by_mcp_success(sep_sols)
+        @info "$(length(sep_only_mcp_success.idx)/(n_maps*n_x0s)*100)% sep mcp success"
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_sep_sols_$(date_now)_exp_$exp_file_date.jld2"; sep_sols)
@@ -162,8 +162,8 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         start_t = time()
         kkt_sols = multi_solve_kkt(ego_poly, x0s, maps, param)
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-        kkt_filt_by_success = filter_by_success(kkt_sols)
-        @info "kkt success rate $(length(kkt_filt_by_success.idx)/(n_maps*n_x0s)*100)%"
+        kkt_only_mcp_success = filter_by_mcp_success(kkt_sols)
+        @info "$(length(kkt_only_mcp_success.idx)/(n_maps*n_x0s)*100)% kkt mcp success rate"
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_kkt_sols_$(date_now)_exp_$exp_file_date.jld2"; kkt_sols)
@@ -184,17 +184,12 @@ function load_experiment(name, date; data_dir="data")
     (; ego_poly, x0s, maps, param)
 end
 
-function filter_by_success(sols; type="mcp", task_radius=.5)
+function filter_by_mcp_success(sols)
     idx = []
     times = []
     x_dists = []
 
     for (i, sol) in sols
-        if type == "mcp"
-            success = sol.mcp_success
-        else
-            success = sol.final_pos'sol.final_pos < task_radius^2
-        end
         if sol.mcp_success
             push!(idx, i)
             push!(times, sol.time)
@@ -204,7 +199,22 @@ function filter_by_success(sols; type="mcp", task_radius=.5)
     (; idx, times, x_dists)
 end
 
-function compute_sols_Δ(n_maps, n_x0s, sols, ref_sols)
+function filter_by_task_success(sols; task_radius=0.5)
+    idx = []
+    times = []
+    x_dists = []
+
+    for (i, sol) in sols
+        if sol.final_pos'sol.final_pos <= task_radius^2
+            push!(idx, i)
+            push!(times, sol.time)
+            push!(x_dists, sol.x_dist)
+        end
+    end
+    (; idx, times, x_dists)
+end
+
+function compute_sols_Δ_mcp(n_maps, n_x0s, sols, ref_sols)
     idx = []
     x_dist_Δ = []
     time_Δ = []
@@ -215,6 +225,31 @@ function compute_sols_Δ(n_maps, n_x0s, sols, ref_sols)
             ref_sol = ref_sols[(i, j)]
 
             if sol.mcp_success && ref_sol.mcp_success
+                push!(idx, (i, j))
+                push!(x_dist_Δ, sol.x_dist - ref_sol.x_dist)
+                push!(time_Δ, sol.time - ref_sol.time)
+            end
+        end
+    end
+
+    n_samples = length(idx)
+    x_dist_Δ_CI = 1.96 * std(x_dist_Δ) / sqrt(n_samples)
+    time_Δ_CI = 1.96 * std(time_Δ) / sqrt(n_samples)
+
+    (; idx, x_dist_Δ, time_Δ, x_dist_Δ_CI, time_Δ_CI)
+end
+
+function compute_sols_Δ_task(n_maps, n_x0s, sols, ref_sols; task_radius=0.5)
+    idx = []
+    x_dist_Δ = []
+    time_Δ = []
+
+    for i in 1:n_maps
+        for j in 1:n_x0s
+            sol = sols[(i, j)]
+            ref_sol = ref_sols[(i, j)]
+
+            if sol.final_pos'sol.final_pos <= task_radius^2 && ref_sol.final_pos'ref_sol.final_pos <= task_radius^2
                 push!(idx, (i, j))
                 push!(x_dist_Δ, sol.x_dist - ref_sol.x_dist)
                 push!(time_Δ, sol.time - ref_sol.time)
@@ -253,12 +288,12 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
                         sol = sols[(maps_idx, x0_idx)]
                         ax = Axis(fig[i, j], aspect=DataAspect())
 
-                        ax.title = "$title_prefix\nmaps[$(maps_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\nmcp $(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, xT[1:2] = $(round.(sol.final_pos; sigdigits=2)) "
+                        ax.title = "$title_prefix\nmaps[$(maps_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\nmcp $(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, pT = $(round.(sol.final_pos; sigdigits=2)) "
 
                         if sol.mcp_success
                             (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                         else
-                            (fig, update_fig, ax) = visualize_quick(x0s[x0_idx_begin], T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                             lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                         end
                     end

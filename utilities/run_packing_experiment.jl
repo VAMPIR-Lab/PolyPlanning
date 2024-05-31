@@ -7,7 +7,7 @@ is_saving = false
 is_running_sep = false
 is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false # skip experiment generation, compute and load from file
+is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
 res_file_date = "2024-05-30_2351"
 exp_name = "packing"
@@ -36,7 +36,7 @@ ego_length = 1.0
 
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
-if is_loading_experiment
+if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
     @assert init_x >= wall_w
