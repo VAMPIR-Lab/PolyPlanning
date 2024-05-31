@@ -29,8 +29,9 @@ function multi_solve_ours(ego_poly, x0s, maps, param)
             res = solve_quick(prob, x0, map; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
-            x_dist = res.z[(param.T-1)*param.n_xu+1]
-            sols[i, j] = (; mcp_success, time, x_dist, res)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            x_dist = final_pos[1]
+            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
             next!(p)
         end
     end
@@ -63,8 +64,9 @@ function multi_solve_sep(ego_poly, x0s, maps, param)
             res = solve_prob_sep_planes(prob, x0; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
-            x_dist = res.z[(param.T-1)*param.n_xu+1]
-            sols[i, j] = (; mcp_success, time, x_dist, res)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            x_dist = final_pos[1]
+            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
             next!(p)
         end
     end
@@ -97,8 +99,9 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
             res = solve_prob_direct_kkt(prob, x0; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
-            x_dist = res.z[(param.T-1)*param.n_xu+1]
-            sols[i, j] = (; mcp_success, time, x_dist, res)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            x_dist = final_pos[1]
+            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
             next!(p)
         end
     end
@@ -167,4 +170,51 @@ function compute_sols_Δ(n_maps, n_x0s, sols, ref_sols)
     time_Δ_CI = 1.96 * std(time_Δ) / sqrt(n_samples)
 
     (; idx, x_dist_Δ, time_Δ, x_dist_Δ_CI, time_Δ_CI)
+end
+
+function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, title_prefix="")
+    n_maps = length(maps)
+    n_x0s = length(x0s)
+    @argcheck n_maps * n_x0s == length(sols)
+
+    n_rows = min(n_maps, n_rows)
+    n_cols = min(n_x0s, n_cols)
+
+    fig = Figure()
+
+    for maps_idx_begin in 1:n_rows:n_maps
+        for x0_idx_begin in 1:n_cols:n_x0s
+            empty!(fig.scene) # clear figure
+            for i in 1:n_rows
+                for j in 1:n_cols
+                    maps_idx = maps_idx_begin - 1 + i
+                    x0_idx = x0_idx_begin - 1 + j
+                    
+                    if maps_idx <= n_maps && x0_idx <= n_x0s
+                        x0 = x0s[x0_idx]
+                        map = maps[maps_idx]
+                        sol = sols[(maps_idx, x0_idx)]
+                        ax = Axis(fig[i, j], aspect=DataAspect())
+
+                        ax.title = "$title_prefix\nmap $(maps_idx), x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\n$(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, x[1:2] @ T = $(round.(sol.final_pos; sigdigits=2)) "
+
+                        if sol.mcp_success
+                            (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                        else
+                            (fig, update_fig, ax) = visualize_quick(x0s[x0_idx_begin], T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                        end
+                    end
+                end
+            end
+
+            if is_displaying
+                display(fig)
+                @info "Enter nothing to continue, enter anything to stop..."
+                if readline() != ""
+                    return
+                end
+            end
+        end
+    end
 end

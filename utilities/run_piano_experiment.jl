@@ -3,15 +3,15 @@ using JLD2
 using Dates
 
 # user options
-is_saving = false
-is_running_sep = false
+is_saving = true
+is_running_sep = true
 is_running_kkt = false
 is_loading_experiment = false
 exp_file_date = "2024-05-30_1421"
 
 # experiment parameters (ignored if is_loading_experiment)
 n_maps = 2
-n_x0s = 2
+n_x0s = 10
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -28,10 +28,10 @@ ego_length = 2.0
 corridor_w_min = sqrt(2) * ego_length / 2
 corridor_w_max = ego_length
 pre_L_length_base = 3.0
-init_x = pre_L_length_base
+init_x = pre_L_length_base + ego_length / 2
 init_y_mean = -1.75
-init_y_disturb_max = 0.0
-init_θ_disturb_max = π / 8
+init_y_disturb_max = 1.0
+init_θ_disturb_max = π / 2
 data_dir = "data"
 exp_name = "piano"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
@@ -77,7 +77,8 @@ else # generate ego_poly, x0s and maps
     end
 
     maps = map(1:n_maps) do i
-        width = corridor_w_min + (corridor_w_max - corridor_w_min) * rand()
+        width = corridor_w_min + (corridor_w_max - corridor_w_min) * rand() * 0
+        # corridor entrance starts at the same x
         pre_L_length = pre_L_length_base - width / 2
         PolyPlanning.gen_L_corridor(; width, pre_L_length, post_L_length=1.0)
     end
@@ -128,12 +129,7 @@ end
 #our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
 
 # visualize
-#maps_idx = 1
-#x0_idx = 1
-#(fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-#update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-#display(fig)
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=2, n_cols=2, title_prefix = "ours")
+PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=2, n_cols=2)
 
-#(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-#update_fig(sep_sols[(maps_idx, x0_idx)].res.θ)
-#display(fig)
+# easier table
