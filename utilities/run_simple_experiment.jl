@@ -3,34 +3,42 @@ using JLD2
 using Dates
 using GLMakie
 
-n_maps = 1 # number of maps
+# user options
+is_saving = false
+is_running_sep = false
+is_running_kkt = false
+is_loading_exp = false # skip experiment generation and load from file
+is_loading_res = false  # skip compute and load from file
+exp_file_date = "2024-05-30_2351"
+res_file_date = "2024-05-30_2351"
+exp_name = "simple"
+data_dir = "data"
+date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
+
+# experiment parameters (ignored if is_loading_exp or is_loading_res)
+n_maps = 4 # number of maps
 n_x0s = 100 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
-Rf = 1e-3 * PolyPlanning.I(3) # penality for control variable
-Rf[3, 3] = Rf[3, 3] / 100.0
+Rf = 1e-3 * PolyPlanning.I(3); # penality for control variable
+Rf[3, 3] = Rf[3, 3] / 100.0;
 Qf = 5e-3 * PolyPlanning.I(2) # penality for translation
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
 init_x = 3.0
 init_y_max = 1.0
-# wall_w = 5.0
-# wall_l = 5.0
-data_dir = "data"
-exp_name = "simple"
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
-is_load_from_file = true
-load_date = "2024-05-30_1438"
+ego_width = 0.5
+ego_length = 1.0
 
-# generate x0s and maps
-if is_load_from_file
-    ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, load_date; data_dir)
-else
-    param = (; n_maps,
+if is_loading_exp || is_loading_res
+    ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
+else # generate ego_poly, x0s and maps
+    param = (;
+        n_maps,
         n_x0s,
         n_sides,
         n_obs,
@@ -46,13 +54,13 @@ else
         init_y_max,
         data_dir,
         date_now,
-        # wall_w,
-        # wall_l,
-        exp_name
+        exp_name,
+        ego_width,
+        ego_length
     )
 
     # generate x0s and maps
-    ego_poly = PolyPlanning.gen_ego_rect(; a=.5, b=1.0)
+    ego_poly = PolyPlanning.gen_ego_rect(; a=ego_width, b=ego_length)
 
     x0s = map(1:n_x0s) do i
         [init_x / 2 * (1 + 2 * rand()), -init_y_max + 2 * init_y_max * rand(), -π + 2 * π * rand(), 0, 0, 0]
@@ -62,59 +70,21 @@ else
         PolyPlanning.gen_rect_obs(; a=0.25)
     end
 
-    jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
-end
-
-# compute
-@info "Computing our solutions..."
-start_t = time()
-our_sols = PolyPlanning.multi_solve_ours(ego_poly, x0s, maps, param)
-@info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-# jldsave("$data_dir/$(exp_name)_our_sols_$date_now.jld2"; our_sols)
-
-# @info "Computing separating hyperplane solutions..."
-# start_t = time()
-# sep_sols = PolyPlanning.multi_solve_sep(ego_poly, x0s, maps, param)
-# @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-# jldsave("$data_dir/$(exp_name)_sep_sols_$date_now.jld2"; sep_sols)
-
-# @info "Computing direct KKT solutions..."
-# start_t = time()
-# kkt_sols = PolyPlanning.multi_solve_kkt(ego_poly, x0s, maps, param)
-# @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-# jldsave("$data_dir/$(exp_name)_kkt_sols_$date_now.jld2"; kkt_sols)
-
-# load results from file
-#ego_poly, x0s, maps, param, our_sols, sep_sols, kkt_sols = PolyPlanning.load_results(exp_name, date_now; data_dir)
-
-# process results
-#our_filt_by_success = PolyPlanning.filter_by_success(our_sols)
-# our_v_sep = PolyPlanning.compute_sols_Δ(param.n_maps, param.n_x0s, our_sols, sep_sols)
-
-# visualize
-# maps_idx = 1
-# x0_idx = 10
-# (fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-# update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-# display(GLMakie.Screen(), fig)
-
-#(fig, update_fig) = PolyPlanning.visualize_sep_planes(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-#update_fig(sep_sols[(maps_idx, x0_idx)].res.θ)
-#display(fig)
-
-mcp_state = Bool[]
-mcp_time = Float64[]
-for maps_idx in 1:n_maps
-    for x0_idx in 1:n_x0s
-        push!(mcp_state, our_sols[(maps_idx, x0_idx)].mcp_success)
-        push!(mcp_time, our_sols[(maps_idx, x0_idx)].res.info.total_time)
-        (fig, update_fig) = PolyPlanning.visualize_quick(x0s[x0_idx], T, ego_poly, maps[maps_idx])
-        update_fig(our_sols[(maps_idx, x0_idx)].res.θ)
-        display(GLMakie.Screen(), fig)
+    if is_saving
+        exp_file_date = date_now
+        jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
     end
 end
-@info "success rate" sum(mcp_state) length(mcp_state) sum(mcp_state) / length(mcp_state)
 
-state_ = mcp_state[2:end]
-time_ = mcp_time[2:end]
-@info "average time" sum(time_[state_]) sum(state_) sum(time_[state_])/sum(state_)
+if is_loading_res
+    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+else
+    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+end
+
+# visualize
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=4, n_cols=5, title_prefix="ours")
+#PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
+#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
+
+# process
