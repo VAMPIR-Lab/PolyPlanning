@@ -95,9 +95,9 @@ end
 #| P2 |_______     | w
 # ___| ___P3 |
 function gen_L_corridor(; width=1.0, pre_L_length=1.0, post_L_length=1.0)
-    wall_width = 2.0
+    wall_width = 4.0
     w = width / 2
-    ext_multip = 3
+    ext_multip = 5
     P1_top_left = [w, ext_multip * post_L_length]
     P2_top_left = [-wall_width - w, ext_multip * post_L_length]
     P3_top_left = [-w, -post_L_length - width]

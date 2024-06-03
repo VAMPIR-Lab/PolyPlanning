@@ -120,7 +120,7 @@ function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, 
     end
 
     if is_loading_kkt
-        kkt_file = jldopen("$data_dir/$(name)_kkt_sols_$(res_date)_exp_$(exp_date).jld2", "r")
+        kkt_file = jldopen("$data_dir/$(exp_name)_kkt_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
         kkt_sols = kkt_file["kkt_sols"]
     end
 
@@ -128,8 +128,8 @@ function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, 
 end
 
 function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, data_dir="data", date_now="", exp_file_date="")
-    n_maps = length(maps)
-    n_x0s = length(x0s)
+    #n_maps = length(maps)
+    #n_x0s = length(x0s)
     @info "Computing nonsmooth solutions..."
     start_t = time()
     our_sols = multi_solve_ours(ego_poly, x0s, maps, param)
@@ -140,8 +140,6 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
     end
 
     sep_sols = []
-    kkt_sols = []
-
     if is_running_sep
         @info "Computing separating hyperplane solutions..."
         start_t = time()
@@ -153,6 +151,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         end
     end
 
+    kkt_sols = []
     if is_running_kkt
         @info "Computing direct KKT solutions..."
         start_t = time()
@@ -180,29 +179,29 @@ end
 
 
 function process_into_bins(sols; global_success_radius=0.5)
-    local_success = (idx=[], time=[], cost=[])
-    global_success = (idx=[], time=[], cost=[])
+    successes = (idx=[], time=[], cost=[])
+    #global_success = (idx=[], time=[], cost=[])
     fails = (idx=[], time=[], cost=[])
 
     for (i, sol) in sols
         if sol.mcp_success
-            push!(local_success.idx, i)
-            push!(local_success.time, sol.time)
-            push!(local_success.cost, sol.cost)
+            push!(successes.idx, i)
+            push!(successes.time, sol.time)
+            push!(successes.cost, sol.cost)
 
             # for now, assume global success depends on local success
-            if sol.final_pos'sol.final_pos <= global_success_radius^2
-                push!(global_success.idx, i)
-                push!(global_success.time, sol.time)
-                push!(global_success.cost, sol.cost)
-            end
+            #if sol.final_pos'sol.final_pos <= global_success_radius^2
+            #    push!(global_success.idx, i)
+            #    push!(global_success.time, sol.time)
+            #    push!(global_success.cost, sol.cost)
+            #end
         else
             push!(fails.idx, i)
             push!(fails.time, sol.time)
             push!(fails.cost, sol.cost)
         end
     end
-    (; local_success, global_success, fails)
+    (; successes, fails)
 end
 
 function compute_Δ_time_cost(bin, ref_bin)
@@ -232,15 +231,72 @@ function get_mean_CI(v)
 end
 
 function print_table(bin, n_maps, n_x0s; title="our")
-    our_local_success_ratio = length(bin.local_success.idx) / (n_maps * n_x0s)
-    our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
+    our_success_ratio = length(bin.successes.idx) / (n_maps * n_x0s)
+    #our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
     our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
 
-    println("             local       global     fails")
-    println("$title ratio    $(round(our_local_success_ratio*100; sigdigits=2))%       $(round(our_global_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
+    println("             local       fails")
+    println("$title ratio    $(round(our_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
     println("          (mean, CI)  (mean, CI) (mean, CI)")
-    println("$title time $(round.(get_mean_CI(bin.local_success.time); sigdigits=2)) $(round.(get_mean_CI(bin.global_success.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
-    println("$title cost $(round.(get_mean_CI(bin.local_success.cost); sigdigits=2)) $(round.(get_mean_CI(bin.global_success.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
+    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+end
+
+
+function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")
+
+    for k in 1:n_rows*n_cols:length(bins.idx)
+        counter = 0
+        fig = Figure()
+        idx_range = k:min(k + n_rows * n_cols - 1, length(bins.idx))
+
+        for (idx, time, cost) in zip(bins.idx[idx_range], bins.time[idx_range], bins.cost[idx_range])
+            sols
+            map_idx = idx[1]
+            x0_idx = idx[2]
+            x0 = x0s[x0_idx]
+            map = maps[map_idx]
+            sol = sols[(map_idx, x0_idx)]
+            counter += 1
+
+            # ind2sub...
+            i = Int(floor((counter - 1) / n_cols)) + 1
+            j = Int((counter - 1) % n_cols) + 1
+            #@info "$i, $j"
+            ax = Axis(fig[i, j], aspect=DataAspect())
+            ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits=2)) s, cost = $(round(sol.cost; sigdigits=2)), pT = $(round.(sol.final_pos; sigdigits=2)) "
+
+            if type == "nonsmooth"
+                if sol.mcp_success
+                    (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                else
+                    (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                end
+            elseif type == "sep_planes"
+                if sol.mcp_success
+                    (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                else
+                    (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                end
+            elseif type == "direct_kkt"
+                if sol.mcp_success
+                    (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                else
+                    (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                end
+            end
+        end
+        if is_displaying
+            display(fig)
+            @info "Enter nothing to continue, enter anything to stop..."
+            if readline() != ""
+                return
+            end
+        end
+    end
 end
 
 
@@ -252,23 +308,23 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
     n_rows = min(n_maps, n_rows)
     n_cols = min(n_x0s, n_cols)
 
-    fig = Figure()
-
     for maps_idx_begin in 1:n_rows:n_maps
         for x0_idx_begin in 1:n_cols:n_x0s
-            empty!(fig.scene) # clear figure
+            fig = Figure()
+            #empty!(fig.scene) # clear figure, interactivity doesn't after first page with this
+
             for i in 1:n_rows
                 for j in 1:n_cols
-                    maps_idx = maps_idx_begin - 1 + i
+                    map_idx = maps_idx_begin - 1 + i
                     x0_idx = x0_idx_begin - 1 + j
 
-                    if maps_idx <= n_maps && x0_idx <= n_x0s
+                    if map_idx <= n_maps && x0_idx <= n_x0s
                         x0 = x0s[x0_idx]
-                        map = maps[maps_idx]
-                        sol = sols[(maps_idx, x0_idx)]
+                        map = maps[map_idx]
+                        sol = sols[(map_idx, x0_idx)]
                         ax = Axis(fig[i, j], aspect=DataAspect())
 
-                        ax.title = "$type\nmaps[$(maps_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\nmcp $(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, pT = $(round.(sol.final_pos; sigdigits=2)) "
+                        ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits=2)) s, cost = $(round(sol.cost; sigdigits=2)), pT = $(round.(sol.final_pos; sigdigits=2)) "
 
                         if type == "nonsmooth"
                             if sol.mcp_success
