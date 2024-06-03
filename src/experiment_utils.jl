@@ -264,7 +264,7 @@ function compute_sols_Δ_task(n_maps, n_x0s, sols, ref_sols; task_radius=0.5)
     (; idx, x_dist_Δ, time_Δ, x_dist_Δ_CI, time_Δ_CI)
 end
 
-function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, title_prefix="")
+function visualize_multi_quick(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, title_prefix="")
     n_maps = length(maps)
     n_x0s = length(x0s)
     @argcheck n_maps * n_x0s == length(sols)
