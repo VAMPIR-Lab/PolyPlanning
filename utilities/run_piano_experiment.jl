@@ -6,9 +6,9 @@ using Statistics
 # user options
 is_saving = true
 is_running_sep = true
-is_running_kkt = false
-is_loading_exp = true # skip experiment generation and load from file
-is_loading_res = true # skip compute and load from file
+is_running_kkt = true
+is_loading_exp = false # skip experiment generation and load from file
+is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-06-03_0034"
 res_file_date = "2024-06-03_0034"
 exp_name = "piano"
@@ -17,7 +17,7 @@ date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 3
-n_x0s = 8
+n_x0s = 100
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -107,18 +107,18 @@ end
 
 # process
 our_bins = PolyPlanning.process_into_bins(our_sols)
-@info "$(length(our_bins.local_success.idx)/(n_maps*n_x0s)*100)% nonsmooth local success rate"
+@info "$(length(our_bins.local_success.idx)/(param.n_maps*param.n_x0s)*100)% nonsmooth local success rate"
 
 sep_bins = []
 if is_running_sep
     sep_bins = PolyPlanning.process_into_bins(sep_sols)
-    @info "$(length(sep_bins.local_success.idx)/(n_maps*n_x0s)*100)% sep local success rate"
+    @info "$(length(sep_bins.local_success.idx)/(param.n_maps*param.n_x0s)*100)% sep local success rate"
 end
 
 kkt_bins = []
 if is_running_kkt
     kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
-    @info "$(length(kkt_bins.local_success.idx)/(n_maps*n_x0s)*100)% kkt local success rate"
+    @info "$(length(kkt_bins.local_success.idx)/(param.n_maps*param.n_x0s)*100)% kkt local success rate"
 end
 
 # visualize
@@ -127,72 +127,30 @@ end
 #PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, type = "direct_kkt")
 
 # tables
-function get_mean_CI(v)
-    mean(v), 1.96 * std(v) / sqrt(length(v))
-end
-
-our_local_success_ratio = length(our_bins.local_success.idx) / (n_maps * n_x0s)
-our_global_success_ratio = length(our_bins.global_success.idx) / (n_maps * n_x0s)
-our_fail_ratio = length(our_bins.fails.idx) / (n_maps * n_x0s)
-
-println("             local       global     fails")
-println("our ratio    $(round(our_local_success_ratio*100; sigdigits=2))%       $(round(our_global_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
-println("          (mean, CI)  (mean, CI) (mean, CI)")
-println("our time $(round.(get_mean_CI(our_bins.local_success.time); sigdigits=2)) $(round.(get_mean_CI(our_bins.global_success.time); sigdigits=2)) $(round.(get_mean_CI(our_bins.fails.time); sigdigits=2))")
-println("our cost $(round.(get_mean_CI(our_bins.local_success.cost); sigdigits=2)) $(round.(get_mean_CI(our_bins.global_success.cost); sigdigits=2)) $(round.(get_mean_CI(our_bins.fails.cost); sigdigits=2))")
+PolyPlanning.print_table(our_bins, param.n_maps, param.n_x0s; title="our")
 
 if is_running_sep
-    sep_local_success_ratio = length(sep_bins.local_success.idx) / (n_maps * n_x0s)
-    sep_global_success_ratio = length(sep_bins.global_success.idx) / (n_maps * n_x0s)
-    sep_fail_ratio = length(sep_bins.fails.idx) / (n_maps * n_x0s)
-
-    println("             local       global     fails")
-    println("sep ratio    $(round(sep_local_success_ratio*100; sigdigits=2))%       $(round(sep_global_success_ratio*100; sigdigits=2))%      $(round(sep_fail_ratio*100; sigdigits=2))%")
-    println("          (mean, CI)  (mean, CI) (mean, CI)")
-    println("sep time $(round.(get_mean_CI(sep_bins.local_success.time); sigdigits=2)) $(round.(get_mean_CI(sep_bins.global_success.time); sigdigits=2)) $(round.(get_mean_CI(sep_bins.fails.time); sigdigits=2))")
-    println("sep cost $(round.(get_mean_CI(sep_bins.local_success.cost); sigdigits=2)) $(round.(get_mean_CI(sep_bins.global_success.cost); sigdigits=2)) $(round.(get_mean_CI(sep_bins.fails.cost); sigdigits=2))")
+    PolyPlanning.print_table(sep_bins, param.n_maps, param.n_x0s, title="sep")
 end
 
 if is_running_kkt
-    println("             local       global     fails")
-    println("kkt rate    $(round(kkt_local_success_ratio*100; sigdigits=2))%       $(round(kkt_global_success_ratio*100; sigdigits=2))%      $(round(kkt_fail_ratio*100; sigdigits=2))%")
-    println("          (mean, CI)  (mean, CI) (mean, CI)")
-    println("kkt time $(round.(get_mean_CI(kkt_bins.local_success.time); sigdigits=2)) $(round.(get_mean_CI(kkt_bins.global_success.time); sigdigits=2)) $(round.(get_mean_CI(kkt_bins.fails.time); sigdigits=2))")
-    println("kkt cost $(round.(get_mean_CI(kkt_bins.local_success.cost); sigdigits=2)) $(round.(get_mean_CI(kkt_bins.global_success.cost); sigdigits=2)) $(round.(get_mean_CI(kkt_bins.fails.cost); sigdigits=2))")
+    PolyPlanning.print_table(kkt_bins, param.n_maps, param.n_x0s, title="kkt")
 end
 
 if is_running_sep
-    our_Δ_sep_locals = PolyPlanning.compute_Δ_time_cost(our_bins.local_success, sep_bins.local_success)
-    our_Δ_sep_globals = PolyPlanning.compute_Δ_time_cost(our_bins.global_success, sep_bins.global_success)
-    our_Δ_sep_fails = PolyPlanning.compute_Δ_time_cost(our_bins.fails, sep_bins.fails)
+    our_v_sep_locals = PolyPlanning.compute_Δ_time_cost(our_bins.local_success, sep_bins.local_success)
+    our_v_sep_globals = PolyPlanning.compute_Δ_time_cost(our_bins.global_success, sep_bins.global_success)
+    our_v_sep_fails = PolyPlanning.compute_Δ_time_cost(our_bins.fails, sep_bins.fails)
+    our_v_sep_bin = (local_success=our_v_sep_locals, global_success=our_v_sep_globals, fails=our_v_sep_fails)
 
-    our_Δ_sep_locals_ratio = length(our_Δ_sep_locals.idx) / (n_maps * n_x0s)
-    our_Δ_sep_globals_ratio = length(our_Δ_sep_globals.idx) / (n_maps * n_x0s)
-    our_Δ_sep_fails_ratio = length(our_Δ_sep_fails.idx) / (n_maps * n_x0s)
-
-    println("our vs sep")
-    println("             local       global     fails")
-    println("ratio        $(round(our_Δ_sep_locals_ratio*100; sigdigits=2))%       $(round(our_Δ_sep_globals_ratio*100; sigdigits=2))%      $(round(our_Δ_sep_fails_ratio*100; sigdigits=2))%")
-    println("          (mean, CI)  (mean, CI) (mean, CI)")
-    println("Δ time $(round.(get_mean_CI(our_Δ_sep_locals.time_Δ); sigdigits=2)) $(round.(get_mean_CI(our_Δ_sep_globals.time_Δ); sigdigits=2)) $(round.(get_mean_CI(our_Δ_sep_fails.time_Δ); sigdigits=2))")
-    println("Δ cost $(round.(get_mean_CI(our_Δ_sep_locals.cost_Δ); sigdigits=2)) $(round.(get_mean_CI(our_Δ_sep_globals.cost_Δ); sigdigits=2)) $(round.(get_mean_CI(our_Δ_sep_fails.cost_Δ); sigdigits=2))")
+    PolyPlanning.print_table(our_v_sep_bin, param.n_maps, param.n_x0s, title="our v sep")
 
     if is_running_kkt
-        kkt_Δ_sep_locals = PolyPlanning.compute_Δ_time_cost(kkt_bins.local_success, sep_bins.local_success)
-        kkt_Δ_sep_globals = PolyPlanning.compute_Δ_time_cost(kkt_bins.global_success, sep_bins.global_success)
-        kkt_Δ_sep_fails = PolyPlanning.compute_Δ_time_cost(kkt_bins.fails, sep_bins.fails)
+        kkt_v_sep_locals = PolyPlanning.compute_Δ_time_cost(kkt_bins.local_success, sep_bins.local_success)
+        kkt_v_sep_globals = PolyPlanning.compute_Δ_time_cost(kkt_bins.global_success, sep_bins.global_success)
+        kkt_v_sep_fails = PolyPlanning.compute_Δ_time_cost(kkt_bins.fails, sep_bins.fails)
+        kkt_v_sep_bin = (local_success=kkt_v_sep_locals, global_success=kkt_v_sep_globals, fails=kkt_v_sep_fails)
 
-        kkt_Δ_sep_locals_ratio = length(kkt_Δ_sep_locals.idx) / (n_maps * n_x0s)
-        kkt_Δ_sep_globals_ratio = length(kkt_Δ_sep_globals.idx) / (n_maps * n_x0s)
-        kkt_Δ_sep_fails_ratio = length(kkt_Δ_sep_fails.idx) / (n_maps * n_x0s)
-
-        println("kkt vs sep")
-        println("             local       global     fails")
-        println("ratio    $(round(kkt_Δ_sep_locals_ratio*100; sigdigits=2))%       $(round(kkt_Δ_sep_globals_ratio*100; sigdigits=2))%      $(round(kkt_Δ_sep_fails_ratio*100; sigdigits=2))%")
-        println("          (mean, CI)  (mean, CI) (mean, CI)")
-        println("Δ time $(round.(get_mean_CI(kkt_Δ_sep_locals.time_Δ); sigdigits=2)) $(round.(get_mean_CI(kkt_Δ_sep_globals.time_Δ); sigdigits=2)) $(round.(get_mean_CI(kkt_Δ_sep_fails.time_Δ); sigdigits=2))")
-        println("Δ cost $(round.(get_mean_CI(kkt_Δ_sep_locals.cost_Δ); sigdigits=2)) $(round.(get_mean_CI(kkt_Δ_sep_globals.cost_Δ); sigdigits=2)) $(round.(get_mean_CI(kkt_Δ_sep_fails.cost_Δ); sigdigits=2))")
+        PolyPlanning.print_table(kkt_v_sep_bin, param.n_maps, param.n_x0s, title="kkt v sep")
     end
 end
-
-

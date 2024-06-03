@@ -207,27 +207,42 @@ end
 
 function compute_Δ_time_cost(bin, ref_bin)
     idx = []
-    time_Δ = []
-    cost_Δ = []
+    time = []
+    cost = []
 
     for (i, id) in enumerate(bin.idx)
         i_ref = findfirst(x -> x == id, ref_bin.idx)
 
         if i_ref !== nothing
             push!(idx, id)
-            push!(time_Δ, bin.time[i] - ref_bin.time[i_ref])
-            push!(cost_Δ, bin.cost[i] - ref_bin.cost[i_ref])
+            push!(time, bin.time[i] - ref_bin.time[i_ref])
+            push!(cost, bin.cost[i] - ref_bin.cost[i_ref])
         end
     end
 
-    n_samples = length(idx)
-    mean_time_Δ = mean(time_Δ)
-    mean_cost_Δ = mean(cost_Δ)
-    CI_time_Δ = 1.96 * std(time_Δ) / sqrt(n_samples)
-    CI_cost_Δ = 1.96 * std(cost_Δ) / sqrt(n_samples)
-
-    (; idx, time_Δ, cost_Δ, mean_time_Δ, mean_cost_Δ, CI_time_Δ, CI_cost_Δ)
+    (; idx, time, cost)
 end
+
+function get_mean_CI(v)
+    res = (0.0, 0.0)
+    if length(v) > 0
+        res = (mean(v), 1.96 * std(v) / sqrt(length(v)))
+    end
+    res
+end
+
+function print_table(bin, n_maps, n_x0s; title="our")
+    our_local_success_ratio = length(bin.local_success.idx) / (n_maps * n_x0s)
+    our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
+    our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
+
+    println("             local       global     fails")
+    println("$title ratio    $(round(our_local_success_ratio*100; sigdigits=2))%       $(round(our_global_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
+    println("          (mean, CI)  (mean, CI) (mean, CI)")
+    println("$title time $(round.(get_mean_CI(bin.local_success.time); sigdigits=2)) $(round.(get_mean_CI(bin.global_success.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
+    println("$title cost $(round.(get_mean_CI(bin.local_success.cost); sigdigits=2)) $(round.(get_mean_CI(bin.global_success.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+end
+
 
 function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")
     n_maps = length(maps)
