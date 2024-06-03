@@ -29,9 +29,9 @@ function multi_solve_ours(ego_poly, x0s, maps, param)
             res = solve_quick(prob, x0, map; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
+            cost = f(res.z, param.T, param.Rf, param.Qf)
             final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
-            x_dist = final_pos[1]
-            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
             next!(p)
         end
     end
@@ -64,9 +64,9 @@ function multi_solve_sep(ego_poly, x0s, maps, param)
             res = solve_prob_sep_planes(prob, x0; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
+            cost = f(res.z, param.T, param.Rf, param.Qf)
             final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
-            x_dist = final_pos[1]
-            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
             next!(p)
         end
     end
@@ -99,9 +99,9 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
             res = solve_prob_direct_kkt(prob, x0; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
+            cost = f(res.z, param.T, param.Rf, param.Qf)
             final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
-            x_dist = final_pos[1]
-            sols[i, j] = (; mcp_success, time, x_dist, final_pos, res)
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
             next!(p)
         end
     end
@@ -134,8 +134,6 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
     start_t = time()
     our_sols = multi_solve_ours(ego_poly, x0s, maps, param)
     @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-    our_only_mcp_success = filter_by_mcp_success(our_sols)
-    @info "$(length(our_only_mcp_success.idx)/(n_maps*n_x0s)*100)% nonsmooth success rate"
 
     if is_saving
         jldsave("$data_dir/$(exp_name)_our_sols_$(date_now)_exp_$exp_file_date.jld2"; our_sols)
@@ -149,8 +147,6 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         start_t = time()
         sep_sols = multi_solve_sep(ego_poly, x0s, maps, param)
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-        sep_only_mcp_success = filter_by_mcp_success(sep_sols)
-        @info "$(length(sep_only_mcp_success.idx)/(n_maps*n_x0s)*100)% sep mcp success"
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_sep_sols_$(date_now)_exp_$exp_file_date.jld2"; sep_sols)
@@ -162,8 +158,6 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         start_t = time()
         kkt_sols = multi_solve_kkt(ego_poly, x0s, maps, param)
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
-        kkt_only_mcp_success = filter_by_mcp_success(kkt_sols)
-        @info "$(length(kkt_only_mcp_success.idx)/(n_maps*n_x0s)*100)% kkt mcp success rate"
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_kkt_sols_$(date_now)_exp_$exp_file_date.jld2"; kkt_sols)
@@ -184,87 +178,58 @@ function load_experiment(name, date; data_dir="data")
     (; ego_poly, x0s, maps, param)
 end
 
-function filter_by_mcp_success(sols)
-    idx = []
-    times = []
-    x_dists = []
+
+function process_into_bins(sols; global_success_radius=0.5)
+    local_success = (idx=[], time=[], cost=[])
+    global_success = (idx=[], time=[], cost=[])
+    fails = (idx=[], time=[], cost=[])
 
     for (i, sol) in sols
         if sol.mcp_success
-            push!(idx, i)
-            push!(times, sol.time)
-            push!(x_dists, sol.x_dist)
-        end
-    end
-    (; idx, times, x_dists)
-end
+            push!(local_success.idx, i)
+            push!(local_success.time, sol.time)
+            push!(local_success.cost, sol.cost)
 
-function filter_by_task_success(sols; task_radius=0.5)
-    idx = []
-    times = []
-    x_dists = []
-
-    for (i, sol) in sols
-        if sol.final_pos'sol.final_pos <= task_radius^2
-            push!(idx, i)
-            push!(times, sol.time)
-            push!(x_dists, sol.x_dist)
-        end
-    end
-    (; idx, times, x_dists)
-end
-
-function compute_sols_Δ_mcp(n_maps, n_x0s, sols, ref_sols)
-    idx = []
-    x_dist_Δ = []
-    time_Δ = []
-
-    for i in 1:n_maps
-        for j in 1:n_x0s
-            sol = sols[(i, j)]
-            ref_sol = ref_sols[(i, j)]
-
-            if sol.mcp_success && ref_sol.mcp_success
-                push!(idx, (i, j))
-                push!(x_dist_Δ, sol.x_dist - ref_sol.x_dist)
-                push!(time_Δ, sol.time - ref_sol.time)
+            # for now, assume global success depends on local success
+            if sol.final_pos'sol.final_pos <= global_success_radius^2
+                push!(global_success.idx, i)
+                push!(global_success.time, sol.time)
+                push!(global_success.cost, sol.cost)
             end
+        else
+            push!(fails.idx, i)
+            push!(fails.time, sol.time)
+            push!(fails.cost, sol.cost)
+        end
+    end
+    (; local_success, global_success, fails)
+end
+
+function compute_Δ_time_cost(bin, ref_bin)
+    idx = []
+    time_Δ = []
+    cost_Δ = []
+
+    for (i, id) in enumerate(bin.idx)
+        i_ref = findfirst(x -> x == id, ref_bin.idx)
+
+        if i_ref !== nothing
+            push!(idx, id)
+            push!(time_Δ, bin.time[i] - ref_bin.time[i_ref])
+            push!(cost_Δ, bin.cost[i] - ref_bin.cost[i_ref])
         end
     end
 
     n_samples = length(idx)
-    x_dist_Δ_CI = 1.96 * std(x_dist_Δ) / sqrt(n_samples)
-    time_Δ_CI = 1.96 * std(time_Δ) / sqrt(n_samples)
+    mean_time_Δ = mean(time_Δ)
+    mean_cost_Δ = mean(cost_Δ)
+    CI_time_Δ = 1.96 * std(time_Δ) / sqrt(n_samples)
+    CI_cost_Δ = 1.96 * std(cost_Δ) / sqrt(n_samples)
 
-    (; idx, x_dist_Δ, time_Δ, x_dist_Δ_CI, time_Δ_CI)
+    (; idx, time_Δ, cost_Δ, mean_time_Δ, mean_cost_Δ, CI_time_Δ, CI_cost_Δ)
 end
 
-function compute_sols_Δ_task(n_maps, n_x0s, sols, ref_sols; task_radius=0.5)
-    idx = []
-    x_dist_Δ = []
-    time_Δ = []
-
-    for i in 1:n_maps
-        for j in 1:n_x0s
-            sol = sols[(i, j)]
-            ref_sol = ref_sols[(i, j)]
-
-            if sol.final_pos'sol.final_pos <= task_radius^2 && ref_sol.final_pos'ref_sol.final_pos <= task_radius^2
-                push!(idx, (i, j))
-                push!(x_dist_Δ, sol.x_dist - ref_sol.x_dist)
-                push!(time_Δ, sol.time - ref_sol.time)
-            end
-        end
-    end
-
-    n_samples = length(idx)
-    x_dist_Δ_CI = 1.96 * std(x_dist_Δ) / sqrt(n_samples)
-    time_Δ_CI = 1.96 * std(time_Δ) / sqrt(n_samples)
-
-    (; idx, x_dist_Δ, time_Δ, x_dist_Δ_CI, time_Δ_CI)
-end
-
-function visualize_multi_quick(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, title_prefix="")
+function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")
     n_maps = length(maps)
     n_x0s = length(x0s)
     @argcheck n_maps * n_x0s == length(sols)
@@ -288,13 +253,29 @@ function visualize_multi_quick(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1,
                         sol = sols[(maps_idx, x0_idx)]
                         ax = Axis(fig[i, j], aspect=DataAspect())
 
-                        ax.title = "$title_prefix\nmaps[$(maps_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\nmcp $(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, pT = $(round.(sol.final_pos; sigdigits=2)) "
+                        ax.title = "$type\nmaps[$(maps_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2))\nmcp $(sol.mcp_success ? "success" : "FAIL"), $(round(sol.time; sigdigits=2)) s, pT = $(round.(sol.final_pos; sigdigits=2)) "
 
-                        if sol.mcp_success
-                            (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                        else
-                            (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                            lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                        if type == "nonsmooth"
+                            if sol.mcp_success
+                                (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            else
+                                (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                                lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                            end
+                        elseif type == "sep_planes"
+                            if sol.mcp_success
+                                (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            else
+                                (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                                lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                            end
+                        elseif type == "direct_kkt"
+                            if sol.mcp_success
+                                (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            else
+                                (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                                lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                            end
                         end
                     end
                 end

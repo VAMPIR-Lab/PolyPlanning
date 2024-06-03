@@ -174,14 +174,11 @@ function setup_sep_planes(
     )
 end
 
-function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3)
+function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_t = n_per_col * n_obs * n_ego
     n_xu = 9
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], aspect=DataAspect())
 
     Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
@@ -244,7 +241,15 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3)
         end
     end
 
-    (fig, update_fig, xxts, abts)
+    if !isempty(θ)
+        update_fig(θ)
+    end
+
+    if is_displaying
+        display(fig)
+    end
+
+    (fig, update_fig, ax)
 end
 
 function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true)

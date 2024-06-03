@@ -131,14 +131,10 @@ function setup_direct_kkt(
     )
 end
 
-function visualize_direct_kkt(x0, T, ego_polys, obs_polys)
+function visualize_direct_kkt(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_xu = 9
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], aspect=DataAspect())
-
 
     Vos = map(obs_polys) do P
         hcat(P.V...)' |> collect
@@ -177,8 +173,16 @@ function visualize_direct_kkt(x0, T, ego_polys, obs_polys)
             end
         end
     end
+    
+    if !isempty(θ)
+        update_fig(θ)
+    end
 
-    (fig, update_fig)
+    if is_displaying
+        display(fig)
+    end
+
+    (fig, update_fig, ax)
 end
 
 
@@ -196,7 +200,7 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
     @assert n == n_z + n_nom "did you forget to update l/u"
 
     if is_displaying
-        (fig, update_fig) = visualize_quick(x0, T, ego_polys, obs_polys)
+        (fig, update_fig) = visualize_direct_kkt(x0, T, ego_polys, obs_polys)
     end
 
     if isnothing(θ0)
