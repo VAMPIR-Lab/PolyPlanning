@@ -7,170 +7,32 @@ function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
     (A, b, q)
 end
 
-function g_col_single(xt, Ae, be, Ao, bo)
-    sds = Dict()
-    Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+
+function get_lagrangian(xt, Ae, be, Ao, bo, sd_opt, λsd_opt)
+    # min c'x
+    # s.t. h - G x in K
+    # KKT:
+    # c + G'λ = 0
+    # h - G x = 0
+    # λ in K*
+    # (h - G x) ∘ λ = 0
     #
-    m1 = length(bex)
-    m2 = length(bo)
-    M = [zeros(Num, 3, 3) -AA'
-        AA zeros(Num, m1 + m2, m1 + m2)]
-    r = [qq; bb]
-    all_active_inds = collect(1:m1+m2)
-    Itr = powerset(all_active_inds) |> collect
-    for active_inds in Itr
-        length(active_inds) > 3 && continue
-        assignment = [i ∈ active_inds for i in 1:m1+m2]
-        try
-            AA_active = collect(AA[active_inds, :])
-            bb_active = collect(bb[active_inds])
-            # TODO what if not unique primal? Need to resolve
-            if length(active_inds) == 3
-                zz = -AA_active \ bb_active
-                #zz = -(AA_active'*AA_active)\AA_active'*bb_active
-            else
-                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
-            end
-            sd = zz[3]
-            sds[active_inds] = sd
-        catch err
-            if err isa LinearAlgebra.SingularException
-                continue
-            else
-                warn(err)
-            end
-        end
-    end
-    sds
+    # for polytopes:
+    # min sd
+    # s.t. 
+    # A r - [A -b] [x, sd] in R+
+    # α ≥ 0
+
+    c = xt
+    G = [A -b] [x, α]
+    h = A * r
+
+    L = c'sd_opt + λsd_opt' * (G * sd_opt - h)
 end
 
-function f_pack_single(xt, Ae, be, Q, q)
-    fvals = Dict()
-    Aex, bex = shift_to(Ae, be, xt)
-    m = length(bex)
-    M = [Q -Aex'
-        Aex zeros(Num, m, m)]
-    r = [q; bex]
-    all_active_inds = collect(1:m)
-    Itr = powerset(all_active_inds) |> collect
-    for active_inds in Itr
-        length(active_inds) > 2 && continue
-        if length(active_inds) == 2 && abs(active_inds[1] - active_inds[2]) == 2
-            continue
-        end
-        assignment = [i ∈ active_inds for i in 1:m]
-        try
-            AA_active = collect(Aex[active_inds, :])
-            bb_active = collect(bex[active_inds])
-            mm = length(active_inds)
-            MM_active = [Q -AA_active'
-                AA_active zeros(Num, mm, mm)]
-            rr_active = [q; bb_active]
-            rhs = -MM_active \ rr_active
-            xx = rhs[1:2]
-            fvals[active_inds] = 0.5 * xx' * Q * xx + xx' * q
-        catch err
-            if err isa LinearAlgebra.SingularException
-                continue
-            else
-                warn(err)
-            end
-        end
-    end
-    fvals
-end
-
-function get_single_sd_ids(xt, Ae, be, Ao, bo, max_derivs)
-    Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
-    m1 = length(bex)
-    m2 = length(bo)
-
-    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
-    #if ret.info.status_polish == -1
-    #    @warn "not polished"
-    #end
-    primals = ret.x
-    duals = -ret.y
-
-    cons = AA * primals + bb
-    I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-    I2 = duals .< 1e-2 .&& cons .< 1e-2
-    I3 = duals .< 1e-2 .&& cons .≥ 1e-2
-
-    all_inds = collect(1:m1+m2)
-    weak_ind_options = powerset(all_inds[I2]) |> collect
-    if length(weak_ind_options) > max_derivs
-        @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
-        weak_ind_options = weak_ind_options[1:max_derivs]
-    end
-    if length(weak_ind_options) < max_derivs
-        append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
-    end
-
-    assignments = map(weak_ind_options) do inds
-        sort([all_inds[I1]; inds])
-    end
-end
-
-function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
-    Aex, bex = shift_to(Ae, be, xt)
-    m = length(be)
-    ret = solve_qp(UseOSQPSolver(); A=sparse(Aex), l=-bex, q, P=sparse(Q), polish=true, verbose=false)
-    primals = ret.x
-    duals = -ret.y
-    cons = Aex * primals + bex
-    I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-    I2 = duals .< 1e-2 .&& cons .< 1e-2
-    I3 = duals .< 1e-2 .&& cons .≥ 1e-2
-
-    all_inds = collect(1:m)
-
-    if sum(I1) == 1
-        for k in keys
-            if all_inds[I1] ⊆ k
-                for j in k
-                    if !I1[j]
-                        I2[j] = true
-                    end
-                end
-            end
-        end
-    end
-
-    weak_ind_options = powerset(all_inds[I2]) |> collect
-    #if length(weak_ind_options) > max_derivs
-    #    @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
-    #    weak_ind_options = weak_ind_options[1:max_derivs]
-    #end
-
-    assignments = map(weak_ind_options) do inds
-        sort([all_inds[I1]; inds])
-    end
-    assignments = filter(a -> a ∈ keys, assignments)
-
-    if length(assignments) > max_derivs
-        @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
-        assignments = assignments[1:max_derivs]
-    end
-    try
-        if length(assignments) < max_derivs
-            append!(assignments, [assignments[end] for _ in 1:max_derivs-length(assignments)])
-        end
-    catch e
-        warn(e)
-    end
-    assignments
-end
-
-
-function setup_quick(ego_polys;
+function setup_differentiablecol(ego_polys;
     T=50,
     dt=0.2,
-    Q=0.01 * [1.0 0; 0 1],
-    q=[0, 0.0],
-    enable_fvals=false,
     Rf=1e-3 * I(3),
     Qf=1e-3 * I(2),
     p1_max=500.0,
@@ -179,21 +41,22 @@ function setup_quick(ego_polys;
     u2_max=1.0,
     u3_max=π / 4,
     sides_per_poly=4,
-    derivs_per_sd=4, # 1
-    derivs_per_fv=4, # 1
     n_obs=4
 )
+    n_x = 6
+    n_u = 3
+    n_xu = n_x + n_u
 
     N_ego_polys = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
 
-    z = Symbolics.@variables(z[1:9*T])[1] |> Symbolics.scalarize
-    xt = Symbolics.@variables(xt[1:6])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:n_xu*T])[1] |> Symbolics.scalarize
+    xt = Symbolics.@variables(xt[1:n_x])[1] |> Symbolics.scalarize
     λsd = Symbolics.@variables(λsd)
     α = Symbolics.@variables(α)
     β = Symbolics.@variables(β)
-    x0 = Symbolics.@variables(x0[1:6])[1] |> Symbolics.scalarize
+    x0 = Symbolics.@variables(x0[1:n_x])[1] |> Symbolics.scalarize
 
     sds = map(ego_polys) do P
         Ae = collect(P.A)
@@ -494,7 +357,7 @@ function setup_quick(ego_polys;
         p2_min)
 end
 
-function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
+function visualize_differentiablecol(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()
@@ -542,7 +405,7 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
     (fig, update_fig, ax)
 end
 
-function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
+function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
 
     @assert length(obs_polys) == n_obs
