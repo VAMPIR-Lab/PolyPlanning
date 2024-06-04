@@ -17,7 +17,7 @@ date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 3
-n_x0s = 8
+n_x0s = 100
 n_sides = 4
 n_obs = 3
 n_xu = 9

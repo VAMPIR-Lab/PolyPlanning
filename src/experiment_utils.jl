@@ -237,7 +237,7 @@ function print_table(bin, n_maps, n_x0s; title="our")
 
     println("             local       fails")
     println("$title ratio    $(round(our_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
-    println("          (mean, CI)  (mean, CI) (mean, CI)")
+    println("          (mean, CI)  (mean, CI)")
     println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
     println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
 end
