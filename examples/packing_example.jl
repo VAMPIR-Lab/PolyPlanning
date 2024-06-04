@@ -11,8 +11,6 @@ our_prob = PolyPlanning.setup_quick(
     ego_rect;
     T=20,
     dt=0.2,
-    Q=0.0 * PolyPlanning.I(2), # disabled final cost
-    q=[0, 0.0],
     Rf,
     Qf=5e-3 * PolyPlanning.I(2),
     u1_max=1.0,

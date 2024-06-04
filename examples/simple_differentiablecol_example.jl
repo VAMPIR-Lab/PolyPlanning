@@ -19,5 +19,3 @@ our_prob = PolyPlanning.setup_quick(
 );
 
 our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=true)
-
-
