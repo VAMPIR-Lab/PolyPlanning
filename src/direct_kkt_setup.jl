@@ -148,7 +148,7 @@ function visualize_direct_kkt(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis
         self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
 
         plot!(ax, self_poly; color=:blue)
-        for t in 1:T# 5:5:T-1
+        for t in 1:T-1# 5:5:T-1
             xxts[i, t] = Observable(x0[1:3])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))

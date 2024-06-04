@@ -12,6 +12,7 @@ our_prob = PolyPlanning.setup_quick(
     dt=0.2,
     Q=1e-3 * PolyPlanning.I(2),
     q=[0, 0.0],
+    enable_fvals=true,
     Rf,
     Qf=5e-3 * PolyPlanning.I(2),
     u1_max=10.0,
