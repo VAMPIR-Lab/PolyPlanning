@@ -183,17 +183,20 @@ function setup_quick(ego_polys;
     derivs_per_fv=4, # 1
     n_obs=4
 )
+    n_x = 6
+    n_u = 3
+    n_xu = n_x + n_u
 
     N_ego_polys = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
 
-    z = Symbolics.@variables(z[1:9*T])[1] |> Symbolics.scalarize
-    xt = Symbolics.@variables(xt[1:6])[1] |> Symbolics.scalarize
+    z = Symbolics.@variables(z[1:n_xu*T])[1] |> Symbolics.scalarize
+    xt = Symbolics.@variables(xt[1:n_x])[1] |> Symbolics.scalarize
     λsd = Symbolics.@variables(λsd)
     α = Symbolics.@variables(α)
     β = Symbolics.@variables(β)
-    x0 = Symbolics.@variables(x0[1:6])[1] |> Symbolics.scalarize
+    x0 = Symbolics.@variables(x0[1:n_x])[1] |> Symbolics.scalarize
 
     sds = map(ego_polys) do P
         Ae = collect(P.A)
@@ -278,11 +281,11 @@ function setup_quick(ego_polys;
     get_gfv = Dict()
     get_Jfv = Dict()
 
-    println(length(sds))
     @info "Generating symbolic solutions to sd calculation"
     for (i, sds_i) in enumerate(sds)
         @showprogress for (k, sd) in sds_i
             lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false)
+
             get_lag[i, k] = Symbolics.build_function(lag, xt, Ao, bo, β, λsd; expression=Val(false))[2]
             get_sd[i, k] = Symbolics.build_function(β[1] * sd, xt, Ao, bo, β, λsd; expression=Val(false))
 
@@ -329,7 +332,7 @@ function setup_quick(ego_polys;
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
         for i in 1:N_ego_polys
             for t in 1:T
-                xt_inds = (t-1)*9+1:(t-1)*9+6
+                xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
                 for (e, P) in enumerate(polys)
                     Ao = P.A
@@ -365,14 +368,14 @@ function setup_quick(ego_polys;
         nothing
     end
 
-    function get_J_both(JJ, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
+    function get_J_both!(JJ, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         JJ.nzval .= 1e-16
         get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
         for i in 1:N_ego_polys
             for t in 1:T
-                xt_inds = (t-1)*9+1:(t-1)*9+6
+                xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
                 for (e, P) in enumerate(polys)
                     Ao = collect(P.A)
@@ -422,7 +425,7 @@ function setup_quick(ego_polys;
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
     for i in 1:N_ego_polys
         for t in 1:T
-            xt_inds = (t-1)*9+1:(t-1)*9+6
+            xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
             for e in 1:n_obs
                 λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
                 β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
@@ -476,7 +479,7 @@ function setup_quick(ego_polys;
     end
 
     return (; fill_F!,
-        get_J_both,
+        get_J_both!,
         J_example,
         l,
         u,
@@ -543,7 +546,7 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
 end
 
 function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
-    (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
+    (; fill_F!, get_J_both!, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
 
     @assert length(obs_polys) == n_obs
 
@@ -594,7 +597,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         @inbounds β_sd = θ[n_z+n_α+1:n_z+n_α+n_β]
         @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
         @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
-        get_J_both(JJ, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
+        get_J_both!(JJ, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
         col .= J_col
         len .= J_len
         row .= J_row

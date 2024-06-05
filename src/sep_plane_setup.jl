@@ -9,6 +9,7 @@ function shift_to(V, x::AbstractArray{T}) where {T}
     Vx
 end
 
+# deprecated
 function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=12)
     cons_sps = Num[]
     l_sps = Float64[]
