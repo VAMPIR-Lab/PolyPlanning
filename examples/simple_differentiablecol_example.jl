@@ -8,13 +8,13 @@ Rf[3, 3] = Rf[3, 3] / 100.0;
 
 our_prob = PolyPlanning.setup_differentiablecol(
     ego_rect;
-    T=20,
+    T=1,
     dt=0.2,
     Rf,
     Qf=5e-3 * PolyPlanning.I(2),
-    u1_max=10.0,
-    u2_max=10.0,
-    u3_max=π,
+    u1_max=10*10.0,
+    u2_max=10*10.0,
+    u3_max=10*π,
     n_obs=length(obs_polys)
 );
 

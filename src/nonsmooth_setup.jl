@@ -187,7 +187,7 @@ function setup_quick(ego_polys;
     n_u = 3
     n_xu = n_x + n_u
 
-    N_ego_polys = length(ego_polys)
+    n_ego = length(ego_polys)
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
 
@@ -204,8 +204,8 @@ function setup_quick(ego_polys;
         g_col_single(xt, Ae, be, Ao, bo)
     end
 
-    num_sd_cons = T * n_obs * N_ego_polys
-    num_sd_mults = T * n_obs * derivs_per_sd * N_ego_polys
+    num_sd_cons = T * n_obs * n_ego
+    num_sd_mults = T * n_obs * derivs_per_sd * n_ego
 
     if enable_fvals
         fvals = map(ego_polys) do P
@@ -216,7 +216,7 @@ function setup_quick(ego_polys;
         fkeys = map(fvals) do fv
             collect(keys(fv))
         end
-        num_f_mults = derivs_per_fv * N_ego_polys
+        num_f_mults = derivs_per_fv * n_ego
     else
         num_f_mults = 0
     end
@@ -234,7 +234,7 @@ function setup_quick(ego_polys;
 
     β_sd = Symbolics.@variables(β_sd[1:num_sd_mults])[1] |> Symbolics.scalarize
     if num_f_mults > 0
-        slacks = Symbolics.@variables(slacks[1:num_sd_cons+N_ego_polys])[1] |> Symbolics.scalarize
+        slacks = Symbolics.@variables(slacks[1:num_sd_cons+n_ego])[1] |> Symbolics.scalarize
     else
         slacks = Symbolics.@variables(slacks[1:num_sd_cons])[1] |> Symbolics.scalarize
     end
@@ -248,11 +248,11 @@ function setup_quick(ego_polys;
 
     simplex_cons = Num[]
     if num_f_mults > 0
-        for i in 1:N_ego_polys
+        for i in 1:n_ego
             push!(simplex_cons, 1.0 - sum(α_f[(i-1)*derivs_per_fv+1:i*derivs_per_fv]))
         end
     end
-    for i in 1:N_ego_polys
+    for i in 1:n_ego
         offset = (i - 1) * T * n_obs * derivs_per_sd
         for t in 1:T
             for j in 1:n_obs
@@ -326,11 +326,12 @@ function setup_quick(ego_polys;
 
     col_offset = length(z) + length(α_f) + length(β_sd) + length(slacks) + length(λ_nom)
     β_offset = length(z) + length(α_f)
-    lag_buf = zeros(6)
+    lag_buf = zeros(n_x)
+    
     function fill_F!(F, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
-        for i in 1:N_ego_polys
+        for i in 1:n_ego
             for t in 1:T
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
@@ -373,7 +374,7 @@ function setup_quick(ego_polys;
         get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
-        for i in 1:N_ego_polys
+        for i in 1:n_ego
             for t in 1:T
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
@@ -423,7 +424,7 @@ function setup_quick(ego_polys;
     end
 
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
-    for i in 1:N_ego_polys
+    for i in 1:n_ego
         for t in 1:T
             xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
             for e in 1:n_obs
@@ -459,7 +460,7 @@ function setup_quick(ego_polys;
     λsdr = randn()
     αr = randn()
     βr = randn()
-    for i in 1:N_ego_polys
+    for i in 1:n_ego
         @showprogress for k in collect(keys(sds[i]))
             get_lag[i, k](lag_buf, xtr, Aor, bor, βr, λsdr)
             ss = get_sd[i, k](xtr, Aor, bor, βr, λsdr)

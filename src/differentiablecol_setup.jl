@@ -1,13 +1,3 @@
-function gen_LP_data(A1::AbstractArray{T}, b1, A2, b2) where {T}
-    m1 = length(b1)
-    m2 = length(b2)
-    A = [[A1; A2] ones(T, m1 + m2)]
-    b = [b1; b2]
-    q = [0, 0, 1.0]
-    (A, b, q)
-end
-
-
 function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd)
     # min c'y
     # s.t. h - G y in K
@@ -16,18 +6,18 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd)
     # h - G y = 0
     # λ in K*
     # (h - G y) ∘ λ = 0
-    #
+
     # for polytopes:
     # min sd
     # s.t. 
-    # A r - [A -b] [x, sd] ≥ R+
+    # A r - [A -b] [p, sd] ≥ R+
     # α ≥ 0
     # c' x = s + λ (cons)
     # p = 2 dim sym
 
     Aex, bex = shift_to(Ae, be, xt)
-    c = [0; 0; 1]
-    G = [Aex -bex; Ao bo]
+    c = [0; 0; 1.0]
+    G = [Aex -bex; Ao -bo]
     h = [Aex * xt[1:2]; Ao * xt[1:2]]
 
     c' * [p; sd] + λsd' * (G * [p; sd] - h)
@@ -50,10 +40,10 @@ function setup_differentiablecol(ego_polys;
     n_u = 3
     n_xu = n_x + n_u
 
-    N_ego_polys = length(ego_polys)
+    n_ego = length(ego_polys)
     sides_per_ego = length(ego_polys[1].b)
     # assert all sides of polys are the same for all i
-    @assert all([length(ego_polys[i].b) for i in 1:N_ego_polys] .== sides_per_ego)
+    @assert all([length(ego_polys[i].b) for i in 1:n_ego] .== sides_per_ego)
 
     Ao = Symbolics.@variables(Ao[1:sides_per_poly, 1:2])[1] |> Symbolics.scalarize
     bo = Symbolics.@variables(bo[1:sides_per_poly])[1] |> Symbolics.scalarize
@@ -100,7 +90,6 @@ function setup_differentiablecol(ego_polys;
     get_dlag = Dict()
     get_Jlag = Dict()
 
-    #@info "Generating symbolic solutions to sd calculation"
     for (i, lag) in enumerate(col_lags)
         dlag = Symbolics.gradient(lag, xt; simplify=false)
         get_dlag[i] = Symbolics.build_function(dlag, xt, Ao, bo, λsd, p, sd; expression=Val(false))[2]
@@ -112,16 +101,21 @@ function setup_differentiablecol(ego_polys;
             Jlag_cols = [1]
             Jlag_vals = Num[0.0]
         end
-  
-        get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, bo, λsd, p, sd; expression=Val(false))[2], zeros(length(Jlag_rows)))
+
+        get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, λsd, p, sd; expression=Val(false))[2], zeros(length(Jlag_rows)))
     end
 
-    col_offset = length(z) + length(λ_nom)
-    lag_buf = zeros(6)
+    #col_offset = length(z) + length(λ_nom)
+    #lag_buf = zeros(6)
+    Aes = [deepcopy(P.A) for P in ego_polys]
+    bes = [deepcopy(P.b) for P in ego_polys]
+    lag_buf = zeros(n_x)
+
+
     function fill_F!(F, z, x0, polys, λ_nom)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom)
-        for i in 1:N_ego_polys
+        for i in 1:n_ego
             for t in 1:T
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
@@ -129,50 +123,59 @@ function setup_differentiablecol(ego_polys;
                     Ao = P.A
                     bo = P.b
 
-                    # osqp solver -> xt, sd, p, λsd
-                    Main.@infiltrate
-                    Aex, bex = shift_to(Ae, be, xt)
-                    AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo) # update this
-          
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
-              
-                    #ret.y ..
-                    # be careful on the negative interpretation of the duals
-                    fill_lag_derivs()
-                    #λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
-                    #β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
-                    #@inbounds λte = λ_col[λ_ind]
-                    #@inbounds βte = β_sd[β_inds]
-                    #assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, derivs_per_sd)
-                    #for (ee, assignment) in enumerate(assignments)
-                    #    if length(assignment) > 3
-                    #        assignment = assignment[1:3]
-                    #    end
-                    #    get_lag[i, assignment](lag_buf, xt, Ao, bo, βte[ee], λte)
-                    #    βsd = get_sd[i, assignment](xt, Ao, bo, βte[ee], λte)
+                    # osqp solver -> sd, p, λsd
+                    Aex, bex = shift_to(Aes[i], bes[i], xt)
+                    qq = [0; 0; 1.0]
+                    AA = [Aex -bex; Ao -bo]
+                    bb = [Aex * xt[1:2]; Ao * xt[1:2]]
+                    # -AA * [p; sd] ≥ -bb
+                    ret = solve_qp(UseOSQPSolver(); A=-sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
 
-                    #    F[xt_inds] .+= lag_buf
-                    #    F[λ_ind+col_offset] += βsd
-                    #end
+                    p = ret.x[1:2]
+                    sd = ret.x[3]
+                    λsd = ret.y
+
+                    get_dlag[i](lag_buf, xt, Ao, bo, λsd, p, sd)
+                    F[xt_inds] .+= lag_buf
                 end
             end
         end
         nothing
     end
 
-    function get_J_both!(JJ, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
-        JJ.nzval .= 1e-16
-        get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
-        JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
+    function get_J_both!(JJ, z, x0, polys, λ_nom)
+        JJ = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
+        #JJ .= 0.0
+        #JJ.nzval .= 1e-16
+        #get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
+        #JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
-        for i in 1:N_ego_polys
+        for i in 1:n_ego
             for t in 1:T
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
                 @inbounds xt = z[xt_inds]
                 for (e, P) in enumerate(polys)
-                    Ao = collect(P.A)
+                    Ao = P.A
                     bo = P.b
-                    fill_lag_derivs()
+
+                    # osqp solver -> sd, p, λsd
+                    Aex, bex = shift_to(Aes[i], bes[i], xt)
+                    qq = [0; 0; 1.0]
+                    AA = [Aex -bex; Ao -bo]
+                    bb = [Aex * xt[1:2]; Ao * xt[1:2]]
+                    # -AA * [p; sd] ≥ -bb
+                    ret = solve_qp(UseOSQPSolver(); A=-sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+
+                    p = ret.x[1:2]
+                    sd = ret.x[3]
+                    λsd = ret.y
+
+                    #Main.@infiltrate
+                    Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
+                    Jlag_vals(Jlag_buf, xt, Ao, bo, λsd, p, sd)
+                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
+
+                    @inbounds JJ[xt_inds, xt_inds] .+= Jlag[1:n_x, 1:n_x]
                 end
 
             end
@@ -180,52 +183,11 @@ function setup_differentiablecol(ego_polys;
         nothing
     end
 
-    #J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
-    #for i in 1:N_ego_polys
-    #    for t in 1:T
-    #        xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
-    #        for e in 1:n_obs
-    #            λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
-    #            J_example[xt_inds, xt_inds] .= 1.0
-    #            J_example[xt_inds, col_offset+λ_ind] .= 1.0
-    #            J_example[col_offset+λ_ind, xt_inds] .= 1.0
-    #        end
-    #        if enable_fvals && t == T
-    #            J_example[xt_inds, length(z)+1:length(z)+length(α_f)] .= 1.0
-    #        end
-    #    end
-    #end
-
-    #@info "Forcing compilation"
     n_z = length(z)
     n_nom = length(λ_nom)
-    #xtr = randn(6)
-    #Aer = randn(sides_per_poly, 2)
-    #ber = randn(sides_per_poly)
-    #Aor = randn(sides_per_poly, 2)
-    #bor = randn(sides_per_poly)
-    #lag_buf = zeros(6)
-    #λsdr = randn()
-    #αr = randn()
-    #βr = randn()
-    #for i in 1:N_ego_polys
-    #    @showprogress for k in collect(keys(sds[i]))
-    #        get_dlag[i, k](lag_buf, xtr, Aor, bor, βr, λsdr)
-    #        ss = get_sd[i, k](xtr, Aor, bor, βr, λsdr)
-    #        get_Jlag[i, k][3](get_Jlag[i, k][4], xtr, Aor, bor, βr, λsdr)
-    #        get_Jsd[i, k][3](get_Jsd[i, k][4], xtr, Aor, bor, βr, λsdr)
-    #    end
-    #    if enable_fvals
-    #        @showprogress for k in collect(keys(fvals[i]))
-    #            gfv = get_gfv[i, k](lag_buf, xtr, αr)
-    #            Jfv = get_Jfv[i, k][3](get_Jfv[i, k][4], xtr, αr)
-    #        end
-    #    end
-    #end
 
     return (; fill_F!,
         J_both=(Jnom_rows, Jnom_cols, get_J_both!),
-        #J_example,
         l,
         u,
         T,
@@ -341,12 +303,12 @@ function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying
         @assert nnz == nnz_total
         data .= 0.0
         @inbounds z = θ[1:n_z]
-        @inbounds λ_col = θ[n_z+n_nom+1:n_z+n_nom]
-        J_vals!(JJ, z, x0, obs_polys, λ_nom)
+        @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
+        J_vals!(data, z, x0, obs_polys, λ_nom)
         col .= J_col
         len .= J_len
         row .= J_row
-        data .= JJ.nzval
+        #data .= JJ.nzval
         Cint(0)
     end
 
@@ -361,10 +323,9 @@ function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    Jrows, Jcols, _ = findnz(J_example)
-
-    Jnum = sparse(Jrows, Jcols, Jbuf)
-    Jnum2 = spzeros(n, n)
+    #Jrows, Jcols, _ = findnz(J_example)
+    #Jnum = sparse(Jrows, Jcols, Jbuf)
+    #Jnum2 = spzeros(n, n)
     #@info "Testing Jacobian accuracy numerically"
     #@showprogress for ni in 1:n
     #    wi = copy(w)
