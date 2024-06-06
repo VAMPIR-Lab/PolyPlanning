@@ -7,19 +7,36 @@
 #     (A, b, q)
 # end
 
-function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
-    centroide = xt[1:2]
-    A = [Ae Ae*centroide+be;
-        Ao Ao*centroido+bo]
-    b = [be; bo]
-    q = [0, 0, 1.0]
+# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
+#     centroide = xt[1:2]
+#     A = [Ae Ae*centroide+be;
+#         Ao Ao*centroido+bo]
+#     b = [be; bo]
+#     q = [0, 0, 1.0]
+#     (A, b, q)
+# end
+
+function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
+    if !is_newsd
+        me = length(be)
+        mo = length(bo)
+        A = [[Ae; Ao] ones(T, me + mo)]
+        b = [be; bo]
+        q = [0, 0, 1.0]
+    else
+        centroide = xt[1:2]
+        A = [Ae Ae*centroide+be;
+            Ao Ao*centroido+bo]
+        b = [be; bo]
+        q = [0, 0, 1.0]
+    end
     (A, b, q)
 end
 
-function g_col_single(xt, Ae, be, Ao, bo, centroido)
+function g_col_single(xt, Ae, be, Ao, bo, centroido; is_newsd=false)
     sds = Dict()
     Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido)
+    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido; is_newsd=is_newsd)
     m1 = length(bex)
     m2 = length(bo)
     M = [zeros(Num, 3, 3) -AA'
@@ -89,9 +106,9 @@ function f_pack_single(xt, Ae, be, Q, q)
     fvals
 end
 
-function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs)
+function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=false)
     Aex, bex = shift_to(Ae, be, xt)
-    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido)
+    AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido; is_newsd=is_newsd)
     m1 = length(bex)
     m2 = length(bo)
 
@@ -189,7 +206,8 @@ function setup_quick(ego_polys;
     sides_per_poly=4,
     derivs_per_sd=4,
     derivs_per_fv=4,
-    n_obs=4
+    n_obs=4,
+    is_newsd=false
 )
 
     N_ego_polys = length(ego_polys)
@@ -207,7 +225,7 @@ function setup_quick(ego_polys;
     sds = map(ego_polys) do P
         Ae = collect(P.A)
         be = P.b
-        g_col_single(xt, Ae, be, Ao, bo, centroido)
+        g_col_single(xt, Ae, be, Ao, bo, centroido; is_newsd=is_newsd)
     end
 
     num_sd_cons = T * n_obs * N_ego_polys
@@ -329,12 +347,12 @@ function setup_quick(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
-                    centroido = sum(P.V)/length(P.V)
+                    centroido = sum(P.V) / length(P.V)
                     λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
                     β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd)
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd; is_newsd=is_newsd)
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -390,7 +408,7 @@ function setup_quick(ego_polys;
                     @inbounds βte = β_sd[β_inds]
                     #λte_inds = (1:derivs_per_sd) .+ ((t-1)*N_polys*derivs_per_sd+(e-1)*derivs_per_sd)
                     #@inbounds λte = λ_col[λte_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd)
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd; is_newsd=is_newsd)
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -487,7 +505,7 @@ function setup_quick(ego_polys;
     βr = randn()
     for i in 1:N_ego_polys
         @showprogress for k in collect(keys(sds[i]))
-            get_lag[i, k](lag_buf, xtr, Aor, bor, centroidor,βr, λsdr)
+            get_lag[i, k](lag_buf, xtr, Aor, bor, centroidor, βr, λsdr)
             ss = get_sd[i, k](xtr, Aor, bor, centroidor, βr, λsdr)
             get_Jlag[i, k][3](get_Jlag[i, k][4], xtr, Aor, bor, centroidor, βr, λsdr)
             get_Jsd[i, k][3](get_Jsd[i, k][4], xtr, Aor, bor, centroidor, βr, λsdr)
@@ -523,7 +541,7 @@ function setup_quick(ego_polys;
         p2_min)
 end
 
-function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
+function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_newsd=false)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()
@@ -544,6 +562,33 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
         Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
         self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
         plot!(ax, self_poly; color=:blue, linewidth=3)
+
+        P = obs_polys[1]
+        Ao = P.A
+        bo = P.b
+        centroido = sum(P.V) / length(P.V)
+        LP_data = @lift(gen_LP_data($(xxts[i, t]), $(Aeb)[1], $(Aeb)[2], Ao, bo, centroido; is_newsd=is_newsd))
+        AA = @lift($(LP_data)[1])
+        bb = @lift($(LP_data)[2])
+        qq = @lift($(LP_data)[3])
+        ret = @lift(solve_qp(UseOSQPSolver(); A=sparse($(AA)), l=-$(bb), q=$(qq), polish=true, verbose=false))
+        sd = @lift($(ret).x[3])
+
+        @infiltrate
+        if !is_newsd
+            be_inflated = @lift($(Aeb)[2] + $(sd) * ones(length($(Aeb)[2])))
+            bo_inflated = @lift(bo + $(sd) * ones(length(bo)))            
+        else
+            be_inflated = @lift($(Aeb)[2] + $(sd) * (($(Aeb)[1]) * $(xxts[i, t])[1:2] + ($(Aeb)[2])))
+            bo_inflated = @lift(bo + $(sd) * (Ao * centroido + bo))
+        end
+        self_poly_inflated = @lift(ConvexPolygon2D($(Aeb)[1], $(be_inflated)))
+        plot!(ax, self_poly_inflated; color=:yellow, linewidth=3)
+
+        obstacle_inflated = @lift(ConvexPolygon2D(Ao, $(bo_inflated)))
+        plot!(ax, obstacle_inflated; color=:yellow, linewidth=3)
+
+
     end
 
     #colors = [:red, :orange, :yellow, :green]
@@ -571,7 +616,7 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
     (fig, update_fig, ax)
 end
 
-function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
+function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_duration = 0., is_newsd=false)
     (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
 
     @assert length(obs_polys) == n_obs
@@ -580,7 +625,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     @assert n == n_z + n_α + n_β + n_s + n_nom + n_col
 
     if is_displaying
-        (fig, update_fig) = visualize_quick(x0, T, ego_polys, obs_polys)
+        (fig, update_fig) = visualize_quick(x0, T, ego_polys, obs_polys; is_newsd=is_newsd)
     end
 
     if isnothing(θ0)
@@ -611,6 +656,10 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
 
         if is_displaying
             update_fig(θ)
+            @info θ
+            if sleep_duration > 0
+                sleep(sleep_duration)
+            end
         end
 
         Cint(0)

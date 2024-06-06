@@ -7,23 +7,23 @@ using GLMakie
 is_saving = false
 is_running_sep = false
 is_running_kkt = false
-is_loading_exp = false # skip experiment generation and load from file
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-05-30_2351"
-res_file_date = "2024-05-30_2351"
+exp_file_date = "2024-06-04_1437"
+res_file_date = "2024-06-04_1437"
 exp_name = "simple"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 4 # number of maps
-n_x0s = 100 # number of initial conditions
+n_maps = 3 # number of maps
+n_x0s = 12 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
-Rf = 1e-3 * PolyPlanning.I(3); # penality for control variable
+Rf = 1e-2 * PolyPlanning.I(3); # penality for control variable
 Rf[3, 3] = Rf[3, 3] / 100.0;
 Qf = 5e-3 * PolyPlanning.I(2) # penality for translation
 u1_max = 10.0
@@ -67,7 +67,7 @@ else # generate ego_poly, x0s and maps
     end
 
     maps = map(1:n_maps) do i
-        PolyPlanning.gen_rect_obs(; a=0.25)
+        PolyPlanning.gen_rect_obs(; a=0.2 + 0.1*rand())
     end
 
     if is_saving
@@ -83,7 +83,8 @@ else
 end
 
 # visualize
-PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=4, n_cols=5, title_prefix="ours")
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=4, title_prefix="ours")
+
 #PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
 #PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
 
