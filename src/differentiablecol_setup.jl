@@ -122,12 +122,14 @@ function setup_differentiablecol(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
+                    xto = sum(P.V) / length(P.V)
 
                     # osqp solver -> sd, p, λsd
                     Aex, bex = shift_to(Aes[i], bes[i], xt)
                     qq = [0; 0; 1.0]
                     AA = [Aex -bex; Ao -bo]
-                    bb = [Aex * xt[1:2]; Ao * xt[1:2]]
+
+                    bb = [Aex * xt[1:2]; Ao * xto]
                     # -AA * [p; sd] ≥ -bb
                     ret = solve_qp(UseOSQPSolver(); A=-sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
 
@@ -137,6 +139,7 @@ function setup_differentiablecol(ego_polys;
 
                     get_dlag[i](lag_buf, xt, Ao, bo, λsd, p, sd)
                     F[xt_inds] .+= lag_buf
+                    #Main.@infiltrate
                 end
             end
         end
@@ -144,11 +147,13 @@ function setup_differentiablecol(ego_polys;
     end
 
     function get_J_both!(JJ, z, x0, polys, λ_nom)
-        JJ = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
-        #JJ .= 0.0
+        #JJ = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
+        JJ .= 0.0
         #JJ.nzval .= 1e-16
         #get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
         #JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
+        get_Jnom_vals(Jnom_buf, z, x0, λ_nom)
+        JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
         for i in 1:n_ego
             for t in 1:T
@@ -157,12 +162,13 @@ function setup_differentiablecol(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
+                    xto = sum(P.V) / length(P.V)
 
                     # osqp solver -> sd, p, λsd
                     Aex, bex = shift_to(Aes[i], bes[i], xt)
                     qq = [0; 0; 1.0]
                     AA = [Aex -bex; Ao -bo]
-                    bb = [Aex * xt[1:2]; Ao * xt[1:2]]
+                    bb = [Aex * xt[1:2]; Ao * xto]
                     # -AA * [p; sd] ≥ -bb
                     ret = solve_qp(UseOSQPSolver(); A=-sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
 
@@ -173,7 +179,7 @@ function setup_differentiablecol(ego_polys;
                     #Main.@infiltrate
                     Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
                     Jlag_vals(Jlag_buf, xt, Ao, bo, λsd, p, sd)
-                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 8)
+                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, 6, 6)
 
                     @inbounds JJ[xt_inds, xt_inds] .+= Jlag[1:n_x, 1:n_x]
                 end
@@ -266,20 +272,10 @@ function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying
 
     if isnothing(θ0)
         θ0 = zeros(n)
-        #derivs_per_fv = Int(n_α / length(ego_polys))
-        #derivs_per_sd = Int(n_β / (T * length(ego_polys) * n_obs))
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+n_x] = x0
         end
-        #θ0[n_z+1:n_z+n_α] .= 1.0 / derivs_per_fv
-        #θ0[n_z+n_α+1:n_z+n_α+n_β] .= 1.0 / derivs_per_sd
     end
-
-    #JJ = J_example
-    #J_col = JJ.colptr[1:end-1]
-    #J_len = diff(JJ.colptr)
-    #J_row = JJ.rowval
-    #nnz_total = length(JJ.nzval)
 
     J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
     J_col = J_shape.colptr[1:end-1]
@@ -301,10 +297,10 @@ function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying
     end
     function J(n, nnz, θ, col, len, row, data)
         @assert nnz == nnz_total
-        data .= 0.0
+        JJ = copy(J_shape)
         @inbounds z = θ[1:n_z]
         @inbounds λ_nom = θ[n_z+1:n_z+n_nom]
-        J_vals!(data, z, x0, obs_polys, λ_nom)
+        J_vals!(JJ, z, x0, obs_polys, λ_nom)
         col .= J_col
         len .= J_len
         row .= J_row
@@ -323,17 +319,16 @@ function solve_differentiablecol(prob, x0, obs_polys; θ0=nothing, is_displaying
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    #Jrows, Jcols, _ = findnz(J_example)
-    #Jnum = sparse(Jrows, Jcols, Jbuf)
-    #Jnum2 = spzeros(n, n)
-    #@info "Testing Jacobian accuracy numerically"
-    #@showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-5
-    #    F(n, wi, buf2)
-    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    #end
-    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
+    Jnum = sparse(J_rows, J_cols, Jbuf)
+    Jnum2 = spzeros(n, n)
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+        wi = copy(w)
+        wi[ni] += 1e-5
+        F(n, wi, buf2)
+        Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(

@@ -327,7 +327,7 @@ function setup_quick(ego_polys;
     col_offset = length(z) + length(α_f) + length(β_sd) + length(slacks) + length(λ_nom)
     β_offset = length(z) + length(α_f)
     lag_buf = zeros(n_x)
-    
+
     function fill_F!(F, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
