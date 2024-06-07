@@ -373,6 +373,7 @@ function setup_quick(ego_polys;
         JJ.nzval .= 1e-16
         get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
+        #Main.@infiltrate
 
         for i in 1:n_ego
             for t in 1:T
