@@ -6,9 +6,9 @@ ego_rect = PolyPlanning.gen_ego_rect(; a=0.5, b=1.0);
 Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
 
-our_prob = PolyPlanning.setup_differentiablecol(
+our_prob = PolyPlanning.setup_dcol(
     ego_rect;
-    T=1,
+    T=2,
     dt=0.2,
     Rf,
     Qf=5e-3 * PolyPlanning.I(2),
@@ -18,4 +18,4 @@ our_prob = PolyPlanning.setup_differentiablecol(
     n_obs=length(obs_polys)
 );
 
-our_sol = PolyPlanning.solve_differentiablecol(our_prob, x0, obs_polys; is_displaying=true)
+our_sol = PolyPlanning.solve_dcol(our_prob, x0, obs_polys; is_displaying=true)

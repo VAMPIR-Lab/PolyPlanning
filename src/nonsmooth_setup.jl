@@ -621,14 +621,14 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
 
     Jnum = sparse(Jrows, Jcols, Jbuf)
     Jnum2 = spzeros(n, n)
-    #@info "Testing Jacobian accuracy numerically"
-    #@showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-5
-    #    F(n, wi, buf2)
-    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    #end
-    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+        wi = copy(w)
+        wi[ni] += 1e-5
+        F(n, wi, buf2)
+        Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
