@@ -73,6 +73,43 @@ function multi_solve_sep(ego_poly, x0s, maps, param)
     sols
 end
 
+
+function multi_solve_dcol(ego_poly, x0s, maps, param)
+    @argcheck length(x0s) == param.n_x0s
+    @argcheck length(maps) == param.n_maps
+    for map in maps
+        @argcheck length(map) == param.n_obs
+    end
+
+    dcol_prob = PolyPlanning.setup_dcol(
+        ego_poly;
+        param.T,
+        param.dt,
+        param.Rf,
+        param.Qf,
+        param.u1_max,
+        param.u2_max,
+        param.u3_max,
+        param.n_obs
+    )
+
+    sols = Dict()
+    p = Progress(param.n_maps * param.n_x0s, dt=1.0)
+    for (i, map) in enumerate(maps)
+        for (j, x0) in enumerate(x0s)
+            res = PolyPlanning.solve_dcol(dcol_prob, x0, map; is_displaying=false)
+            mcp_success = res.status == PATHSolver.MCP_Solved
+            time = res.info.total_time
+            cost = f(res.z, param.T, param.Rf, param.Qf)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
+            next!(p)
+        end
+    end
+    sols
+end
+
+
 function multi_solve_kkt(ego_poly, x0s, maps, param)
     @argcheck length(x0s) == param.n_x0s
     @argcheck length(maps) == param.n_maps
@@ -108,7 +145,7 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
     sols
 end
 
-function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, is_loading_kkt=false, data_dir="data")
+function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
     our_file = jldopen("$data_dir/$(exp_name)_our_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
     our_sols = our_file["our_sols"]
@@ -119,15 +156,20 @@ function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, 
         sep_sols = sep_file["sep_sols"]
     end
 
+    if is_loading_dcol
+        dcol_file = jldopen("$data_dir/$(exp_name)_dcol_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
+        dcol_sols = sep_file["dcol_sols"]
+    end
+
     if is_loading_kkt
         kkt_file = jldopen("$data_dir/$(exp_name)_kkt_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
         kkt_sols = kkt_file["kkt_sols"]
     end
 
-    (our_sols, sep_sols, kkt_sols)
+    (our_sols, sep_sols, dcol_sols, kkt_sols)
 end
 
-function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, data_dir="data", date_now="", exp_file_date="")
+function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="")
     #n_maps = length(maps)
     #n_x0s = length(x0s)
     @info "Computing nonsmooth solutions..."
@@ -151,6 +193,18 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         end
     end
 
+    dcol_sols = []
+    if is_running_dcol
+        @info "Computing DifferentiableCollisions.jl solutions..."
+        start_t = time()
+        dcol_sols = multi_solve_dcol(ego_poly, x0s, maps, param)
+        @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_dcol_sols_$(date_now)_exp_$exp_file_date.jld2"; dcol_sols)
+        end
+    end
+
     kkt_sols = []
     if is_running_kkt
         @info "Computing direct KKT solutions..."
@@ -163,7 +217,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         end
     end
 
-    (our_sols, sep_sols, kkt_sols)
+    (our_sols, sep_sols, dcol_sols, kkt_sols)
 end
 
 function load_experiment(name, date; data_dir="data")
@@ -280,6 +334,13 @@ function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1,
                     (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                     lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                 end
+            elseif type == "dcol"
+                if sol.mcp_success
+                    (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                else
+                    (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                end
             elseif type == "direct_kkt"
                 if sol.mcp_success
                     (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
@@ -338,6 +399,13 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
                                 (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                             else
                                 (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                                lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
+                            end
+                        elseif type == "dcol"
+                            if sol.mcp_success
+                                (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            else
+                                (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         elseif type == "direct_kkt"

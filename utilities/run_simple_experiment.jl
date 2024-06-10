@@ -4,9 +4,10 @@ using Dates
 using GLMakie
 
 # user options
-is_saving = true
-is_running_sep = true
-is_running_kkt = true
+is_saving = false
+is_running_sep = false
+is_running_dcol = true
+is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
@@ -17,15 +18,15 @@ date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 1 # number of maps
-n_x0s = 100 # number of initial conditions
+n_x0s = 1 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
-Rf = 1e-3 * PolyPlanning.I(3); # penality for control variable
+Rf = 2e-3 * PolyPlanning.I(3); # penalty for control variable
 Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 5e-3 * PolyPlanning.I(2) # penality for translation
+Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
@@ -85,16 +86,36 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
 
 # visualize
-#PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix="ours")
+PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=2, type="nonsmooth")
 #PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
+PolyPlanning.visualize_multi(x0s, maps, dcol_sols, T, ego_poly; n_rows=3, n_cols=2, type = "dcol")
 #PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
 
 # process
+our_bins = PolyPlanning.process_into_bins(our_sols)
+@info "$(length(our_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% nonsmooth success rate"
 
+sep_bins = []
+if is_running_sep
+    sep_bins = PolyPlanning.process_into_bins(sep_sols)
+    @info "$(length(sep_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+end
+
+dcol_bins = []
+if is_running_dcol
+    dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
+    @info "$(length(dcol_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% dcol success rate"
+end
+
+kkt_bins = []
+if is_running_kkt
+    kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
+    @info "$(length(kkt_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
+end
 

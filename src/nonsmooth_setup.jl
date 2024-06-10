@@ -38,7 +38,7 @@ function g_col_single(xt, Ae, be, Ao, bo)
             if err isa LinearAlgebra.SingularException
                 continue
             else
-                warn(err)
+                @warn(err)
             end
         end
     end
@@ -74,7 +74,7 @@ function f_pack_single(xt, Ae, be, Q, q)
             if err isa LinearAlgebra.SingularException
                 continue
             else
-                warn(err)
+                @warn(err)
             end
         end
     end

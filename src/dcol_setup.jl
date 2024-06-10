@@ -15,6 +15,12 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     # c' x = s + λ (cons)
     # p = 2 dim sym
 
+    #Q = [cos(xt[3]) sin(xt[3])
+    #-sin(xt[3]) cos(xt[3])]
+    #qq = [0; 0; 1.0]
+    #AA = [Ae*Q' be; Ao bo+Ao*xto]
+    #bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
+
     Q = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     c = [0; 0; 1.0]
@@ -118,10 +124,12 @@ function setup_dcol(ego_polys;
         get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     end
 
+    get_lag = Dict()
     get_dlag = Dict()
     get_Jlag = Dict()
 
     for (i, lag) in enumerate(col_lags)
+        get_lag[i] = Symbolics.build_function(lag, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))
         dlag = Symbolics.gradient(lag, xt; simplify=false)
         get_dlag[i] = Symbolics.build_function(dlag, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))[2]
         Jlag = Symbolics.sparsejacobian(dlag, xt; simplify=false)
@@ -146,6 +154,30 @@ function setup_dcol(ego_polys;
     # dF/dλ_dcol -dlag_buf
     #F[dcol_inds] += sd # just sd
     # dsd/dx = dlag
+    function solve_sd(xte, Ae, be, xto, Ao, bo)
+        # osqp solver -> sd, p, λsd
+        x = xte[1:2]
+        θ = xte[3]
+
+        Q = [cos(θ) sin(θ)
+            -sin(θ) cos(θ)]
+        qq = [0; 0; 1.0]
+
+        AA = [Ae*Q' be; Ao bo+Ao*xto]
+        bb = [-Ae * Q' * x; -Ao * xto]
+
+        ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+
+        #if ret.info.status_val != 1
+        #    @warn "OSQP failed $(ret.info.status)"
+        #end
+        p = ret.x[1:2]
+        sd = ret.x[3]
+        λsd = -ret.y
+
+        (p, sd, λsd)
+    end
+
     function fill_F!(F, θ, x0, polys)
         @inbounds z = θ[z_s2i[:]]
         @inbounds λ_nom = θ[λ_nom_s2i[:]]
@@ -156,7 +188,7 @@ function setup_dcol(ego_polys;
         for t in 1:T
             for i in 1:n_ego
                 xt_inds = z_s2i[1:n_x, t]
-                @inbounds xt = θ[xt_inds]
+                @inbounds xte = θ[xt_inds]
                 for (j, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
@@ -164,28 +196,15 @@ function setup_dcol(ego_polys;
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
-                    # osqp solver -> sd, p, λsd
                     Ae = Aes[i]
                     be = bes[i]
-                    Q = [cos(xt[3]) sin(xt[3])
-                        -sin(xt[3]) cos(xt[3])]
-                    qq = [0; 0; 1.0]
+                    (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
+                    get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
 
-                    AA = [Ae*Q' be; Ao bo+Ao*xto]
-                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
-                    #AA = [Ae*Q' be;]
-                    #bb = [-Ae * Q' * xt[1:2];]
-
-                    #Main.@infiltrate
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
-
-                    p = ret.x[1:2]
-                    sd = ret.x[3]
-                    λsd = -ret.y
-                    #if ()
-                    #Main.@infiltrate
-
-                    get_dlag[i](dlag_buf, xt, Ao, bo, p, sd, λsd, xto)
+                    #sd_check = get_lag[i](xte, Ao, bo, p, sd, λsd, xto)
+                    #if !isapprox(sd_check, sd; atol=1e-2)
+                    #    @warn("sd inconsistency $(sd_check) != $sd")
+                    #end
 
                     F[xt_inds] .+= -λ_dcol .* dlag_buf
                     F[dcol_inds] .+= sd - 1.0
@@ -196,59 +215,13 @@ function setup_dcol(ego_polys;
     end
 
     function fill_J!(JJ, θ, x0, polys)
-        #JJ = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
         JJ.nzval .= 1e-16
-        #JJ .= 0.0
-        #JJ.nzval .= 1e-16
-        #get_Jnom_vals(Jnom_buf, z, x0, λ_nom, α_f, β_sd)
-        #JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
         @inbounds z = θ[z_s2i[:]]
         @inbounds λ_nom = θ[λ_nom_s2i[:]]
         @inbounds λ_dcol = θ[λ_dcol_s2i[:]]
         get_Jnom_vals!(Jnom_buf, z, x0, λ_nom, λ_dcol)
-        #Main.@infiltrate
-        #JJnom_ids = [z_s2i[:]; λ_nom_s2i[:]]
         JJ .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
 
-        for t in 1:T
-            for i in 1:n_ego
-                xt_inds = z_s2i[1:n_x, t]
-                @inbounds xt = θ[xt_inds]
-                for (j, P) in enumerate(polys)
-                    Ao = P.A
-                    bo = P.b
-                    xto = sum(P.V) / length(P.V)
-                    dcol_inds = λ_dcol_s2i[:, j, i, t]
-                    @inbounds λ_dcol = θ[dcol_inds]
-
-                    # osqp solver -> sd, p, λsd
-                    Ae = Aes[i]
-                    be = bes[i]
-                    Q = [cos(xt[3]) sin(xt[3])
-                        -sin(xt[3]) cos(xt[3])]
-                    qq = [0; 0; 1.0]
-                    AA = [Ae*Q' be; Ao bo+Ao*xto]
-                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
-
-                    # AA * [p;sd] + bb .>= 0
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
-
-                    p = ret.x[1:2]
-                    sd = ret.x[3]
-                    λsd = -ret.y
-                    #Main.@infiltrate
-
-
-                    Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
-                    Jlag_vals(Jlag_buf, xt, Ao, bo, p, sd, λsd, xto)
-                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, n_x, n_x)
-
-                    @inbounds JJ[xt_inds, xt_inds] .+= -λ_dcol .* Jlag
-                    @inbounds JJ[xt_inds, dcol_inds] .+= -dlag_buf
-                    @inbounds JJ[dcol_inds, xt_inds] .+= dlag_buf'
-                end
-            end
-        end
         #F_buf = zeros(n)
         #F_buf2 = zeros(n)
         #fill_F!(F_buf, θ, x0, polys)
@@ -259,7 +232,44 @@ function setup_dcol(ego_polys;
         #    fill_F!(F_buf2, wi, x0, polys)
         #    Jnum2[:, ni] = sparse((F_buf2 - F_buf) ./ 1e-5)
         #end
-        #Main.@infiltrate
+
+        for t in 1:T
+            for i in 1:n_ego
+                xt_inds = z_s2i[1:n_x, t]
+                @inbounds xte = θ[xt_inds]
+                for (j, P) in enumerate(polys)
+                    Ao = P.A
+                    bo = P.b
+                    xto = sum(P.V) / length(P.V)
+                    dcol_inds = λ_dcol_s2i[:, j, i, t]
+                    @inbounds λ_dcol = θ[dcol_inds]
+
+                    # osqp solver -> sd, p, λsd
+                    Ae = Aes[i]
+                    be = bes[i]
+                    (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
+
+                    get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
+
+                    Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
+                    Jlag_vals(Jlag_buf, xte, Ao, bo, p, sd, λsd, xto)
+                    Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, n_x, n_x)
+
+                    @inbounds JJ[xt_inds, xt_inds] .+= -λ_dcol .* Jlag
+                    @inbounds JJ[xt_inds, dcol_inds] .+= -dlag_buf
+                    @inbounds JJ[dcol_inds, xt_inds] .+= dlag_buf'
+
+                    # if this value is not equal to the num der of F, then their claim is incorrect
+                    # check if dlag is numerically equal to d sd/dx
+                    #if !all(isapprox.(Jnum2[xt_inds, xt_inds], JJ[xt_inds, xt_inds]; atol=1e-1))
+                    #    @warn("Jlag inconsistency $(Jnum2[xt_inds[1:3], xt_inds[1:3]].nzval) != $(JJ[xt_inds[1:3], xt_inds[1:3]].nzval)")
+                    #end
+                    #if !all(isapprox.(Jnum2[dcol_inds, xt_inds], dlag_buf'; atol=1e-2))
+                    #    @warn("dlag inconsistency $(Jnum2[dcol_inds, xt_inds].nzval) != $(dlag_buf[1:3])")
+                    #end
+                end
+            end
+        end
         nothing
     end
 
@@ -416,29 +426,29 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     end
 
 
-    buf = zeros(n)
-    buf2 = zeros(n)
-    Jbuf = zeros(nnz_total)
+    #buf = zeros(n)
+    #buf2 = zeros(n)
+    #Jbuf = zeros(nnz_total)
 
-    w = randn(length(θ0))
-    w = copy(θ0)
+    #w = randn(length(θ0))
+    #w = copy(θ0)
 
-    F(n, w, buf)
-    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    #F(n, w, buf)
+    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    Jrows, Jcols, _ = findnz(J_example)
-    Jnum = sparse(Jrows, Jcols, Jbuf)
+    #Jrows, Jcols, _ = findnz(J_example)
+    #Jnum = sparse(Jrows, Jcols, Jbuf)
     #Main.@infiltrate
 
-    Jnum2 = spzeros(n, n)
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-        wi = copy(w)
-        wi[ni] += 1e-5
-        F(n, wi, buf2)
-        Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    #Jnum2 = spzeros(n, n)
+    #@info "Testing Jacobian accuracy numerically"
+    #@showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-5
+    #    F(n, wi, buf2)
+    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+    #end
+    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
     #Main.@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
