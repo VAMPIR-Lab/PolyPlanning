@@ -15,13 +15,15 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     # c' x = s + λ (cons)
     # p = 2 dim sym
 
-    Aex, bex = shift_to(Ae, be, xt)
+    Q = [cos(xt[3]) sin(xt[3])
+        -sin(xt[3]) cos(xt[3])]
     c = [0; 0; 1.0]
-    G = [-Aex bex; -Ao bo]
-    h = [-Aex * xt[1:2]; -Ao * xo]
-    y = [p; sd]
+    AA = [Ae*Q' be; Ao bo]
+    bb = [-Ae * Q' * xt[1:2]; -Ao * xo]
+    y = [p; sd .- 1.0]
 
-    c' * y + λsd' * (G * y - h)
+
+    c' * y - λsd' * (AA * y + bb)
 end
 
 
@@ -83,8 +85,9 @@ function setup_dcol(ego_polys;
     cons_nom = [cons_dyn; cons_env]
 
     n_λ_nom = length(cons_nom)
-    _, λ_nom_s2i, λ_dcol_s2i = get_sub2idxs((n_xu, T), (n_λ_nom), (1, n_obs, n_ego, T))
+    z_s2i, λ_nom_s2i, λ_dcol_s2i = get_sub2idxs((n_xu, T), (n_λ_nom), (1, n_obs, n_ego, T))
     n_λ_dcol = length(λ_dcol_s2i)
+    #Main.@infiltrate
 
     λ_dcol = Symbolics.@variables(λ_dcol[1:n_λ_dcol])[1] |> Symbolics.scalarize
     λ_nom = Symbolics.@variables(λ_nom[1:n_λ_nom])[1] |> Symbolics.scalarize
@@ -137,6 +140,11 @@ function setup_dcol(ego_polys;
     bes = [deepcopy(P.b) for P in ego_polys]
     dlag_buf = zeros(n_x)
 
+    #F[xt_inds] .+= -λ_dcol .* dlag_buf
+    # dF/dx = -λ_dcol .* ddlag_buf
+    # dF/dλ_dcol -dlag_buf
+    #F[dcol_inds] += sd # just sd
+    # dsd/dx = dlag
     function fill_F!(F, θ, x0, polys)
         @inbounds z = θ[z_s2i[:]]
         @inbounds λ_nom = θ[λ_nom_s2i[:]]
@@ -156,27 +164,25 @@ function setup_dcol(ego_polys;
                     @inbounds λ_dcol = θ[dcol_inds]
 
                     # osqp solver -> sd, p, λsd
-                    Aex, bex = shift_to(Aes[i], bes[i], xt)
+                    Ae = Aes[i]
+                    be = bes[i]
+                    Q = [cos(xt[3]) sin(xt[3])
+                        -sin(xt[3]) cos(xt[3])]
                     qq = [0; 0; 1.0]
-                    AA = [-Aex bex; -Ao bo]
+                    AA = [Ae*Q' be; Ao bo]
+                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
 
-                    bb = [-Aex * xt[1:2]; -Ao * xto]
-                    # -AA * [p; sd] ≥ -bb
+                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
                     #Main.@infiltrate
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=bb, q=qq, polish=true, verbose=false)
-
                     p = ret.x[1:2]
                     sd = ret.x[3]
                     λsd = -ret.y
 
+
                     get_dlag[i](dlag_buf, xt, Ao, bo, λsd, p, sd, xto)
 
-                    #Main.@infiltrate
                     F[xt_inds] .+= -λ_dcol .* dlag_buf
-                    # dF/dx = -λ_dcol .* ddlag_buf
-                    # dF/dλ_dcol -dlag_buf
-                    F[dcol_inds] .+= sd # just sd
-                    # dsd/dx = dlag
+                    F[dcol_inds] .+= sd - 1.0
                 end
             end
         end
@@ -210,51 +216,41 @@ function setup_dcol(ego_polys;
                     @inbounds λ_dcol = θ[dcol_inds]
 
                     # osqp solver -> sd, p, λsd
-                    Aex, bex = shift_to(Aes[i], bes[i], xt)
+                    Ae = Aes[i]
+                    be = bes[i]
+                    Q = [cos(xt[3]) sin(xt[3])
+                        -sin(xt[3]) cos(xt[3])]
                     qq = [0; 0; 1.0]
-                    AA = [-Aex bex; -Ao bo]
-                    bb = [-Aex * xt[1:2]; -Ao * xto]
-                    # -AA * [p; sd] ≥ -bb
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=bb, q=qq, polish=true, verbose=false)
+                    AA = [Ae*Q' be; Ao bo]
+                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
+
+                    # AA * [p;sd] + bb .>= 0
+                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
 
                     p = ret.x[1:2]
                     sd = ret.x[3]
-                    λsd = ret.y
+                    λsd = -ret.y
+                    Main.@infiltrate
 
-                    #Main.@infiltrate
+
                     Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
                     Jlag_vals(Jlag_buf, xt, Ao, bo, λsd, p, sd, xto)
                     Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, n_x, n_x)
 
-                    #F[xt_inds] .+= -λ_dcol .* dlag_buf
-                    # dF/dx = -λ_dcol .* ddlag_buf
-                    # dF/dλ_dcol -dlag_buf
-                    #F[dcol_inds] += sd # just sd
-                    # dsd/dx = dlag
-
-                    #Main.@infiltrate
                     @inbounds JJ[xt_inds, xt_inds] .+= -λ_dcol .* Jlag
                     @inbounds JJ[xt_inds, dcol_inds] .+= -dlag_buf
-
+                    @inbounds JJ[dcol_inds, xt_inds] .+= dlag_buf'
 
                     #F_buf = zeros(n)
                     #F_buf2 = zeros(n)
                     #fill_F!(F_buf, θ, x0, polys)
-
                     #Jnum2 = spzeros(n, n)
-                    #@info "Testing Jacobian accuracy numerically"
                     #for ni in 1:n
                     #    wi = copy(θ)
                     #    wi[ni] += 1e-5
                     #    fill_F!(F_buf2, wi, x0, polys)
                     #    Jnum2[:, ni] = sparse((F_buf2 - F_buf) ./ 1e-5)
                     #end
-
-                    #Main.@infiltrate
-                    #get_dlag[i](dlag_buf, xt, Ao, bo, λsd, [0; 0], sd, xto)
-                    @inbounds JJ[dcol_inds, xt_inds] .+= -dlag_buf'
-                    #@inbounds JJ[dcol_inds, xt_inds] = Jnum2[dcol_inds, xt_inds]
-                    # not right..
                 end
             end
         end
@@ -292,6 +288,7 @@ function setup_dcol(ego_polys;
         n_λ_nom,
         n_obs,
         z_s2i,
+        λ_nom_s2i,
         λ_dcol_s2i,
         ego_polys,
         sides_per_poly,

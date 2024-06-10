@@ -431,6 +431,7 @@ function setup_quick(ego_polys;
             for e in 1:n_obs
                 λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
                 β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
+                #Main.@infiltrate
                 J_example[xt_inds, xt_inds] .= 1.0
                 J_example[xt_inds, col_offset+λ_ind] .= 1.0
                 J_example[col_offset+λ_ind, xt_inds] .= 1.0
@@ -600,6 +601,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
         @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
         get_J_both!(JJ, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
+        
         col .= J_col
         len .= J_len
         row .= J_row
@@ -619,7 +621,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     Jrows, Jcols, _ = findnz(J_example)
-
+    #Main.@infiltrate
     Jnum = sparse(Jrows, Jcols, Jbuf)
     Jnum2 = spzeros(n, n)
     @info "Testing Jacobian accuracy numerically"

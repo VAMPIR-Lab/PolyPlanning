@@ -162,11 +162,15 @@ function gen_polys(N; side_length=4)
     end
 end
 
-function gen_rect_obs(; a=0.25)
+function gen_rect_obs(; a=0.25, x_shift=0.0)
     offset = a / 20
     l_multip = 5
-    P = ConvexPolygon2D([[0, -l_multip * a], [0, l_multip * a], [-a, l_multip * a + offset], [-a, -l_multip * a - offset]])
+    P = ConvexPolygon2D([[x_shift, -l_multip * a], [x_shift, l_multip * a], [-a, l_multip * a + offset], [-a, -l_multip * a - offset]])
     [P]
+end
+
+function gen_simple_obs(; scale=1.0)
+    [ConvexPolygon2D([[-1.0, -1], [1.0, -1], [1.0, 1], [-1.0, 1]])]
 end
 
 #  _______ a
