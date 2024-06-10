@@ -29,7 +29,7 @@ end
 function identity_dyn(x, u, dt)
     #v = dt * [u[1:2]; u[3] / 10.0]
     #x + [dt * x[4:6] + dt * v / 2; v]
-    x + dt * [x[4:6]; u[1:2]; u[3] / 10]
+    x + dt * [x[4:6]; u[1:2]; u[3] / 10] # higher rotational inertia
     #x + [u; u[1:2]; u[3] / 10.0]
     #x + dt*u
 end

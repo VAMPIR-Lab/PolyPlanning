@@ -522,9 +522,11 @@ function setup_quick(ego_polys;
             #J1 = get_Jlag[k](xtr,Aer,ber,Aor,bor,λsdr)
             #J2 = get_Jsd[k](xtr,Aer,ber,Aor,bor,λsdr)
         end
-        @showprogress for k in collect(keys(fvals[i]))
-            gfv = get_gfv[i, k](lag_buf, xtr, αr)
-            Jfv = get_Jfv[i, k][3](get_Jfv[i, k][4], xtr, αr)
+        if enable_fvals
+            @showprogress for k in collect(keys(fvals[i]))
+                gfv = get_gfv[i, k](lag_buf, xtr, αr)
+                Jfv = get_Jfv[i, k][3](get_Jfv[i, k][4], xtr, αr)
+            end
         end
     end
 
