@@ -88,7 +88,7 @@ function gen_gap(; width=1.25, length=0.25, xs=-3.0)
     p1 = PolyPlanning.ConvexPolygon2D([[-l + xs, w], [l + xs, w], [l + os + xs, obs_len], [-l - os + xs, obs_len]])
     p2 = PolyPlanning.ConvexPolygon2D([[-l + xs, -w], [l + xs, -w], [l + os + xs, -obs_len], [-l - os + xs, -obs_len]])
 
-    [p1, p2]
+    [p1 p2]
 end
 
 #  ___    [  P1  ]
@@ -169,8 +169,8 @@ function gen_rect_obs(; a=0.25, x_shift=0.0)
     [P]
 end
 
-function gen_simple_obs(; scale=1.0)
-    [ConvexPolygon2D([[-1.0, -1], [1.0, -1], [1.0, 1], [-1.0, 1]])]
+function gen_simple_obs(; scale=1.0, offset=[0.0, 0.0])
+    [ConvexPolygon2D([offset .+ [-1.0, -1], offset .+ [1.0, -1], offset .+ [1.0, 1], offset .+ [-1.0, 1]])]
 end
 
 #  _______ a

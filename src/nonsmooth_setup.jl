@@ -610,28 +610,28 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     end
 
 
-    buf = zeros(n)
-    buf2 = zeros(n)
-    Jbuf = zeros(nnz_total)
+    #buf = zeros(n)
+    #buf2 = zeros(n)
+    #Jbuf = zeros(nnz_total)
 
-    w = randn(length(θ0))
-    w = copy(θ0)
+    #w = randn(length(θ0))
+    #w = copy(θ0)
 
-    F(n, w, buf)
-    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    #F(n, w, buf)
+    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    Jrows, Jcols, _ = findnz(J_example)
+    #Jrows, Jcols, _ = findnz(J_example)
     #Main.@infiltrate
-    Jnum = sparse(Jrows, Jcols, Jbuf)
-    Jnum2 = spzeros(n, n)
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-        wi = copy(w)
-        wi[ni] += 1e-5
-        F(n, wi, buf2)
-        Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    #Jnum = sparse(Jrows, Jcols, Jbuf)
+    #Jnum2 = spzeros(n, n)
+    #@info "Testing Jacobian accuracy numerically"
+    #@showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-5
+    #    F(n, wi, buf2)
+    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    #end
+    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(

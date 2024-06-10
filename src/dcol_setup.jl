@@ -18,7 +18,8 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     Q = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     c = [0; 0; 1.0]
-    AA = [Ae*Q' be; Ao bo]
+    #Main.@infiltrate
+    AA = [Ae*Q' be; Ao bo+Ao*xo]
     bb = [-Ae * Q' * xt[1:2]; -Ao * xo]
     y = [p; sd .- 1.0]
 
@@ -99,7 +100,7 @@ function setup_dcol(ego_polys;
 
     F_nom = [grad_lag; cons_nom; zeros(Num, n_λ_dcol)]
 
-    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(n_λ_dcol)]
+    l = [fill(-Inf, length(grad_lag)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(n_λ_dcol)] # ones(n_λ_dcol didn't work...)
     u = [fill(+Inf, length(grad_lag)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, n_λ_dcol)]
     n = length(l)
 
@@ -122,9 +123,9 @@ function setup_dcol(ego_polys;
 
     for (i, lag) in enumerate(col_lags)
         dlag = Symbolics.gradient(lag, xt; simplify=false)
-        get_dlag[i] = Symbolics.build_function(dlag, xt, Ao, bo, λsd, p, sd, xo; expression=Val(false))[2]
+        get_dlag[i] = Symbolics.build_function(dlag, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))[2]
         Jlag = Symbolics.sparsejacobian(dlag, xt; simplify=false)
-
+        #Main.@infiltrate
         Jlag_rows, Jlag_cols, Jlag_vals = findnz(Jlag)
 
         if length(Jlag_vals) == 0
@@ -133,7 +134,7 @@ function setup_dcol(ego_polys;
             Jlag_vals = Num[0.0]
         end
 
-        get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, λsd, p, sd, xo; expression=Val(false))[2], zeros(length(Jlag_rows)))
+        get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))[2], zeros(length(Jlag_rows)))
     end
 
     Aes = [deepcopy(P.A) for P in ego_polys]
@@ -169,17 +170,22 @@ function setup_dcol(ego_polys;
                     Q = [cos(xt[3]) sin(xt[3])
                         -sin(xt[3]) cos(xt[3])]
                     qq = [0; 0; 1.0]
-                    AA = [Ae*Q' be; Ao bo]
-                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
 
-                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+                    AA = [Ae*Q' be; Ao bo+Ao*xto]
+                    bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
+                    #AA = [Ae*Q' be;]
+                    #bb = [-Ae * Q' * xt[1:2];]
+
                     #Main.@infiltrate
+                    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+
                     p = ret.x[1:2]
                     sd = ret.x[3]
                     λsd = -ret.y
+                    #if ()
+                    #Main.@infiltrate
 
-
-                    get_dlag[i](dlag_buf, xt, Ao, bo, λsd, p, sd, xto)
+                    get_dlag[i](dlag_buf, xt, Ao, bo, p, sd, λsd, xto)
 
                     F[xt_inds] .+= -λ_dcol .* dlag_buf
                     F[dcol_inds] .+= sd - 1.0
@@ -221,7 +227,7 @@ function setup_dcol(ego_polys;
                     Q = [cos(xt[3]) sin(xt[3])
                         -sin(xt[3]) cos(xt[3])]
                     qq = [0; 0; 1.0]
-                    AA = [Ae*Q' be; Ao bo]
+                    AA = [Ae*Q' be; Ao bo+Ao*xto]
                     bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
 
                     # AA * [p;sd] + bb .>= 0
@@ -230,30 +236,30 @@ function setup_dcol(ego_polys;
                     p = ret.x[1:2]
                     sd = ret.x[3]
                     λsd = -ret.y
-                    Main.@infiltrate
+                    #Main.@infiltrate
 
 
                     Jlag_rows, Jlag_cols, Jlag_vals, Jlag_buf = get_Jlag[i]
-                    Jlag_vals(Jlag_buf, xt, Ao, bo, λsd, p, sd, xto)
+                    Jlag_vals(Jlag_buf, xt, Ao, bo, p, sd, λsd, xto)
                     Jlag = sparse(Jlag_rows, Jlag_cols, Jlag_buf, n_x, n_x)
 
                     @inbounds JJ[xt_inds, xt_inds] .+= -λ_dcol .* Jlag
                     @inbounds JJ[xt_inds, dcol_inds] .+= -dlag_buf
                     @inbounds JJ[dcol_inds, xt_inds] .+= dlag_buf'
-
-                    #F_buf = zeros(n)
-                    #F_buf2 = zeros(n)
-                    #fill_F!(F_buf, θ, x0, polys)
-                    #Jnum2 = spzeros(n, n)
-                    #for ni in 1:n
-                    #    wi = copy(θ)
-                    #    wi[ni] += 1e-5
-                    #    fill_F!(F_buf2, wi, x0, polys)
-                    #    Jnum2[:, ni] = sparse((F_buf2 - F_buf) ./ 1e-5)
-                    #end
                 end
             end
         end
+        #F_buf = zeros(n)
+        #F_buf2 = zeros(n)
+        #fill_F!(F_buf, θ, x0, polys)
+        #Jnum2 = spzeros(n, n)
+        #for ni in 1:n
+        #    wi = copy(θ)
+        #    wi[ni] += 1e-5
+        #    fill_F!(F_buf2, wi, x0, polys)
+        #    Jnum2[:, ni] = sparse((F_buf2 - F_buf) ./ 1e-5)
+        #end
+        #Main.@infiltrate
         nothing
     end
 
@@ -363,6 +369,7 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         θ0 = zeros(n)
         for t in 1:T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+n_x] = x0
+            #θ0[λ_dcol_s2i[:]] .= 1.0 # wrong jacobian with nonzero init
         end
     end
 
@@ -376,7 +383,7 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     J_len = diff(JJ.colptr)
     J_row = JJ.rowval
     nnz_total = length(JJ.nzval)
-    #Main.@infiltrate
+
 
     function F(n, θ, result)
         result .= 0.0
@@ -386,6 +393,7 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         fill_F!(result, θ, x0, obs_polys)
 
         if is_displaying
+            #Main.@infiltrate
             update_fig(θ)
         end
 
@@ -422,15 +430,15 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     Jnum = sparse(Jrows, Jcols, Jbuf)
     #Main.@infiltrate
 
-    #Jnum2 = spzeros(n, n)
-    #@info "Testing Jacobian accuracy numerically"
-    #@showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-5
-    #    F(n, wi, buf2)
-    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
-    #end
-    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
+    Jnum2 = spzeros(n, n)
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+        wi = copy(w)
+        wi[ni] += 1e-5
+        F(n, wi, buf2)
+        Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
     #Main.@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
