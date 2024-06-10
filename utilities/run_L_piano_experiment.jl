@@ -3,7 +3,7 @@ using JLD2
 using Dates
 
 # user options
-is_saving = false
+is_saving = true
 is_running_sep = false
 is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
@@ -122,7 +122,7 @@ end
 # end
 
 success_rate(is_saving, is_running_sep, is_running_kkt, is_loading_exp, is_loading_res, exp_file_date, 
-            res_file_date, exp_name, data_dir, date_now; Rf_multiplier=.1, Qf_multiplier=.00316, is_plot=true)
+            res_file_date, exp_name, data_dir, date_now; Rf_multiplier=.001, Qf_multiplier=.001, is_plot=true)
 
 #PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
 #PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")

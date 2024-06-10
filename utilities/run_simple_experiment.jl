@@ -9,8 +9,8 @@ is_running_sep = false
 is_running_kkt = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-06-04_1437"
-res_file_date = "2024-06-04_1437"
+exp_file_date = "2024-06-10_1707"
+res_file_date = "2024-06-10_1707"
 exp_name = "simple"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
@@ -58,7 +58,6 @@ else # generate ego_poly, x0s and maps
         ego_width,
         ego_length
     )
-
     # generate x0s and maps
     ego_poly = PolyPlanning.gen_ego_rect(; a=ego_width, b=ego_length)
 

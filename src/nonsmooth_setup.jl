@@ -1,37 +1,39 @@
-# function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido) where {T}
-#     m1 = length(b1)
-#     m2 = length(b2)
-#     A = [[A1; A2] ones(T, m1 + m2)]
-#     b = [b1; b2]
-#     q = [0, 0, 1.0]
-#     (A, b, q)
-# end
+function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido; is_newsd=false) where {T}
+    m1 = length(b1)
+    m2 = length(b2)
+    A = [[A1; A2] ones(T, m1 + m2)]
+    b = [b1; b2]
+    q = [0, 0, 1.0]
+    # print("old")
+    (A, b, q)
+end
 
-# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido) where {T}
+# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
 #     centroide = xt[1:2]
 #     A = [Ae Ae*centroide+be;
 #         Ao Ao*centroido+bo]
 #     b = [be; bo]
 #     q = [0, 0, 1.0]
+#     # print("new")
 #     (A, b, q)
 # end
 
-function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
-    if !is_newsd
-        me = length(be)
-        mo = length(bo)
-        A = [[Ae; Ao] ones(T, me + mo)]
-        b = [be; bo]
-        q = [0, 0, 1.0]
-    else
-        centroide = xt[1:2]
-        A = [Ae Ae*centroide+be;
-            Ao Ao*centroido+bo]
-        b = [be; bo]
-        q = [0, 0, 1.0]
-    end
-    (A, b, q)
-end
+# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
+#     if !is_newsd
+#         me = length(be)
+#         mo = length(bo)
+#         A = [[Ae; Ao] ones(T, me + mo)]
+#         b = [be; bo]
+#         q = [0, 0, 1.0]
+#     else
+#         centroide = xt[1:2]
+#         A = [Ae Ae*centroide+be;
+#             Ao Ao*centroido+bo]
+#         b = [be; bo]
+#         q = [0, 0, 1.0]
+#     end
+#     (A, b, q)
+# end
 
 function g_col_single(xt, Ae, be, Ao, bo, centroido; is_newsd=false)
     sds = Dict()
@@ -115,10 +117,15 @@ function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=f
     m1 = length(bex)
     m2 = length(bo)
 
-    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
     #if ret.info.status_polish == -1
     #    @warn "not polished"
     #end
+    if ret.info.status != Symbol("Solved") 
+        @warn ret.info.status
+    end
+
+    @infiltrate
     primals = ret.x
     duals = -ret.y
 
@@ -126,6 +133,10 @@ function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=f
     I1 = duals .≥ 1e-2 .&& cons .< 1e-2
     I2 = duals .< 1e-2 .&& cons .< 1e-2
     I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+
+    # if ret.info.status != Symbol("Solved") 
+    #     @warn ("cons=$(cons) duals=$(duals)")
+    # end
 
     all_inds = collect(1:m1+m2)
     weak_ind_options = powerset(all_inds[I2]) |> collect
@@ -522,11 +533,9 @@ function setup_quick(ego_polys;
             #J1 = get_Jlag[k](xtr,Aer,ber,Aor,bor,λsdr)
             #J2 = get_Jsd[k](xtr,Aer,ber,Aor,bor,λsdr)
         end
-        if enable_fvals
-            @showprogress for k in collect(keys(fvals[i]))
-                gfv = get_gfv[i, k](lag_buf, xtr, αr)
-                Jfv = get_Jfv[i, k][3](get_Jfv[i, k][4], xtr, αr)
-            end
+        @showprogress for k in collect(keys(fvals[i]))
+            gfv = get_gfv[i, k](lag_buf, xtr, αr)
+            Jfv = get_Jfv[i, k][3](get_Jfv[i, k][4], xtr, αr)
         end
     end
 
@@ -584,19 +593,19 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
         ret = @lift(solve_qp(UseOSQPSolver(); A=sparse($(AA)), l=-$(bb), q=$(qq), polish=true, verbose=false))
         sd = @lift($(ret).x[3])
 
-        @infiltrate
-        if !is_newsd
-            be_inflated = @lift($(Aeb)[2] + $(sd) * ones(length($(Aeb)[2])))
-            bo_inflated = @lift(bo + $(sd) * ones(length(bo)))            
-        else
-            be_inflated = @lift($(Aeb)[2] + $(sd) * (($(Aeb)[1]) * $(xxts[i, t])[1:2] + ($(Aeb)[2])))
-            bo_inflated = @lift(bo + $(sd) * (Ao * centroido + bo))
-        end
-        self_poly_inflated = @lift(ConvexPolygon2D($(Aeb)[1], $(be_inflated)))
-        plot!(ax, self_poly_inflated; color=:yellow, linewidth=3)
+        # @infiltrate
+        # if !is_newsd
+        #     be_inflated = @lift($(Aeb)[2] + $(sd) * ones(length($(Aeb)[2])))
+        #     bo_inflated = @lift(bo + $(sd) * ones(length(bo)))            
+        # else
+        #     be_inflated = @lift($(Aeb)[2] + $(sd) * (($(Aeb)[1]) * $(xxts[i, t])[1:2] + ($(Aeb)[2])))
+        #     bo_inflated = @lift(bo + $(sd) * (Ao * centroido + bo))
+        # end
+        # self_poly_inflated = @lift(ConvexPolygon2D($(Aeb)[1], $(be_inflated)))
+        # plot!(ax, self_poly_inflated; color=:yellow, linewidth=3)
 
-        obstacle_inflated = @lift(ConvexPolygon2D(Ao, $(bo_inflated)))
-        plot!(ax, obstacle_inflated; color=:yellow, linewidth=3)
+        # obstacle_inflated = @lift(ConvexPolygon2D(Ao, $(bo_inflated)))
+        # plot!(ax, obstacle_inflated; color=:yellow, linewidth=3)
 
 
     end
@@ -710,14 +719,14 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
     Jnum = sparse(Jrows, Jcols, Jbuf)
     Jnum2 = spzeros(n, n)
     # @infiltrate
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-       wi = copy(w)
-       wi[ni] += 1e-5
-       F(n, wi, buf2)
-       Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    # @info "Testing Jacobian accuracy numerically"
+    # @showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-5
+    #    F(n, wi, buf2)
+    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    # end
+    # @info "Jacobian error is $(norm(Jnum2-Jnum))"
     @infiltrate
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
