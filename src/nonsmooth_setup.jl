@@ -55,6 +55,8 @@ function g_col_single(xt, Ae, be, Ao, bo, centroido; is_newsd=false)
                 zz = -AA_active \ bb_active
                 #zz = -(AA_active'*AA_active)\AA_active'*bb_active
             else
+                #if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
+                #Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
                 zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
             end
             sd = zz[3]
@@ -95,6 +97,7 @@ function f_pack_single(xt, Ae, be, Q, q)
             rhs = -MM_active \ rr_active
             xx = rhs[1:2]
             fvals[active_inds] = 0.5 * xx' * Q * xx + xx' * q
+            #xx = -AA_active \ bb_active
         catch err
             if err isa LinearAlgebra.SingularException
                 continue
@@ -105,7 +108,7 @@ function f_pack_single(xt, Ae, be, Q, q)
     end
     fvals
 end
-
+# some index combinations is not feasible, i.e. all indices are from m1 or m2
 function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=false)
     Aex, bex = shift_to(Ae, be, xt)
     AA, bb, qq = gen_LP_data(xt, Aex, bex, Ao, bo, centroido; is_newsd=is_newsd)
@@ -126,14 +129,17 @@ function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=f
 
     all_inds = collect(1:m1+m2)
     weak_ind_options = powerset(all_inds[I2]) |> collect
+    # the first set is an empty set, and is always preserved
     if length(weak_ind_options) > max_derivs
         @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
         weak_ind_options = weak_ind_options[1:max_derivs]
     end
+    # what if weak_ind_options is empty?
     if length(weak_ind_options) < max_derivs
         append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
     end
 
+    #indices of I1 + subset of I2
     assignments = map(weak_ind_options) do inds
         sort([all_inds[I1]; inds])
     end
@@ -180,6 +186,7 @@ function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
         @warn("More derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
         assignments = assignments[1:max_derivs]
     end
+    # if length(assignments)=0, nothing is added
     try
         if length(assignments) < max_derivs
             append!(assignments, [assignments[end] for _ in 1:max_derivs-length(assignments)])
@@ -241,16 +248,16 @@ function setup_quick(ego_polys;
     end
     num_f_mults = derivs_per_fv * N_ego_polys
 
-    cost_nom = f(z, T, Rf, Qf)
+    cost_nom = f(z, T, Rf, Qf) #sum of interdimate cost for control and position
     cons_dyn = g_dyn(z, x0, T, dt)
     cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
-    cons_nom = [cons_dyn; cons_env]
-
-    α_f = Symbolics.@variables(α_f[1:num_f_mults])[1] |> Symbolics.scalarize
-    β_sd = Symbolics.@variables(β_sd[1:num_sd_mults])[1] |> Symbolics.scalarize
-    slacks = Symbolics.@variables(slacks[1:num_sd_cons+N_ego_polys])[1] |> Symbolics.scalarize
-    λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize
-    λ_col = Symbolics.@variables(λ_col[1:num_sd_cons])[1] |> Symbolics.scalarize
+    cons_nom = [cons_dyn; cons_env] #dynamic and environment constraints
+    
+    α_f = Symbolics.@variables(α_f[1:num_f_mults])[1] |> Symbolics.scalarize # coefficients of subderivatives of final cost
+    β_sd = Symbolics.@variables(β_sd[1:num_sd_mults])[1] |> Symbolics.scalarize # coefficients of subderivatives of sd (for every pair of ego and obstacle and every timestep)
+    slacks = Symbolics.@variables(slacks[1:num_sd_cons+N_ego_polys])[1] |> Symbolics.scalarize # simplex constraints
+    λ_nom = Symbolics.@variables(λ_nom[1:length(cons_nom)])[1] |> Symbolics.scalarize # dynamic and environment constraints
+    λ_col = Symbolics.@variables(λ_col[1:num_sd_cons])[1] |> Symbolics.scalarize # collision avoidance constraints
 
     θ = [z; α_f; β_sd; slacks; λ_nom; λ_col]
 
@@ -270,7 +277,7 @@ function setup_quick(ego_polys;
         end
     end
     F_nom = [grad_lag; zeros(Num, num_f_mults + num_sd_mults); simplex_cons; cons_nom; zeros(Num, num_sd_cons)]
-
+    @infiltrate
     l = [fill(-Inf, length(grad_lag)); fill(0.0, num_f_mults + num_sd_mults); fill(-Inf, length(simplex_cons)); fill(-Inf, length(cons_dyn)); zeros(length(cons_env)); zeros(num_sd_cons)]
     u = [fill(+Inf, length(grad_lag)); fill(Inf, num_f_mults + num_sd_mults); fill(Inf, length(simplex_cons)); fill(Inf, length(cons_dyn)); fill(Inf, length(cons_env)); fill(Inf, num_sd_cons)]
     n = length(l)
@@ -291,12 +298,12 @@ function setup_quick(ego_polys;
 
     get_gfv = Dict()
     get_Jfv = Dict()
-
     println(length(sds))
+    @infiltrate
     @info "Generating symbolic solutions to sd calculation"
-    for (i, sds_i) in enumerate(sds)
-        @showprogress for (k, sd) in sds_i
-            lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false)
+    for (i, sds_i) in enumerate(sds) # i is index of egos
+        @showprogress for (k, sd) in sds_i # k is indices of active constraints, sd is corresponding sd
+            lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false) # λ is a representative of λ_col, β is a representative of β_sd
             get_lag[i, k] = Symbolics.build_function(lag, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2]
             get_sd[i, k] = Symbolics.build_function(β[1] * sd, xt, Ao, bo, centroido, β, λsd; expression=Val(false))
 
@@ -319,10 +326,11 @@ function setup_quick(ego_polys;
             get_Jsd[i, k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
         end
     end
+    @infiltrate
     @info "Generating symbolic solutions to f calculation"
     for (i, fvals_i) in enumerate(fvals)
         @showprogress for (k, fv) in fvals_i
-            gfv = Symbolics.gradient(fv * α[1], xt; simplify=false)
+            gfv = Symbolics.gradient(fv * α[1], xt; simplify=false) # α is the coefficient of one subderivative
             get_gfv[i, k] = Symbolics.build_function(gfv, xt, α; expression=Val(false))[2]
 
             Jfv = Symbolics.sparsejacobian(gfv, [xt; α]; simplify=false)
@@ -330,13 +338,13 @@ function setup_quick(ego_polys;
             get_Jfv[i, k] = (Jfv_rows, Jfv_cols, Symbolics.build_function(Jfv_vals, xt, α; expression=Val(false))[2], zeros(length(Jfv_rows)))
         end
     end
-
     Aes = [deepcopy(P.A) for P in ego_polys]
     bes = [deepcopy(P.b) for P in ego_polys]
 
     col_offset = length(z) + length(α_f) + length(β_sd) + length(slacks) + length(λ_nom)
     β_offset = length(z) + length(α_f)
     lag_buf = zeros(6)
+    #infiltrate
     function fill_F!(F, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
@@ -353,6 +361,7 @@ function setup_quick(ego_polys;
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], Ao, bo, centroido, derivs_per_sd; is_newsd=is_newsd)
+                    # directly delete indices after 3 may cause some problems
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -464,7 +473,6 @@ function setup_quick(ego_polys;
         end
         nothing
     end
-
     J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
     for i in 1:N_ego_polys
         for t in 1:T
@@ -520,7 +528,7 @@ function setup_quick(ego_polys;
         end
     end
 
-    #@infiltrate
+    @infiltrate
 
     return (; fill_F!,
         get_J_both,
@@ -618,7 +626,10 @@ end
 
 function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_duration = 0., is_newsd=false)
     (; fill_F!, get_J_both, J_example, ego_polys, l, u, T, n_z, n_α, n_β, n_s, n_nom, n_col, n_obs, sides_per_poly, p1_max, p2_min) = prob
-
+    # J_example
+    # n_z 
+    # n_α 
+    # n_β 
     @assert length(obs_polys) == n_obs
 
     n = length(l)
@@ -645,6 +656,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
     J_row = JJ.rowval
     nnz_total = length(JJ.nzval)
 
+    @infiltrate
     function F(n, θ, result)
         result .= 0.0
         @inbounds z = θ[1:n_z]
@@ -656,7 +668,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
 
         if is_displaying
             update_fig(θ)
-            @info θ
+            # @info θ[172:174]
             if sleep_duration > 0
                 sleep(sleep_duration)
             end
@@ -695,15 +707,16 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
 
     Jnum = sparse(Jrows, Jcols, Jbuf)
     Jnum2 = spzeros(n, n)
-    #@info "Testing Jacobian accuracy numerically"
-    #@showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-5
-    #    F(n, wi, buf2)
-    #    Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    #end
-    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
-
+    # @infiltrate
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+       wi = copy(w)
+       wi[ni] += 1e-5
+       F(n, wi, buf2)
+       Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    @infiltrate
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
