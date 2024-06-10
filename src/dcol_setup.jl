@@ -166,10 +166,11 @@ function setup_dcol(ego_polys;
         AA = [Ae*Q' be; Ao bo+Ao*xto]
         bb = [-Ae * Q' * x; -Ao * xto]
 
-        ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)
+        ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false) #, max_iter=100000)
 
         #if ret.info.status_val != 1
         #    @warn "OSQP failed $(ret.info.status)"
+        #    #Main.@infiltrate
         #end
         p = ret.x[1:2]
         sd = ret.x[3]
@@ -186,18 +187,29 @@ function setup_dcol(ego_polys;
         get_Fnom!(F, z, x0, λ_nom, λ_dcol)
 
         for t in 1:T
-            for i in 1:n_ego
-                xt_inds = z_s2i[1:n_x, t]
-                @inbounds xte = θ[xt_inds]
-                for (j, P) in enumerate(polys)
-                    Ao = P.A
-                    bo = P.b
-                    xto = sum(P.V) / length(P.V)
+            xt_inds = z_s2i[1:n_x, t]
+            @inbounds xt = θ[xt_inds]
+            for (i, Pe) in enumerate(ego_polys)
+                # shift ith ego poly to the origin (the method needs this)
+                c = sum(Pe.V) / length(Pe.V)
+                Abe = shift_to(Pe.A, Pe.b, [-c; 0])
+                Pe_shifted = ConvexPolygon2D(Abe[1], Abe[2])
+                Ae = Pe_shifted.A
+                be = Pe_shifted.b
+                # replace xte[1:2] with a point inside ith ego poly (the method needs this)
+                Q = [cos(xt[3]) sin(xt[3])
+                    -sin(xt[3]) cos(xt[3])]
+                xte = [xt[1:2] .+ Q * c; xt[3:end]]
+                #Main.@infiltrate
+                for (j, Po) in enumerate(polys)
+                    Ao = Po.A
+                    bo = Po.b
+                    xto = sum(Po.V) / length(Po.V)
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
-                    Ae = Aes[i]
-                    be = bes[i]
+                    #Ae = Aes[i]
+                    #be = bes[i]
                     (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
                     get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
 
@@ -234,9 +246,19 @@ function setup_dcol(ego_polys;
         #end
 
         for t in 1:T
-            for i in 1:n_ego
-                xt_inds = z_s2i[1:n_x, t]
-                @inbounds xte = θ[xt_inds]
+            xt_inds = z_s2i[1:n_x, t]
+            @inbounds xt = θ[xt_inds]
+            for (i, Pe) in enumerate(ego_polys)
+                # shift ith ego poly to the origin (the method needs this)
+                c = sum(Pe.V) / length(Pe.V)
+                Abe = shift_to(Pe.A, Pe.b, [-c; 0])
+                Pe = ConvexPolygon2D(Abe[1], Abe[2])
+                Ae = Pe.A
+                be = Pe.b
+                # replace xte[1:2] with a point inside ith ego poly (the method needs this)
+                Q = [cos(xt[3]) sin(xt[3])
+                    -sin(xt[3]) cos(xt[3])]
+                xte = [xt[1:2] .+ Q * c; xt[3:end]]
                 for (j, P) in enumerate(polys)
                     Ao = P.A
                     bo = P.b
@@ -397,9 +419,9 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
 
     function F(n, θ, result)
         result .= 0.0
-        if (any(isnan.(θ)))
-            #Main.@infiltrate
-        end
+        #if (any(isnan.(θ)))
+        #    Main.@infiltrate
+        #end
         fill_F!(result, θ, x0, obs_polys)
 
         if is_displaying
@@ -411,9 +433,9 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
     end
     function J(n, nnz, θ, col, len, row, data)
         @assert nnz == nnz_total
-        if (any(isnan.(θ)))
-            #Main.@infiltrate
-        end
+        #if (any(isnan.(θ)))
+        #    Main.@infiltrate
+        #end
 
         data .= 0.0
         fill_J!(JJ, θ, x0, obs_polys)
