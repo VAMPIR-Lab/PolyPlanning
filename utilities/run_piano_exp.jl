@@ -107,52 +107,35 @@ end
 
 # process
 our_bins = PolyPlanning.process_into_bins(our_sols)
-@info "$(length(our_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% nonsmooth success rate"
+@info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
 
 sep_bins = []
 if is_running_sep
     sep_bins = PolyPlanning.process_into_bins(sep_sols)
-    @info "$(length(sep_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+    @info "$(length(sep_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+end
+
+dcol_bins = []
+if is_running_dcol
+    dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
+    @info "$(length(dcol_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% dcol success rate"
 end
 
 kkt_bins = []
 if is_running_kkt
     kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
-    @info "$(length(kkt_bins.successes.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
+    @info "$(length(kkt_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
 end
 
-# visualize
-#PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=8, type="nonsmooth")
-#PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=8, type="sep_planes")
-#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, type = "direct_kkt")
-
-#PolyPlanning.visualize_multi(x0s, maps, our_sols, our_bins.successes, T, ego_poly; n_rows=3, n_cols=8, type="nonsmooth")
-#PolyPlanning.visualize_multi(x0s, maps, sep_sols, sep_bins.successes, T, ego_poly; n_rows=3, n_cols=8, type="sep_planes")
-#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, kkt_bins.successes, T, ego_poly; n_rows=3, n_cols=8, type="direct_kkt")
-
 # tables
-PolyPlanning.print_table(our_bins, param.n_maps, param.n_x0s; title="our")
-
 if is_running_sep
-    PolyPlanning.print_table(sep_bins, param.n_maps, param.n_x0s, title="sep")
+    PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
+end
+
+if is_running_dcol
+    PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
 end
 
 if is_running_kkt
-    PolyPlanning.print_table(kkt_bins, param.n_maps, param.n_x0s, title="kkt")
-end
-
-if is_running_sep
-    our_v_sep_locals = PolyPlanning.compute_Δ_time_cost(our_bins.successes, sep_bins.successes)
-    our_v_sep_fails = PolyPlanning.compute_Δ_time_cost(our_bins.fails, sep_bins.fails)
-    our_v_sep_bin = (successes=our_v_sep_locals, fails=our_v_sep_fails)
-
-    PolyPlanning.print_table(our_v_sep_bin, param.n_maps, param.n_x0s, title="our v sep")
-
-    if is_running_kkt
-        our_v_kkt_locals = PolyPlanning.compute_Δ_time_cost(kkt_bins.successes, sep_bins.successes)
-        our_v_kkt_fails = PolyPlanning.compute_Δ_time_cost(kkt_bins.fails, sep_bins.fails)
-        our_v_kkt_bin = (successes=our_v_kkt_locals, fails=our_v_kkt_fails)
-
-        PolyPlanning.print_table(our_v_kkt_bin, param.n_maps, param.n_x0s, title="our v kkt")
-    end
+    PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
 end

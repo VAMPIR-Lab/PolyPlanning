@@ -5,20 +5,20 @@ using Dates
 # user options
 is_saving = true
 is_running_sep = true
-is_running_kkt = true
+is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false  # skip compute and load from file
+is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
 res_file_date = "2024-05-30_2351"
-exp_name = "L_packing"
+exp_name = "L_piano"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 20
-n_x0s = 20
+n_maps = 3
+n_x0s = 100
 n_sides = 4
-n_obs = 3
+n_obs = 2
 n_xu = 9
 T = 20
 dt = 0.2
@@ -28,17 +28,21 @@ Qf = 5e-3 * PolyPlanning.I(2)
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
-init_x_mean = 6.0
+init_x_mean = 5.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
-init_y_disturb_max = 4.0
-wall_w = 5.0
-wall_l = 5.0
+init_y_disturb_max = 3.0
+gap_min = 1.25
+gap_max = 2.5
+gap_array = [gap_min, (gap_min + gap_max) / 2, gap_max]
+wall_xs = 3.0
 
-if is_loading_exp
+if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
-    @assert init_x_mean - init_x_disturb_max >= wall_w
+    @assert init_x_mean - init_x_disturb_max >= gap_offset
+    @assert n_obs == 2
+    @assert n_maps == length(gap_array)
 
     param = (;
         n_maps,
@@ -59,11 +63,17 @@ else # generate ego_poly, x0s and maps
         init_y_disturb_max,
         data_dir,
         date_now,
-        wall_w,
-        wall_l,
+        init_x_mean,
+        init_y_mean,
+        init_x_disturb_max,
+        init_y_disturb_max,
+        gap_min,
+        gap_max,
+        gap_offset,
         exp_name
     )
 
+    # generate x0s and maps
     ego_poly = PolyPlanning.gen_ego_L()
 
     x0s = map(1:n_x0s) do i
@@ -73,7 +83,7 @@ else # generate ego_poly, x0s and maps
     end
 
     maps = map(1:n_maps) do i
-        PolyPlanning.gen_packing_wall(n_obs, n_sides; w=param.wall_w, l=param.wall_l, max_overlap=0.0)
+        PolyPlanning.gap_polys = PolyPlanning.gen_gap(; width=gap_min + (gap_max - gap_min) * rand(), xs=gap_offset)
     end
 
     if is_saving
@@ -88,9 +98,37 @@ else
     our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
 end
 
-# visualize
-PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix="ours")
-#PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "sep")
-#PolyPlanning.visualize_multi(x0s, maps, kkt_sols, T, ego_poly; n_rows=3, n_cols=2, title_prefix = "kkt")
-
 # process
+our_bins = PolyPlanning.process_into_bins(our_sols)
+@info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+
+sep_bins = []
+if is_running_sep
+    sep_bins = PolyPlanning.process_into_bins(sep_sols)
+    @info "$(length(sep_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+end
+
+dcol_bins = []
+if is_running_dcol
+    dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
+    @info "$(length(dcol_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% dcol success rate"
+end
+
+kkt_bins = []
+if is_running_kkt
+    kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
+    @info "$(length(kkt_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
+end
+
+# tables
+if is_running_sep
+    PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
+end
+
+if is_running_dcol
+    PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
+end
+
+if is_running_kkt
+    PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
+end

@@ -158,7 +158,7 @@ function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, 
 
     if is_loading_dcol
         dcol_file = jldopen("$data_dir/$(exp_name)_dcol_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
-        dcol_sols = sep_file["dcol_sols"]
+        dcol_sols = dcol_file["dcol_sols"]
     end
 
     if is_loading_kkt
@@ -233,15 +233,15 @@ end
 
 
 function process_into_bins(sols; global_success_radius=0.5)
-    successes = (idx=[], time=[], cost=[])
+    success = (idx=[], time=[], cost=[])
     #global_success = (idx=[], time=[], cost=[])
-    fails = (idx=[], time=[], cost=[])
+    fail = (idx=[], time=[], cost=[])
 
     for (i, sol) in sols
         if sol.mcp_success
-            push!(successes.idx, i)
-            push!(successes.time, sol.time)
-            push!(successes.cost, sol.cost)
+            push!(success.idx, i)
+            push!(success.time, sol.time)
+            push!(success.cost, sol.cost)
 
             # for now, assume global success depends on local success
             #if sol.final_pos'sol.final_pos <= global_success_radius^2
@@ -250,51 +250,107 @@ function process_into_bins(sols; global_success_radius=0.5)
             #    push!(global_success.cost, sol.cost)
             #end
         else
-            push!(fails.idx, i)
-            push!(fails.time, sol.time)
-            push!(fails.cost, sol.cost)
+            push!(fail.idx, i)
+            push!(fail.time, sol.time)
+            push!(fail.cost, sol.cost)
         end
     end
-    (; successes, fails)
+    (; success, fail)
 end
 
-function compute_Δ_time_cost(bin, ref_bin)
+function find_bin_common(bin, ref_bin)
     idx = []
     time = []
     cost = []
+    ref_time = []
+    ref_cost = []
+
 
     for (i, id) in enumerate(bin.idx)
         i_ref = findfirst(x -> x == id, ref_bin.idx)
 
         if i_ref !== nothing
             push!(idx, id)
-            push!(time, bin.time[i] - ref_bin.time[i_ref])
-            push!(cost, bin.cost[i] - ref_bin.cost[i_ref])
+            push!(time, bin.time[i])
+            push!(cost, bin.cost[i])
+            push!(ref_time, ref_bin.time[i_ref])
+            push!(ref_cost, ref_bin.cost[i_ref])
         end
     end
 
-    (; idx, time, cost)
+    (; idx, time, cost, ref_time, ref_cost)
 end
 
-function get_mean_CI(v)
-    res = (0.0, 0.0)
-    if length(v) > 0
-        res = (mean(v), 1.96 * std(v) / sqrt(length(v)))
+function get_mean_std_CI(v)
+    try
+        m = mean(v)
+        s = std(v)
+        CI = 1.96 * std(v) / sqrt(length(v))
+        return (mean=m, CI, std=s)
+    catch e
+        @error "empty v"
     end
-    res
 end
 
-function print_table(bin, n_maps, n_x0s; title="our")
-    our_success_ratio = length(bin.successes.idx) / (n_maps * n_x0s)
-    #our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
-    our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
+function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin")
 
-    println("             local       fails")
-    println("$title ratio    $(round(our_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
-    println("          (mean, CI)  (mean, CI)")
-    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
-    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+    common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
+    common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
+
+    bin_success_percent = length(bin.success.idx) / (n_maps * n_x0s) * 100
+    ref_success_percent = length(ref_bin.success.idx) / (n_maps * n_x0s) * 100
+    both_success_percent = length(common_success.idx) / (n_maps * n_x0s) * 100
+    bin_fail_percent = length(bin.fail.idx) / (n_maps * n_x0s) * 100
+    ref_fail_percent = length(ref_bin.fail.idx) / (n_maps * n_x0s) * 100
+    both_fail_percent = length(common_fail.idx) / (n_maps * n_x0s) * 100
+
+    println("           $name     $ref_name     both    both(ct)")
+    println("success    $(round(bin_success_percent; sigdigits=3))%    $(round(ref_success_percent; sigdigits=3))%    $(round(both_success_percent; sigdigits=3))%    $(length(common_success.idx))")
+    println("fail       $(round(bin_fail_percent; sigdigits=3))%    $(round(ref_fail_percent; sigdigits=3))%    $(round(both_fail_percent; sigdigits=3))%    $(length(common_fail.idx))")
+    if length(common_success.idx) > 0
+        println("$name vs $ref_name successes compared:")
+        print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
+    end
+    #if length(common_fail.idx) > 0
+    #println("fails compared:")
+    #print_table(common_fail.time, common_fail.ref_time, common_fail.cost, common_fail.ref_cost; name, ref_name)
+    #end
 end
+
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin")
+
+    abs_Δ_time = get_mean_std_CI(time - ref_time)
+    rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100
+    rel_Δ_time_CI = abs_Δ_time.CI ./ mean(ref_time) * 100
+    abs_Δ_cost = get_mean_std_CI(cost - ref_cost)
+    rel_Δ_cost = abs_Δ_cost.mean ./ mean(ref_cost) * 100
+    rel_Δ_cost_CI = abs_Δ_cost.CI ./ mean(ref_cost) * 100
+
+    println("              mean    CI     std")
+    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits=2)) ± $(round.(abs_Δ_time.CI; sigdigits=2))  $(round.(abs_Δ_time.std; sigdigits=2))")
+    println("time rel Δ    $(round.(rel_Δ_time; sigdigits=3))% ± $(round.(rel_Δ_time_CI; sigdigits=3))%  ")
+    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits=3)) ± $(round.(abs_Δ_cost.CI; sigdigits=3))  $(round.(abs_Δ_cost.std; sigdigits=3))")
+    println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits=3))% ± $(round.(rel_Δ_cost_CI; sigdigits=3))%  ")
+
+    time_stats = get_mean_std_CI(time)
+    ref_time_stats = get_mean_std_CI(ref_time)
+    cost_stats = get_mean_std_CI(cost)
+    ref_cost_stats = get_mean_std_CI(ref_cost)
+    println("mean   $name vs $ref_name")
+    println("time   $(round.(time_stats.mean; sigdigits=2))    $(round.(ref_time_stats.mean; sigdigits=2))  ")
+    println("cost   $(round.(cost_stats.mean; sigdigits=2))    $(round.(ref_cost_stats.mean; sigdigits=2))  ")
+end
+#function print_table(bin, n_maps, n_x0s; title="our")
+#our_success_ratio = length(bin.successes.idx) / (n_maps * n_x0s)
+#    #our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
+#    our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
+
+#    println("             local       fails")
+#    println("$title ratio    $(round(our_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
+#    println("          (mean, CI)  (mean, CI)")
+#    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
+#    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+#end
 
 
 function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")

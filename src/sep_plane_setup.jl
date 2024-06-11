@@ -175,7 +175,7 @@ function setup_sep_planes(
     )
 end
 
-function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
+function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_showing_sep_plane=false)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_t = n_per_col * n_obs * n_ego
@@ -200,14 +200,16 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
             self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
             plot!(ax, self_poly; color=:blue, linestyle=:dash)
 
-            for (e, V) in enumerate(Vos)
-                abts[i, t, e] = Observable([0.5, 0.5, 1.0])
-                # a' x + b = 0
-                # a2 x2 = (- a1 x1 - b) 
-                # x2 = (-a1 x1 - b)/a2
-                xs = @lift($(xxts[i, t])[1] .+ (-10:5:10))
-                ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
-                #GLMakie.lines!(ax, xs, ys; color=:green, linestyle=:dash)
+            if is_showing_sep_plane
+                for (e, V) in enumerate(Vos)
+                    abts[i, t, e] = Observable([0.5, 0.5, 1.0])
+                    # a' x + b = 0
+                    # a2 x2 = (- a1 x1 - b) 
+                    # x2 = (-a1 x1 - b)/a2
+                    xs = @lift($(xxts[i, t])[1] .+ (-10:5:10))
+                    ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
+                    #GLMakie.lines!(ax, xs, ys; color=:green, linestyle=:dash)
+                end
             end
         end
         t = T
@@ -216,13 +218,15 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
         self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
         plot!(ax, self_poly; color=:blue, linewidth=3)
 
-        for e in 1:n_obs
-            abts[i, t, e] = Observable([0.5, 0.5, 1.0])
-            # a' x + b = 0
-            xs = @lift($(xxts[i, t])[1] .+ (-10:5:10))
-            ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
-            GLMakie.lines!(ax, xs, ys; color=:green, linewidth=3)
-            limits!(ax, [-10, 10], [-10, 10])
+        if is_showing_sep_plane
+            for e in 1:n_obs
+                abts[i, t, e] = Observable([0.5, 0.5, 1.0])
+                # a' x + b = 0
+                xs = @lift($(xxts[i, t])[1] .+ (-10:5:10))
+                ys = @lift((-$(abts[i, t, e])[3] .- $(abts[i, t, e])[1] .* $xs) ./ $(abts[i, t, e])[2])
+                GLMakie.lines!(ax, xs, ys; color=:green, linewidth=3)
+                limits!(ax, [-10, 10], [-10, 10])
+            end
         end
     end
 
@@ -235,8 +239,10 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
         for i in 1:n_ego
             for t in 1:T
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                for k in 1:n_obs
-                    abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
+                if is_showing_sep_plane
+                    for k in 1:n_obs
+                        abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
+                    end
                 end
             end
         end
@@ -283,15 +289,15 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true)
                     yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
 
                     for (k, Pk) in enumerate(obs_polys)
-                        Vo = hcat(Pk.V...)' |> collect
-                        Vo_center = sum(Vo; dims=1) ./ size(Vo, 1)
-                        a = x0[1:2] - Vo_center[1:2]
-                        z = (x0[1:2] + Vo_center[1:2]) / 2
-                        b = -a'z
+                        #Vo = hcat(Pk.V...)' |> collect
+                        #Vo_center = sum(Vo; dims=1) ./ size(Vo, 1)
+                        #a = x0[1:2] - Vo_center[1:2]
+                        #z = (x0[1:2] + Vo_center[1:2]) / 2
+                        #b = -a'z
 
                         # make it worse?
-                        #a = [0.5, 0.5]
-                        #b = 0.5
+                        a = [0.5, 0.5]
+                        b = 0.5
 
                         yti[(k-1)*n_per_col+1:(k-1)*n_per_col+2] = a
                         yti[(k-1)*n_per_col+3] = b
@@ -299,7 +305,6 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true)
                 end
             end
         end
-
         #for t in 1:T
         #    for i in 1:n_ego
         #        xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])

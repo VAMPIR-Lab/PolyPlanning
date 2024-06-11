@@ -173,7 +173,7 @@ function visualize_direct_kkt(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis
             end
         end
     end
-    
+
     if !isempty(θ)
         update_fig(θ)
     end
@@ -249,13 +249,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
         row .= J_row
         Cint(0)
     end
-
-    buf = zeros(n)
-    buf2 = zeros(n)
-    Jbuf = zeros(nnz_total)
-
-    F(n, θ0, buf)
-    J(n, nnz_total, θ0, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
