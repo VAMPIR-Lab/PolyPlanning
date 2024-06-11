@@ -5,18 +5,19 @@ using Dates
 # user options
 is_saving = true
 is_running_sep = true
+is_running_dcol = true
 is_running_kkt = true
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
 res_file_date = "2024-05-30_2351"
-exp_name = "L_packing"
+exp_name = "random_L_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 20
-n_x0s = 20
+n_maps = 10
+n_x0s = 30
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -32,7 +33,7 @@ init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
 init_y_disturb_max = 4.0
-wall_w = 5.0
+wall_w = 3.0
 wall_l = 5.0
 
 if is_loading_exp
@@ -83,10 +84,11 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
+
 
 # process
 our_bins = PolyPlanning.process_into_bins(our_sols)

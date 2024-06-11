@@ -6,6 +6,7 @@ using Statistics
 # user options
 is_saving = true
 is_running_sep = true
+is_running_dcol = true
 is_running_kkt = true
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
@@ -36,7 +37,7 @@ corridor_w_max = ego_length
 corridor_w_array = [corridor_w_min, (corridor_w_min + corridor_w_max) / 2, corridor_w_max]
 pre_L_length_base = 5.0
 post_L_length = 3.0
-init_x_min = pre_L_length_base + ego_length / 2
+init_x_min = pre_L_length_base + ego_length / 2 + 0.1
 init_y_mean = -post_L_length - corridor_w_min / 2
 init_x_disturb_max = corridor_w_min / 2
 init_y_disturb_max = corridor_w_min / 2
@@ -100,9 +101,9 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
 
 # process

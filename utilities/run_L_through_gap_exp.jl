@@ -5,7 +5,8 @@ using Dates
 # user options
 is_saving = true
 is_running_sep = true
-is_running_kkt = false
+is_running_dcol = true
+is_running_kkt = true
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
@@ -35,7 +36,7 @@ init_y_disturb_max = 3.0
 gap_min = 1.25
 gap_max = 2.5
 gap_array = [gap_min, (gap_min + gap_max) / 2, gap_max]
-wall_xs = 3.0
+gap_offset = 3.0
 
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
@@ -83,7 +84,7 @@ else # generate ego_poly, x0s and maps
     end
 
     maps = map(1:n_maps) do i
-        PolyPlanning.gap_polys = PolyPlanning.gen_gap(; width=gap_min + (gap_max - gap_min) * rand(), xs=gap_offset)
+        PolyPlanning.gen_gap(; width=gap_min + (gap_max - gap_min) * rand(), xs=gap_offset)
     end
 
     if is_saving
@@ -93,9 +94,9 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, kkt_sols = PolyPlanning.load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=is_running_sep, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
 
 # process

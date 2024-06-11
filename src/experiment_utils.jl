@@ -145,24 +145,24 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
     sols
 end
 
-function load_all(exp_name, res_file_date, exp_file_date; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
+function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
-    our_file = jldopen("$data_dir/$(exp_name)_our_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
+    our_file = jldopen("$data_dir/$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
     our_sols = our_file["our_sols"]
     sep_sols = []
     kkt_sols = []
     if is_loading_sep
-        sep_file = jldopen("$data_dir/$(exp_name)_sep_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
+        sep_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(res_file_date).jld2", "r")
         sep_sols = sep_file["sep_sols"]
     end
 
     if is_loading_dcol
-        dcol_file = jldopen("$data_dir/$(exp_name)_dcol_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
+        dcol_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_dcol_sols_$(res_file_date).jld2", "r")
         dcol_sols = dcol_file["dcol_sols"]
     end
 
     if is_loading_kkt
-        kkt_file = jldopen("$data_dir/$(exp_name)_kkt_sols_$(res_file_date)_exp_$(exp_file_date).jld2", "r")
+        kkt_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_kkt_sols_$(res_file_date).jld2", "r")
         kkt_sols = kkt_file["kkt_sols"]
     end
 
@@ -178,7 +178,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
     @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 
     if is_saving
-        jldsave("$data_dir/$(exp_name)_our_sols_$(date_now)_exp_$exp_file_date.jld2"; our_sols)
+        jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(date_now).jld2"; our_sols)
     end
 
     sep_sols = []
@@ -189,7 +189,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 
         if is_saving
-            jldsave("$data_dir/$(exp_name)_sep_sols_$(date_now)_exp_$exp_file_date.jld2"; sep_sols)
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(date_now).jld2"; sep_sols)
         end
     end
 
@@ -201,7 +201,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 
         if is_saving
-            jldsave("$data_dir/$(exp_name)_dcol_sols_$(date_now)_exp_$exp_file_date.jld2"; dcol_sols)
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_dcol_sols_$(date_now).jld2"; dcol_sols)
         end
     end
 
@@ -213,7 +213,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
 
         if is_saving
-            jldsave("$data_dir/$(exp_name)_kkt_sols_$(date_now)_exp_$exp_file_date.jld2"; kkt_sols)
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_kkt_sols_$(date_now).jld2"; kkt_sols)
         end
     end
 
@@ -308,7 +308,6 @@ function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin"
     println("success    $(round(bin_success_percent; sigdigits=3))%    $(round(ref_success_percent; sigdigits=3))%    $(round(both_success_percent; sigdigits=3))%    $(length(common_success.idx))")
     println("fail       $(round(bin_fail_percent; sigdigits=3))%    $(round(ref_fail_percent; sigdigits=3))%    $(round(both_fail_percent; sigdigits=3))%    $(length(common_fail.idx))")
     if length(common_success.idx) > 0
-        println("$name vs $ref_name successes compared:")
         print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
     end
     #if length(common_fail.idx) > 0
@@ -326,10 +325,10 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     rel_Δ_cost = abs_Δ_cost.mean ./ mean(ref_cost) * 100
     rel_Δ_cost_CI = abs_Δ_cost.CI ./ mean(ref_cost) * 100
 
-    println("              mean    CI     std")
-    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits=2)) ± $(round.(abs_Δ_time.CI; sigdigits=2))  $(round.(abs_Δ_time.std; sigdigits=2))")
+    println("              mean    CI ")
+    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits=2)) ± $(round.(abs_Δ_time.CI; sigdigits=2))")
     println("time rel Δ    $(round.(rel_Δ_time; sigdigits=3))% ± $(round.(rel_Δ_time_CI; sigdigits=3))%  ")
-    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits=3)) ± $(round.(abs_Δ_cost.CI; sigdigits=3))  $(round.(abs_Δ_cost.std; sigdigits=3))")
+    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits=3)) ± $(round.(abs_Δ_cost.CI; sigdigits=3))")
     println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits=3))% ± $(round.(rel_Δ_cost_CI; sigdigits=3))%  ")
 
     time_stats = get_mean_std_CI(time)

@@ -15,7 +15,7 @@ PolyPlanning.visualize_multi(x0s, maps, kkt_sols, kkt_bins.success, T, ego_poly;
 # visualize common success
 our_sep_common_success = PolyPlanning.find_bin_common(our_bins.success, sep_bins.success)
 PolyPlanning.visualize_multi(x0s, maps, our_sols, our_sep_common_success, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="nonsmooth")
-PolyPlanning.visualize_multi(x0s, maps, kkt_sols, our_sep_common_success, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="sep_planes")
+PolyPlanning.visualize_multi(x0s, maps, sep_sols, our_sep_common_success, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="sep_planes")
 
 our_dcol_common_success = PolyPlanning.find_bin_common(our_bins.success, dcol_bins.success)
 PolyPlanning.visualize_multi(x0s, maps, our_sols, our_dcol_common_success, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="nonsmooth")
