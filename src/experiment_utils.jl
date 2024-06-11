@@ -147,7 +147,7 @@ end
 
 function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
-    our_file = jldopen("$data_dir/$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
+    our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
     our_sols = our_file["our_sols"]
     sep_sols = []
     kkt_sols = []
