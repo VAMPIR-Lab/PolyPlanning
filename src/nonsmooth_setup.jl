@@ -1,22 +1,22 @@
-function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido; is_newsd=false) where {T}
-    m1 = length(b1)
-    m2 = length(b2)
-    A = [[A1; A2] ones(T, m1 + m2)]
-    b = [b1; b2]
-    q = [0, 0, 1.0]
-    # print("old")
-    (A, b, q)
-end
-
-# function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
-#     centroide = xt[1:2]
-#     A = [Ae Ae*centroide+be;
-#         Ao Ao*centroido+bo]
-#     b = [be; bo]
+# function gen_LP_data(xt, A1::AbstractArray{T}, b1, A2, b2, centroido; is_newsd=false) where {T}
+#     m1 = length(b1)
+#     m2 = length(b2)
+#     A = [[A1; A2] ones(T, m1 + m2)]
+#     b = [b1; b2]
 #     q = [0, 0, 1.0]
-#     # print("new")
+#     # print("old")
 #     (A, b, q)
 # end
+
+function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
+    centroide = xt[1:2]
+    A = [Ae Ae*centroide+be;
+        Ao Ao*centroido+bo]
+    b = [be; bo]
+    q = [0, 0, 1.0]
+    # print("new")
+    (A, b, q)
+end
 
 # function gen_LP_data(xt, Ae::AbstractArray{T}, be, Ao, bo, centroido; is_newsd=false) where {T}
 #     if !is_newsd
@@ -121,9 +121,9 @@ function get_single_sd_ids(xt, Ae, be, Ao, bo, centroido, max_derivs; is_newsd=f
     #if ret.info.status_polish == -1
     #    @warn "not polished"
     #end
-    if ret.info.status != Symbol("Solved") 
-        @warn ret.info.status
-    end
+    # if ret.info.status != Symbol("Solved") 
+    #     @warn ret.info.status
+    # end
 
     @infiltrate
     primals = ret.x
