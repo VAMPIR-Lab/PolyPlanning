@@ -119,10 +119,10 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
     #if ret.info.status_polish == -1
     #    @warn "not polished"
     #end
-    if ret.info.status != Symbol("Solved") 
-        @warn ret.info.status
-        @infiltrate
-    end
+    # if ret.info.status != Symbol("Solved") 
+    #     @warn ret.info.status
+    #     @infiltrate
+    # end
 
     @infiltrate
     primals = ret.x
@@ -138,21 +138,23 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
     # end
 
     # # println("calculating LP")
-    # model = Model(Clp.Optimizer)
-    # set_attribute(model, "LogLevel", 0) # disable printing log
-    # @variable(model, xx[1:3])
-    # @constraint(model, constraint, AA * xx + bb .>= 0)
-    # @objective(model, Min, qq' * xx)
-    # optimize!(model)
+    # model = JuMP.Model(Clp.Optimizer)
+    # JuMP.set_attribute(model, "LogLevel", 0) # disable printing log
+    # JuMP.@variable(model, xx[1:3])
+    # JuMP.@constraint(model, constraint, AA * xx + bb .>= 0)
+    # JuMP.@objective(model, Min, qq' * xx)
+    # JuMP.optimize!(model)
 
-    # status = termination_status(model)
+    # status = JuMP.termination_status(model)
     # if status != OPTIMAL
     #     @info status
     #     @infiltrate
+    #     duals = zeros(m1+m2)
+    #     cons = duals
     # end
 
-    # primals = value.(xx)
-    # duals = dual.(constraint)
+    # primals = JuMP.value.(xx)
+    # duals = JuMP.dual.(constraint)
     # cons = AA * primals + bb
 
     # # primal and dual tolerance is 1e-7
@@ -391,6 +393,7 @@ function setup_quick(ego_polys;
                 R = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 centroide = xt[1:2] + R * centroide_wrt_ego_frame
+                @infiltrate
 
                 for (e, Po) in enumerate(polys)
                     Ao = Po.A
@@ -554,9 +557,8 @@ function setup_quick(ego_polys;
     βr = randn()
     for i in 1:N_ego_polys
         @showprogress for k in collect(keys(sds[i]))
-            @infiltrate
             get_lag[i, k](lag_buf, xtr, centroider, Aor, bor, centroidor, βr, λsdr)
-            ss = get_sd[i, k](xtr, Aor, centroider, bor, centroidor, βr, λsdr)
+            ss = get_sd[i, k](xtr, centroider, Aor, bor, centroidor, βr, λsdr)
             get_Jlag[i, k][3](get_Jlag[i, k][4], xtr, centroider, Aor, bor, centroidor, βr, λsdr)
             get_Jsd[i, k][3](get_Jsd[i, k][4], xtr, centroider, Aor, bor, centroidor, βr, λsdr)
             #ll = get_lag[k](xtr,Aer,ber,Aor,bor, λsdr)
