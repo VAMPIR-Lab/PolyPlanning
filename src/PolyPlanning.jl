@@ -13,6 +13,8 @@ using ArgCheck
 using Statistics
 using JLD2
 using Infiltrator
+using JuMP
+using Clp
 
 include("solvers.jl")
 include("poly_functions.jl")

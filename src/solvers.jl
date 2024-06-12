@@ -9,8 +9,8 @@ function solve_qp(::UseOSQPSolver;
                   u=nothing,
                   kwargs...)
     m = OSQP.Model()
-    # OSQP.setup!(m; P, q, A, l, u, kwargs...)
-    OSQP.setup!(m; P, q, A, l, u, max_iter=1e6, kwargs...) #eps_abs=1e-5, eps_rel=1e-5, 
+    OSQP.setup!(m; P, q, A, l, u, kwargs...)
+    # OSQP.setup!(m; P, q, A, l, u, max_iter=1e6, kwargs...) #eps_abs=1e-5, eps_rel=1e-5, 
     ret = OSQP.solve!(m)
     ret
 end

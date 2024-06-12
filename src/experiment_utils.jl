@@ -17,8 +17,8 @@ function multi_solve_ours(ego_poly, x0s, maps, param)
         param.u2_max,
         param.u3_max,
         sides_per_poly=4,
-        derivs_per_sd=4,
-        derivs_per_fv=4,
+        derivs_per_sd=8,
+        derivs_per_fv=8,
         param.n_obs
     )
 
