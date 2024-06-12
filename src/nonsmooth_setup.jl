@@ -121,50 +121,51 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
     m1 = length(bex)
     m2 = length(bo)
 
-    # ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
-    # #if ret.info.status_polish == -1
-    # #    @warn "not polished"
-    # #end
+
+
+    # use OSQP solver
+    ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
+    #if ret.info.status_polish == -1
+    #    @warn "not polished"
+    #end
     # if ret.info.status != Symbol("Solved") 
     #     @warn ret.info.status
     # end
 
-    # primals = ret.x
-    # duals = -ret.y
+    primals = ret.x
+    duals = -ret.y
 
-    # cons = AA * primals + bb
-    # I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-    # I2 = duals .< 1e-2 .&& cons .< 1e-2
-    # I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+    cons = AA * primals + bb
+    I1 = duals .≥ 1e-2 .&& cons .< 1e-2
+    I2 = duals .< 1e-2 .&& cons .< 1e-2
+    I3 = duals .< 1e-2 .&& cons .≥ 1e-2
 
-    # if ret.info.status != Symbol("Solved") 
-    #     @warn ("cons=$(cons) duals=$(duals)")
+
+    
+    # # use JuMP and Clp solver
+    # model = JuMP.Model(Clp.Optimizer)
+    # JuMP.set_attribute(model, "LogLevel", 0) # disable printing log
+    # JuMP.@variable(model, xx[1:3])
+    # JuMP.@constraint(model, constraint, AA * xx + bb .>= 0)
+    # JuMP.@objective(model, Min, qq' * xx)
+    # JuMP.optimize!(model)
+
+    # status = JuMP.termination_status(model)
+    # if status != OPTIMAL
+    #     @info status
+    #     @infiltrate
+    #     duals = zeros(m1+m2)
+    #     cons = duals
     # end
 
-    # println("calculating LP")
-    model = JuMP.Model(Clp.Optimizer)
-    JuMP.set_attribute(model, "LogLevel", 0) # disable printing log
-    JuMP.@variable(model, xx[1:3])
-    JuMP.@constraint(model, constraint, AA * xx + bb .>= 0)
-    JuMP.@objective(model, Min, qq' * xx)
-    JuMP.optimize!(model)
+    # primals = JuMP.value.(xx)
+    # duals = JuMP.dual.(constraint)
+    # cons = AA * primals + bb
 
-    status = JuMP.termination_status(model)
-    if status != OPTIMAL
-        @info status
-        @infiltrate
-        duals = zeros(m1+m2)
-        cons = duals
-    end
-
-    primals = JuMP.value.(xx)
-    duals = JuMP.dual.(constraint)
-    cons = AA * primals + bb
-
-    # primal and dual tolerance is 1e-7
-    I1 = duals .≥ 1e-6 .&& cons .< 1e-6
-    I2 = duals .< 1e-6 .&& cons .< 1e-6
-    I3 = duals .< 1e-6 .&& cons .≥ 1e-6
+    # # primal and dual tolerance is 1e-7
+    # I1 = duals .≥ 1e-6 .&& cons .< 1e-6
+    # I2 = duals .< 1e-6 .&& cons .< 1e-6
+    # I3 = duals .< 1e-6 .&& cons .≥ 1e-6
 
 
     all_inds = collect(1:m1+m2)
