@@ -321,6 +321,7 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100
     rel_Δ_time_CI = abs_Δ_time.CI ./ mean(ref_time) * 100
+    #Main.@infiltrate
     abs_Δ_cost = get_mean_std_CI(cost - ref_cost)
     rel_Δ_cost = abs_Δ_cost.mean ./ mean(ref_cost) * 100
     rel_Δ_cost_CI = abs_Δ_cost.CI ./ mean(ref_cost) * 100

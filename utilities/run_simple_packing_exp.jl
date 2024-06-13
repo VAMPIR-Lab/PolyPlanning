@@ -7,18 +7,18 @@ using GLMakie
 is_saving = true
 is_running_sep = true
 is_running_dcol = true
-is_running_kkt = true
-is_loading_exp = false # skip experiment generation and load from file
+is_running_kkt = false
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-05-30_2351"
-res_file_date = "2024-05-30_2351"
+exp_file_date = "2024-06-12_2243"
+res_file_date = "2024-06-12_2243"
 exp_name = "simple_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 1 # number of maps
-n_x0s = 300 # number of initial conditions
+n_x0s = 100 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
