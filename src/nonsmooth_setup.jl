@@ -1,12 +1,12 @@
-# function gen_LP_data(xt, Ae::AbstractArray{T}, be, centroide, Ao, bo, centroido; is_newsd=false) where {T}
-#     me = length(be)
-#     mo = length(bo)
-#     A = [[Ae; Ao] ones(T, me + mo)]
-#     b = [be; bo]
-#     q = [0, 0, 1.0]
-#     # print("old")
-#     (A, b, q)
-# end
+#function gen_LP_data(xt, Ae::AbstractArray{T}, be, centroide, Ao, bo, centroido; is_newsd=false) where {T}
+#    me = length(be)
+#    mo = length(bo)
+#    A = [[Ae; Ao] ones(T, me + mo)]
+#    b = [be; bo]
+#    q = [0, 0, 1.0]
+#    # print("old")
+#    (A, b, q)
+#end
 
 function gen_LP_data(xt, Ae::AbstractArray{T}, be, centroide, Ao, bo, centroido; is_newsd=false) where {T}
     A = [Ae Ae*centroide+be
@@ -110,8 +110,41 @@ function f_pack_single(xt, Ae, be, Q, q)
     end
     fvals
 end
+
+function plot_inflated(xt, Ae, be, centroide, Ao, bo, centroido, p_intercept, sd; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
+
+    # draw polys
+    Aeb = shift_to(Ae, be, xt)
+    Aex = Aeb[1]
+    bex = Aeb[2]
+    ego_shifted = ConvexPolygon2D(Aex, bex)
+    plot!(ax, ego_shifted; color=:blue)
+    obs = ConvexPolygon2D(Ao, bo)
+    plot!(ax, obs; color=:red)
+
+    # draw inflated
+    be_inflated = bex + sd * (Aex * centroide + bex)
+    bo_inflated = bo + sd * (Ao * centroido + bo)
+    ego_inflated = ConvexPolygon2D(Aex, be_inflated)
+    obs_inflated = ConvexPolygon2D(Ao, bo_inflated)
+
+    plot!(ax, ego_inflated; color=:lightblue, linewidth=2)
+    plot!(ax, obs_inflated; color=:pink, linewidth=2)
+
+    # draw the intercept and centroids
+    scatter!(ax, centroide[1], centroide[2]; color=:blue)
+    scatter!(ax, centroido[1], centroido[2]; color=:red)
+    scatter!(ax, p_intercept[1], p_intercept[2]; color=:green)
+
+    if is_displaying
+        display(fig)
+    end
+
+    (fig, ax)
+end
+
 # some index combinations is not feasible, i.e. all indices are from m1 or m2
-function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs; is_newsd=false)
+function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs, t; is_newsd=false)
     Aex, bex = shift_to(Ae, be, xt)
     R = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
@@ -121,10 +154,16 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
     m2 = length(bo)
 
     # use OSQP solver
-    #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
-    ##if ret.info.status_polish == -1
-    ##    @warn "not polished"
-    ##end
+    #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false, max_iter=4e4, eps_abs=1e-5)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
+
+    #if ret.info.status_val != 1
+    #    @warn ret.info.status
+    #    Main.@infiltrate
+    #    #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, ret.x[1:2], ret.x[3])
+    #end
+    #if ret.info.status_polish == -1
+    #    @warn "not polished"
+    #end
     #primals = ret.x
     #duals = -ret.y
 
@@ -143,26 +182,28 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
 
     status = JuMP.termination_status(model)
     if status != OPTIMAL
-        @info status
-        #@infiltrate
         duals = zeros(m1 + m2)
         cons = duals
+        xx = JuMP.value.(xx)
+        @warn status
+        Main.@infiltrate
+        #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, xx[1:2], xx[3])
+    else
+        primals = JuMP.value.(xx)
+        duals = JuMP.dual.(constraint)
+        cons = AA * primals + bb
     end
+    ### primal and dual tolerance is 1e-7
+    I1 = duals .≥ 1e-2 .&& cons .< 1e-2
+    I2 = duals .< 1e-2 .&& cons .< 1e-2
+    I3 = duals .< 1e-2 .&& cons .≥ 1e-2
 
-    primals = JuMP.value.(xx)
-    duals = JuMP.dual.(constraint)
-    cons = AA * primals + bb
-
-    # primal and dual tolerance is 1e-7
-    I1 = duals .≥ 1e-6 .&& cons .< 1e-6
-    I2 = duals .< 1e-6 .&& cons .< 1e-6
-    I3 = duals .< 1e-6 .&& cons .≥ 1e-6
 
     all_inds = collect(1:m1+m2)
     weak_ind_options = powerset(all_inds[I2]) |> collect
     # the first set is an empty set, and is always preserved
     if length(weak_ind_options) > max_derivs
-        @warn("More sd derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
+        #@warn("More sd derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
         weak_ind_options = weak_ind_options[1:max_derivs]
     end
     # what if weak_ind_options is empty?
@@ -174,6 +215,44 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs;
     assignments = map(weak_ind_options) do inds
         sort([all_inds[I1]; inds])
     end
+
+
+    function does_it_exist(as, v)
+        for (i, a) in enumerate(as)
+            if a == v
+                return i
+            end
+        end
+        return 0
+    end
+
+    new_assignments = copy(assignments)
+
+    #for (i, a) in enumerate(assignments)
+    i = does_it_exist(assignments, [1, 8])
+    if i > 0
+        # if we have [1,2, 8] already...
+        if does_it_exist(assignments, [1, 2, 8]) == 0
+            new_assignments[i] = [1, 2, 8]
+            # if we have [1,4,8] already
+        elseif does_it_exist(assignments, [1, 4, 8]) == 0
+            new_assignments[i] = [1, 4, 8]
+        end
+    end
+    #end
+
+    
+    if t == 20
+        #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, primals[1:2], primals[3])
+        #@info "old:"
+        #@info assignments
+        #@info "hacked:"
+        #@info new_assignments
+        #Main.@infiltrate
+    end
+
+    new_assignments
+    #assignments
 end
 
 function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
@@ -348,8 +427,10 @@ function setup_quick(ego_polys;
     get_Jlag = Dict()
     get_Jsd = Dict()
 
-    get_gfv = Dict()
-    get_Jfv = Dict()
+    if enable_fvals
+        get_gfv = Dict()
+        get_Jfv = Dict()
+    end
 
     @info "Generating symbolic solutions to sd calculation"
     for (i, sds_i) in enumerate(sds) # i is index of egos
@@ -414,8 +495,12 @@ function setup_quick(ego_polys;
                     β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd; is_newsd=is_newsd)
+
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, 0; is_newsd=is_newsd)
                     # directly delete indices after 3 may cause some problems
+                    #if t == 20
+                    #@info assignments
+                    #end
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -458,7 +543,7 @@ function setup_quick(ego_polys;
                     β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
-                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd; is_newsd=is_newsd)
+                    assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, t; is_newsd=is_newsd)
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -620,7 +705,6 @@ function visualize_quick(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[
 
         # obstacle_inflated = @lift(ConvexPolygon2D(Ao, $(bo_inflated)))
         # plot!(ax, obstacle_inflated; color=:yellow, linewidth=3)
-
     end
 
     #colors = [:red, :orange, :yellow, :green]
@@ -688,9 +772,9 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
 
         if is_displaying
             update_fig(θ)
-            #if sleep_duration > 0
-            #    sleep(sleep_duration)
-            #end
+            if sleep_duration > 0
+                sleep(sleep_duration)
+            end
         end
 
         Cint(0)
@@ -709,20 +793,26 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         len .= J_len
         row .= J_row
         data .= JJ.nzval
+
+        
+        #if is_displaying
+        #    update_fig(θ)
+        #    if sleep_duration > 0
+        #        sleep(sleep_duration)
+        #    end
+        #end
+
         Cint(0)
     end
 
+    # force compilation
+    buf = zeros(n)
+    Jbuf = zeros(nnz_total)
+    w = randn(length(θ0))
+    F(n, w, buf)
+    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    #buf = zeros(n)
     #buf2 = zeros(n)
-    #Jbuf = zeros(nnz_total)
-
-    #w = randn(length(θ0))
-    #w = copy(θ0)
-
-    #F(n, w, buf)
-    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-
     #Jrows, Jcols, _ = findnz(J_example)
     #Main.@infiltrate
     #Jnum = sparse(Jrows, Jcols, Jbuf)

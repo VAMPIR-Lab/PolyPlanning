@@ -12,20 +12,27 @@ function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
         yt = @view(z[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
 
-        for (i, Pi) in enumerate(ego_polys)
+        for (i, Pe) in enumerate(ego_polys)
             yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
-            Ae = Pi.A
-            be = Pi.b
+            Ae = Pe.A
+            be = Pe.b
             Aex, bex = shift_to(Ae, be, xt)
+            Ve = Pe.V
+            centroide = sum(Ve) / length(Ve)
 
-            for (k, Pk) in enumerate(obs_polys)
+            for (k, Po) in enumerate(obs_polys)
                 xxt = @view(yti[(k-1)*n_per_col+1:(k-1)*n_per_col+3])
                 λt = @view(yti[(k-1)*n_per_col+4:(k-1)*n_per_col+n_per_col])
-                Ao = Matrix(Pk.A)
-                bo = Pk.b
+                Ao = Matrix(Po.A)
+                bo = Po.b
+                centroido = sum(Po.V) / length(Po.V)
 
                 # min x' q, s.t. A x >= b
-                AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
+                R = [cos(xt[3]) sin(xt[3])
+                    -sin(xt[3]) cos(xt[3])]
+                centroidex = xt[1:2] + R * centroide
+                AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido)
+                #AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
 
                 push!(cons_kkt, λt' * (AA * xxt + bb)) # = 0 (1)
                 push!(l_kkt, -Inf)
@@ -249,6 +256,13 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
         row .= J_row
         Cint(0)
     end
+
+    # force compilation
+    buf = zeros(n)
+    Jbuf = zeros(nnz_total)
+    w = randn(length(θ0))
+    F(n, w, buf)
+    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(

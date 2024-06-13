@@ -7,11 +7,11 @@ using GLMakie
 is_saving = true
 is_running_sep = true
 is_running_dcol = true
-is_running_kkt = false
+is_running_kkt = true
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-06-12_2243"
-res_file_date = "2024-06-12_2243"
+exp_file_date = "2024-06-13_1245"
+res_file_date = "2024-06-13_1245"
 exp_name = "simple_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
@@ -24,13 +24,13 @@ n_obs = 1
 n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
-Rf = 1e-3 * PolyPlanning.I(3); # penalty for control variable
-Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 5e-3 * PolyPlanning.I(2) # penalty for translation
+Rf = 1e-3 * PolyPlanning.I(3) # penalty for control variable
+Rf[3, 3] = Rf[3, 3] / 100.0
+Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
-init_x_mean = 3.0
+init_x_mean = 2.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
 init_y_disturb_max = 1.0
@@ -116,16 +116,13 @@ end
 
 # tables
 if is_running_sep
-    @info "ours vs seperating hyperplanes"
     PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
 end
 
 if is_running_dcol
-    @info "ours vs DifferentiableCollisions.jl"
     PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
 end
 
 if is_running_kkt
-    @info "ours vs direct kkt"
     PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
 end

@@ -18,4 +18,4 @@ sep_prob = PolyPlanning.setup_sep_planes(
     u3_max=π
 )
 
-sep_sol = PolyPlanning.solve_prob_sep_planes(sep_prob, x0; is_displaying=true)
+sep_sol = PolyPlanning.solve_prob_sep_planes(sep_prob, x0; is_displaying=true, sleep_duration=0.25)

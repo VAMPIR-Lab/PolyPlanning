@@ -21,7 +21,7 @@ include("problem_setup.jl")
 include("nonsmooth_setup.jl")
 include("sep_plane_setup.jl")
 include("direct_kkt_setup.jl")
-include("dcol_setup.jl")	
+include("dcol_setup.jl")
 include("experiment_utils.jl")
 
 export ConvexPolygon2D

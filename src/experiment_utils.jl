@@ -169,13 +169,13 @@ function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false
     (our_sols, sep_sols, dcol_sols, kkt_sols)
 end
 
-function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="")
+function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
     #n_maps = length(maps)
     #n_x0s = length(x0s)
     @info "Computing nonsmooth solutions..."
     start_t = time()
     our_sols = multi_solve_ours(ego_poly, x0s, maps, param)
-    @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+    @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
     if is_saving
         jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(date_now).jld2"; our_sols)
@@ -186,7 +186,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Computing separating hyperplane solutions..."
         start_t = time()
         sep_sols = multi_solve_sep(ego_poly, x0s, maps, param)
-        @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(date_now).jld2"; sep_sols)
@@ -198,7 +198,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Computing DifferentiableCollisions.jl solutions..."
         start_t = time()
         dcol_sols = multi_solve_dcol(ego_poly, x0s, maps, param)
-        @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_dcol_sols_$(date_now).jld2"; dcol_sols)
@@ -210,7 +210,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
         @info "Computing direct KKT solutions..."
         start_t = time()
         kkt_sols = multi_solve_kkt(ego_poly, x0s, maps, param)
-        @info "Done! $(round(time() - start_t; sigdigits=3)) seconds elapsed."
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
         if is_saving
             jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_kkt_sols_$(date_now).jld2"; kkt_sols)
@@ -292,7 +292,7 @@ function get_mean_std_CI(v)
     end
 end
 
-function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin")
+function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin", sigdigits=2)
 
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
@@ -304,9 +304,10 @@ function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin"
     ref_fail_percent = length(ref_bin.fail.idx) / (n_maps * n_x0s) * 100
     both_fail_percent = length(common_fail.idx) / (n_maps * n_x0s) * 100
 
+
     println("           $name     $ref_name     both    both(ct)")
-    println("success    $(round(bin_success_percent; sigdigits=3))%    $(round(ref_success_percent; sigdigits=3))%    $(round(both_success_percent; sigdigits=3))%    $(length(common_success.idx))")
-    println("fail       $(round(bin_fail_percent; sigdigits=3))%    $(round(ref_fail_percent; sigdigits=3))%    $(round(both_fail_percent; sigdigits=3))%    $(length(common_fail.idx))")
+    println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
+    println("fail       $(round(bin_fail_percent; sigdigits))%    $(round(ref_fail_percent; sigdigits))%    $(round(both_fail_percent; sigdigits))%    $(length(common_fail.idx))")
     if length(common_success.idx) > 0
         print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
     end
@@ -316,7 +317,7 @@ function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin"
     #end
 end
 
-function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin")
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=2)
 
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100
@@ -327,18 +328,18 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     rel_Δ_cost_CI = abs_Δ_cost.CI ./ mean(ref_cost) * 100
 
     println("              mean    CI ")
-    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits=2)) ± $(round.(abs_Δ_time.CI; sigdigits=2))")
-    println("time rel Δ    $(round.(rel_Δ_time; sigdigits=3))% ± $(round.(rel_Δ_time_CI; sigdigits=3))%  ")
-    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits=3)) ± $(round.(abs_Δ_cost.CI; sigdigits=3))")
-    println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits=3))% ± $(round.(rel_Δ_cost_CI; sigdigits=3))%  ")
+    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits)) ± $(round.(abs_Δ_time.CI; sigdigits))")
+    println("time rel Δ    $(round.(rel_Δ_time; sigdigits))% ± $(round.(rel_Δ_time_CI; sigdigits))%  ")
+    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits)) ± $(round.(abs_Δ_cost.CI; sigdigits))")
+    println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits))% ± $(round.(rel_Δ_cost_CI; sigdigits))%  ")
 
     time_stats = get_mean_std_CI(time)
     ref_time_stats = get_mean_std_CI(ref_time)
     cost_stats = get_mean_std_CI(cost)
     ref_cost_stats = get_mean_std_CI(ref_cost)
     println("mean   $name vs $ref_name")
-    println("time   $(round.(time_stats.mean; sigdigits=2))    $(round.(ref_time_stats.mean; sigdigits=2))  ")
-    println("cost   $(round.(cost_stats.mean; sigdigits=2))    $(round.(ref_cost_stats.mean; sigdigits=2))  ")
+    println("time   $(round.(time_stats.mean; sigdigits))    $(round.(ref_time_stats.mean; sigdigits))  ")
+    println("cost   $(round.(cost_stats.mean; sigdigits))    $(round.(ref_cost_stats.mean; sigdigits))  ")
 end
 #function print_table(bin, n_maps, n_x0s; title="our")
 #our_success_ratio = length(bin.successes.idx) / (n_maps * n_x0s)
@@ -346,14 +347,14 @@ end
 #    our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
 
 #    println("             local       fails")
-#    println("$title ratio    $(round(our_success_ratio*100; sigdigits=2))%      $(round(our_fail_ratio*100; sigdigits=2))%")
+#    println("$title ratio    $(round(our_success_ratio*100; sigdigits))%      $(round(our_fail_ratio*100; sigdigits))%")
 #    println("          (mean, CI)  (mean, CI)")
-#    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits=2)) $(round.(get_mean_CI(bin.fails.time); sigdigits=2))")
-#    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits=2)) $(round.(get_mean_CI(bin.fails.cost); sigdigits=2))")
+#    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits)) $(round.(get_mean_CI(bin.fails.time); sigdigits))")
+#    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits)) $(round.(get_mean_CI(bin.fails.cost); sigdigits))")
 #end
 
 
-function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")
+function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth", sigdigits=2)
 
     for k in 1:n_rows*n_cols:length(bins.idx)
         counter = 0
@@ -374,7 +375,7 @@ function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1,
             j = Int((counter - 1) % n_cols) + 1
             #@info "$i, $j"
             ax = Axis(fig[i, j], aspect=DataAspect())
-            ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits=2)) s, cost = $(round(sol.cost; sigdigits=2)), pT = $(round.(sol.final_pos; sigdigits=2)) "
+            ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits)) s, cost = $(round(sol.cost; sigdigits)), pT = $(round.(sol.final_pos; sigdigits)) "
 
             if type == "nonsmooth"
                 if sol.mcp_success
@@ -417,7 +418,7 @@ function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1,
 end
 
 
-function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth")
+function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth", sigdigits=2)
     n_maps = length(maps)
     n_x0s = length(x0s)
     @argcheck n_maps * n_x0s == length(sols)
@@ -441,7 +442,7 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
                         sol = sols[(map_idx, x0_idx)]
                         ax = Axis(fig[i, j], aspect=DataAspect())
 
-                        ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits=2)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits=2)) s, cost = $(round(sol.cost; sigdigits=2)), pT = $(round.(sol.final_pos; sigdigits=2)) "
+                        ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits)) s, cost = $(round(sol.cost; sigdigits)), pT = $(round.(sol.final_pos; sigdigits)) "
 
                         if type == "nonsmooth"
                             if sol.mcp_success

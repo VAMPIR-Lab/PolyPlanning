@@ -447,16 +447,12 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         Cint(0)
     end
 
-
-    #buf = zeros(n)
-    #buf2 = zeros(n)
-    #Jbuf = zeros(nnz_total)
-
-    #w = randn(length(θ0))
-    #w = copy(θ0)
-
-    #F(n, w, buf)
-    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    # force compilation
+    buf = zeros(n)
+    Jbuf = zeros(nnz_total)
+    w = randn(length(θ0))
+    F(n, w, buf)
+    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     #Jrows, Jcols, _ = findnz(J_example)
     #Jnum = sparse(Jrows, Jcols, Jbuf)
