@@ -191,30 +191,82 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     else
         primals = JuMP.value.(xx)
         duals = JuMP.dual.(constraint)
+        # cons = AA * primals + bb
+    end
+
+    assignments = Set{Set{Int}}()
+    verts = []
+    explored_verts = []
+
+    push!(verts, [primals; duals])
+
+    while !empty(verts)
+        v = pop!(verts)
+        primals = v[1:3]; duals = v[4:end]
+        push!(explored_verts, v)
         cons = AA * primals + bb
+        ### primal and dual tolerance is 1e-7
+        I1 = duals .≥ 1e-2 .&& cons .< 1e-2
+        I2 = duals .< 1e-2 .&& cons .< 1e-2
+        I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+
+        all_inds = collect(1:m1+m2)
+        weak_ind_options = powerset(all_inds[I2]) |> collect
+        # the first set is an empty set, and is always preserved
+        if length(weak_ind_options) > max_derivs
+            #@warn("More sd derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
+            weak_ind_options = weak_ind_options[1:max_derivs]
+        end
+        # what if weak_ind_options is empty?
+        if length(weak_ind_options) < max_derivs
+            append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
+        end
+    
+        for inds in weak_ind_options
+            ass =  Set{Int}([all_inds[I1]; inds])
+            ma = length(ass)
+            B_eq = [spzeros(3, 3) -AA[ass, :]';
+                    AA[ass, :] spzeros(ma, ma)]
+            not_ass = setdiff(all_inds, ass)
+            B_ineq = [AA[not_ass, :] spzeros(m1+m2-ma, ma)]
+            b_eq = [qq' * xx; bb[ass]]
+            b_ineq = bb[not_ass]
+
+            @assert B_eq * [primals; duals] + b_eq |> norm < 1e-5
+            @assert B_ineq * [primals; duals] + b_ineq .≥ -1e-5
+
+            hps = map(1:ma) do i
+                HyperPlane(B_eq[i,:], -b_eq[i])
+            end
+            hss = map(1:m1+m2-ma) do i
+                HalfSpace(B_ineq[i,:], -b_ineq[i])
+            end
+            hr = hrep(hps, hss; d=3+ma)
+            poly = Polyhedra.polyhedron(hr)
+            vr = vrep(poly)
+
+            local_verts = Polyhedra.points(vr)
+
+            for v in local_verts
+                xv = v[1:3]
+                λv_eq = v[4:end]
+                λv = zeros(m1+m2); λv[ass] = λv_eq
+                vv = [xv;  λv]
+                if !any(isapprox(vv,vi; atol=1e-6) for vi in [explored_verts;verts])
+                    push!(verts, vv)
+                end
+            end
+
+            if length(ass) ≥ 3    
+                push!(assignments, Set(ass))
+            end
+        end
     end
-    ### primal and dual tolerance is 1e-7
-    I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-    I2 = duals .< 1e-2 .&& cons .< 1e-2
-    I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+
+   
 
 
-    all_inds = collect(1:m1+m2)
-    weak_ind_options = powerset(all_inds[I2]) |> collect
-    # the first set is an empty set, and is always preserved
-    if length(weak_ind_options) > max_derivs
-        #@warn("More sd derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
-        weak_ind_options = weak_ind_options[1:max_derivs]
-    end
-    # what if weak_ind_options is empty?
-    if length(weak_ind_options) < max_derivs
-        append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
-    end
-
-    #indices of I1 + subset of I2
-    assignments = map(weak_ind_options) do inds
-        sort([all_inds[I1]; inds])
-    end
+   
 
 
     #function does_it_exist(as, v)
@@ -252,7 +304,11 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     #end
 
     #new_assignments
-    assignments
+    v_assignments = []
+    for a in assignments
+        push!(v_assignments, sort(collect(a)))
+    end
+    v_assignments
 end
 
 function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
