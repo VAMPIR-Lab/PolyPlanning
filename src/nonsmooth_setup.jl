@@ -255,8 +255,10 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
 
         for inds in weak_ind_options
             ass = Set{Int}([all_inds[I1]; inds])
-            ma = length(ass)
+            ma = length(ass) # number of active indices
             ass_v = ass |> collect |> sort
+            # B_eq * [primals; duals_active] + b_eq = 0
+            # B_ineq * duals_inactive + b_ineq ≥ 0
             B_eq = [spzeros(3, 3) -AA[ass_v, :]'
                 AA[ass_v, :] spzeros(ma, ma)]
             not_ass = setdiff(all_inds, ass) # is this always ordered
@@ -271,24 +273,29 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
             #@assert all(B_ineq * [pp; dd[ass_v]] + b_ineq .≥ -1e-5)
 
             #@infiltrate
+            # B_eq2 * [primals; duals_active; duals_inactive] + b_eq = 0
+            # B_ineq2 * [primals; duals_active; duals_inactive] + b_ineq ≥ 0 
             B_eq2 = [B_eq zeros(3 + ma, m1 + m2 - ma)]
             B_ineq2 = [B_ineq zeros(m1 + m2 - ma, m1 + m2 - ma)]
             B_big = [B_eq2; B_ineq2]
 
+            # hyperplanes, i.e., equality constraints
             hps = map(1:ma+3) do i
                 HyperPlane(-B_eq2[i, :], b_eq[i])
             end
-
+            
+            # halfspaces, i.e., inequality constraints
             hss = map(1:m1+m2-ma) do i
                 HalfSpace(-B_ineq2[i, :], b_ineq[i])
             end
-            hr = hrep(hps, hss)
+            hr = hrep(hps, hss) # H-representation for polyhedron 
             poly = Polyhedra.polyhedron(hr)
-            vr = vrep(poly)
+            vr = vrep(poly) # V-representation
 
             local_verts = Polyhedra.points(vr)
             #@infiltrate
 
+            # need to consider the order of indices
             for v in local_verts
                 #@infiltrate
                 xv = v[1:3]
