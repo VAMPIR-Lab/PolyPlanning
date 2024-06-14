@@ -24,8 +24,8 @@ our_prob = PolyPlanning.setup_quick(
 
 #x0 = [5.0, 0.0, -π / 2 + π * rand(), 0, 0, 0];
 #x0 = [5.0, 0.0, 0.006216649582387657, 0, 0, 0];
-#x0 = [5.0, 0.0, -1.2633343742220948, 0, 0, 0];
-x0 = [5.0, 0.0, π/2-1e-3, 0, 0, 0];
-our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=true, sleep_duration=0.)
+x0 = [5.0, 0.0, -1.2633343742220948, 0, 0, 0];
+#x0 = [5.0, 0.0, π/2+, 0, 0, 0];
+our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=true, sleep_duration=0.25)
 
 

@@ -14,6 +14,8 @@ using Statistics
 using JLD2
 using JuMP
 using Clp
+using Polyhedra
+using Infiltrator
 
 include("solvers.jl")
 include("poly_functions.jl")

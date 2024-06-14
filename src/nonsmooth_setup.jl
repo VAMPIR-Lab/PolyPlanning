@@ -186,29 +186,60 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
         cons = duals
         xx = JuMP.value.(xx)
         @warn status
-        Main.@infiltrate
+        #Main.@infiltrate
         #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, xx[1:2], xx[3])
     else
         primals = JuMP.value.(xx)
         duals = JuMP.dual.(constraint)
-        # cons = AA * primals + bb
+        cons = AA * primals + bb
     end
 
+    # old
+    ####
+    # primal and dual tolerance is 1e-7
+    #I1 = duals .≥ 1e-6 .&& cons .< 1e-6
+    #I2 = duals .< 1e-6 .&& cons .< 1e-6
+    #I3 = duals .< 1e-6 .&& cons .≥ 1e-6
+
+    #all_inds = collect(1:m1+m2)
+    #weak_ind_options = powerset(all_inds[I2]) |> collect
+    ## the first set is an empty set, and is always preserved
+    #if length(weak_ind_options) > max_derivs
+    #    @warn("More sd derivatives than accounted for! |I2| = $(sum(I2)). λ = $duals. cons = $cons")
+    #    weak_ind_options = weak_ind_options[1:max_derivs]
+    #end
+    ## what if weak_ind_options is empty?
+    #if length(weak_ind_options) < max_derivs
+    #    append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
+    #end
+
+    ##indices of I1 + subset of I2
+    #assignments = map(weak_ind_options) do inds
+    #    sort([all_inds[I1]; inds])
+    #end
+
+    # new 
+    #####
     assignments = Set{Set{Int}}()
     verts = []
     explored_verts = []
 
     push!(verts, [primals; duals])
 
-    while !empty(verts)
+    #@infiltrate
+
+    while !isempty(verts)
+        #@infiltrate
         v = pop!(verts)
-        primals = v[1:3]; duals = v[4:end]
+        pp = v[1:3]
+        dd = v[4:end]
         push!(explored_verts, v)
-        cons = AA * primals + bb
+        cons = AA * pp + bb
         ### primal and dual tolerance is 1e-7
-        I1 = duals .≥ 1e-2 .&& cons .< 1e-2
-        I2 = duals .< 1e-2 .&& cons .< 1e-2
-        I3 = duals .< 1e-2 .&& cons .≥ 1e-2
+        tol = 1e-2
+        I1 = dd .≥ tol .&& cons .< tol
+        I2 = dd .< tol .&& cons .< tol
+        I3 = dd .< tol .&& cons .≥ tol
 
         all_inds = collect(1:m1+m2)
         weak_ind_options = powerset(all_inds[I2]) |> collect
@@ -221,52 +252,65 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
         if length(weak_ind_options) < max_derivs
             append!(weak_ind_options, [weak_ind_options[end] for _ in 1:max_derivs-length(weak_ind_options)])
         end
-    
+
         for inds in weak_ind_options
-            ass =  Set{Int}([all_inds[I1]; inds])
+            ass = Set{Int}([all_inds[I1]; inds])
             ma = length(ass)
-            B_eq = [spzeros(3, 3) -AA[ass, :]';
-                    AA[ass, :] spzeros(ma, ma)]
-            not_ass = setdiff(all_inds, ass)
-            B_ineq = [AA[not_ass, :] spzeros(m1+m2-ma, ma)]
-            b_eq = [qq' * xx; bb[ass]]
+            ass_v = ass |> collect |> sort
+            B_eq = [spzeros(3, 3) -AA[ass_v, :]'
+                AA[ass_v, :] spzeros(ma, ma)]
+            not_ass = setdiff(all_inds, ass) # is this always ordered
+            B_ineq = [AA[not_ass, :] spzeros(m1 + m2 - ma, ma)]
+            b_eq = [qq; bb[ass_v]]
             b_ineq = bb[not_ass]
 
-            @assert B_eq * [primals; duals] + b_eq |> norm < 1e-5
-            @assert B_ineq * [primals; duals] + b_ineq .≥ -1e-5
+            #if !(B_eq * [pp; dd[ass_v]] + b_eq |> norm < 1e-5)
+            #    @infiltrate
+            #end
+            #@assert B_eq * [pp; dd[ass_v]] + b_eq |> norm < 1e-5
+            #@assert all(B_ineq * [pp; dd[ass_v]] + b_ineq .≥ -1e-5)
 
-            hps = map(1:ma) do i
-                HyperPlane(B_eq[i,:], -b_eq[i])
+            #@infiltrate
+            B_eq2 = [B_eq zeros(3 + ma, m1 + m2 - ma)]
+            B_ineq2 = [B_ineq zeros(m1 + m2 - ma, m1 + m2 - ma)]
+            B_big = [B_eq2; B_ineq2]
+
+            hps = map(1:ma+3) do i
+                HyperPlane(-B_eq2[i, :], b_eq[i])
             end
+
             hss = map(1:m1+m2-ma) do i
-                HalfSpace(B_ineq[i,:], -b_ineq[i])
+                HalfSpace(-B_ineq2[i, :], b_ineq[i])
             end
-            hr = hrep(hps, hss; d=3+ma)
+            hr = hrep(hps, hss)
             poly = Polyhedra.polyhedron(hr)
             vr = vrep(poly)
 
             local_verts = Polyhedra.points(vr)
+            #@infiltrate
 
             for v in local_verts
+                #@infiltrate
                 xv = v[1:3]
                 λv_eq = v[4:end]
-                λv = zeros(m1+m2); λv[ass] = λv_eq
-                vv = [xv;  λv]
-                if !any(isapprox(vv,vi; atol=1e-6) for vi in [explored_verts;verts])
+                λv = zeros(m1 + m2)
+                λv[ass_v] = λv_eq[1:ma]
+                vv = [xv; λv]
+                if !any(isapprox(vv, vi; atol=1e-6) for vi in [explored_verts; verts])
                     push!(verts, vv)
                 end
             end
 
-            if length(ass) ≥ 3    
-                push!(assignments, Set(ass))
+            if length(ass) ≥ 3
+                push!(assignments, ass)
             end
         end
     end
 
-   
+    @infiltrate
 
 
-   
+
 
 
     #function does_it_exist(as, v)
@@ -293,22 +337,28 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     #end
     #end
 
-    
+
     #if t == 20
-        #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, primals[1:2], primals[3])
-        #@info "old:"
-        #@info assignments
-        #@info "hacked:"
-        #@info new_assignments
-        #Main.@infiltrate
+    #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, primals[1:2], primals[3])
+    #@info "old:"
+    #@info assignments
+    #@info "hacked:"
+    #@info new_assignments
+    #Main.@infiltrate
     #end
 
-    #new_assignments
+
     v_assignments = []
     for a in assignments
         push!(v_assignments, sort(collect(a)))
     end
+    #@infiltrate
     v_assignments
+
+    # do we need this??
+    #if length(v_assignments) > max_derivs
+    #    v_assignments[1:max_derivs]
+    #end
 end
 
 function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
@@ -557,6 +607,7 @@ function setup_quick(ego_polys;
                     #if t == 20
                     #@info assignments
                     #end
+                    #@infiltrate
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -850,7 +901,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         row .= J_row
         data .= JJ.nzval
 
-        
+
         #if is_displaying
         #    update_fig(θ)
         #    if sleep_duration > 0
