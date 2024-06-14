@@ -1,10 +1,13 @@
 using PolyPlanning
 
-x0 = [5.0, 0.0, 0.1, 0, 0, 0];
+#x0 = [5.0, 0.0, rand(), 0, 0, 0];
+#x0 = [5.0, 0.0, -π / 2 + π * rand(), 0, 0, 0];
 obs_polys = PolyPlanning.gen_rect_obs(; a=0.25);
 #obs_polys = PolyPlanning.gen_simple_obs();
-ego_rect = PolyPlanning.gen_ego_rect(; a=0.5, b=1.0);
-Rf = 2e-3 * PolyPlanning.I(3);
+#ego_rect = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+#Rf = 1e-3 * PolyPlanning.I(3);
+ego_rect = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
 
 our_prob = PolyPlanning.setup_quick(
@@ -19,6 +22,10 @@ our_prob = PolyPlanning.setup_quick(
     n_obs=length(obs_polys)
 );
 
-our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=true)
+#x0 = [5.0, 0.0, -π / 2 + π * rand(), 0, 0, 0];
+#x0 = [5.0, 0.0, 0.006216649582387657, 0, 0, 0];
+#x0 = [5.0, 0.0, -1.2633343742220948, 0, 0, 0];
+x0 = [5.0, 0.0, π/2-1e-3, 0, 0, 0];
+our_sol = PolyPlanning.solve_quick(our_prob, x0, obs_polys; is_displaying=true, sleep_duration=0.)
 
 

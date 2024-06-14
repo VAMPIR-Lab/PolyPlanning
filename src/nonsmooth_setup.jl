@@ -217,42 +217,42 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     end
 
 
-    function does_it_exist(as, v)
-        for (i, a) in enumerate(as)
-            if a == v
-                return i
-            end
-        end
-        return 0
-    end
+    #function does_it_exist(as, v)
+    #    for (i, a) in enumerate(as)
+    #        if a == v
+    #            return i
+    #        end
+    #    end
+    #    return 0
+    #end
 
-    new_assignments = copy(assignments)
+    #new_assignments = copy(assignments)
 
-    #for (i, a) in enumerate(assignments)
-    i = does_it_exist(assignments, [1, 8])
-    if i > 0
-        # if we have [1,2, 8] already...
-        if does_it_exist(assignments, [1, 2, 8]) == 0
-            new_assignments[i] = [1, 2, 8]
-            # if we have [1,4,8] already
-        elseif does_it_exist(assignments, [1, 4, 8]) == 0
-            new_assignments[i] = [1, 4, 8]
-        end
-    end
+    ##for (i, a) in enumerate(assignments)
+    #i = does_it_exist(assignments, [1, 8])
+    #if i > 0
+    #    # if we have [1,2, 8] already...
+    #    if does_it_exist(assignments, [1, 2, 8]) == 0
+    #        new_assignments[i] = [1, 2, 8]
+    #        # if we have [1,4,8] already
+    #    elseif does_it_exist(assignments, [1, 4, 8]) == 0
+    #        new_assignments[i] = [1, 4, 8]
+    #    end
+    #end
     #end
 
     
-    if t == 20
+    #if t == 20
         #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, primals[1:2], primals[3])
         #@info "old:"
         #@info assignments
         #@info "hacked:"
         #@info new_assignments
         #Main.@infiltrate
-    end
+    #end
 
-    new_assignments
-    #assignments
+    #new_assignments
+    assignments
 end
 
 function get_single_f_pack_ids(xt, Ae, be, Q, q, max_derivs, keys)
