@@ -4,14 +4,14 @@ using Dates
 using GLMakie
 
 # user options
-is_saving = true
+is_saving = false
 is_running_sep = true
 is_running_dcol = false
 is_running_kkt = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-06-13_1245"
-res_file_date = "2024-06-13_1245"
+exp_file_date = "2024-06-17_1454"
+res_file_date = "2024-06-17_1454"
 exp_name = "simple_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")

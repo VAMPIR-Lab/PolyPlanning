@@ -279,12 +279,12 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
             B_ineq2 = [B_ineq zeros(m1 + m2 - ma, m1 + m2 - ma)]
             B_big = [B_eq2; B_ineq2]
 
-            # hyperplanes, i.e., equality constraints
+            # hyperplanes, i.e., equality constraints in the form of Ax=b
             hps = map(1:ma+3) do i
                 HyperPlane(-B_eq2[i, :], b_eq[i])
             end
             
-            # halfspaces, i.e., inequality constraints
+            # halfspaces, i.e., inequality constraints in the form of Ax≤b
             hss = map(1:m1+m2-ma) do i
                 HalfSpace(-B_ineq2[i, :], b_ineq[i])
             end
@@ -539,7 +539,7 @@ function setup_quick(ego_polys;
     get_sd = Dict()
     get_Jlag = Dict()
     get_Jsd = Dict()
-
+    @infiltrate
     if enable_fvals
         get_gfv = Dict()
         get_Jfv = Dict()
@@ -548,7 +548,7 @@ function setup_quick(ego_polys;
     @info "Generating symbolic solutions to sd calculation"
     for (i, sds_i) in enumerate(sds) # i is index of egos
         @showprogress for (k, sd) in sds_i # k is indices of active constraints, sd is corresponding sd
-            lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false) # λ is a representative of λ_col, β is a representative of β_sd
+            lag = Symbolics.gradient(-sd * λsd[1] * β[1], xt; simplify=false) # λsd is a representative of λ_col, β is a representative of β_sd
             get_lag[i, k] = Symbolics.build_function(lag, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2]
             get_sd[i, k] = Symbolics.build_function(β[1] * sd, xt, Ao, bo, centroido, β, λsd; expression=Val(false))
 
@@ -569,6 +569,7 @@ function setup_quick(ego_polys;
             end
             get_Jlag[i, k] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jlag_rows)))
             get_Jsd[i, k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
+            @infiltrate
         end
     end
     if enable_fvals
@@ -581,6 +582,7 @@ function setup_quick(ego_polys;
                 Jfv = Symbolics.sparsejacobian(gfv, [xt; α]; simplify=false)
                 Jfv_rows, Jfv_cols, Jfv_vals = findnz(Jfv)
                 get_Jfv[i, k] = (Jfv_rows, Jfv_cols, Symbolics.build_function(Jfv_vals, xt, α; expression=Val(false))[2], zeros(length(Jfv_rows)))
+                @infiltrate    
             end
         end
     end
@@ -595,7 +597,7 @@ function setup_quick(ego_polys;
     function fill_F!(F, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
-
+        @infiltrate
         for t in 1:T
             for i in 1:n_ego
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
@@ -614,11 +616,12 @@ function setup_quick(ego_polys;
                     #if t == 20
                     #@info assignments
                     #end
-                    #@infiltrate
+                    @infiltrate
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
                         end
+                        @infiltrate
                         get_lag[i, assignment](lag_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         βsd = get_sd[i, assignment](xt, Ao, bo, centroido, βte[ee], λte)
 
@@ -638,6 +641,7 @@ function setup_quick(ego_polys;
                 end
             end
         end
+        @infiltrate
         nothing
     end
 
@@ -658,6 +662,7 @@ function setup_quick(ego_polys;
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, t; is_newsd=is_newsd)
+                    @infiltrate
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -668,6 +673,7 @@ function setup_quick(ego_polys;
                         Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
                         Jsd_vals(Jsd_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1, 7)
+                        @infiltrate
 
                         @inbounds JJ[xt_inds, xt_inds] .+= Jlag[1:6, 1:6]
                         @inbounds JJ[xt_inds, β_inds[ee]+β_offset] .+= Jlag[1:6, 7]
@@ -692,6 +698,7 @@ function setup_quick(ego_polys;
                 end
             end
         end
+        @infiltrate
         nothing
     end
 
@@ -753,7 +760,6 @@ function setup_quick(ego_polys;
             end
         end
     end
-
     return (; fill_F!,
         get_J_both!,
         J_example,
@@ -919,6 +925,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         Cint(0)
     end
 
+    @infiltrate
     # force compilation
     buf = zeros(n)
     Jbuf = zeros(nnz_total)
