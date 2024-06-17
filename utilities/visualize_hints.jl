@@ -1,5 +1,5 @@
 # visualize all
-plot_n_rows = 5
+plot_n_rows = 8
 plot_n_cols = 3
 PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="nonsmooth")
 PolyPlanning.visualize_multi(x0s, maps, sep_sols, T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="sep_planes")

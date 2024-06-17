@@ -193,7 +193,7 @@ function visualize_direct_kkt(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis
 end
 
 
-function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
+function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
     (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, n_per_col, obs_polys) = prob
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
@@ -237,6 +237,9 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true)
 
         if is_displaying
             update_fig(θ)
+            if sleep_duration > 0
+                sleep(sleep_duration)
+            end
         end
         #for i in 1:length(ego_polys)
         #    for t in 1:T

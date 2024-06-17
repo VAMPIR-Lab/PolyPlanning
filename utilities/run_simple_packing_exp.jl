@@ -8,7 +8,7 @@ is_saving = false
 is_running_sep = true
 is_running_dcol = false
 is_running_kkt = false
-is_loading_exp = true # skip experiment generation and load from file
+is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
 exp_file_date = "2024-06-17_1454"
 res_file_date = "2024-06-17_1454"
@@ -22,8 +22,8 @@ n_x0s = 100 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
-T = 20 # timestep
-dt = 0.2 #
+T = 2 # timestep
+dt = 2.0 #
 Rf = 1e-3 * PolyPlanning.I(3) # penalty for control variable
 Rf[3, 3] = Rf[3, 3] / 100.0
 Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
@@ -32,7 +32,7 @@ u2_max = 10.0
 u3_max = π
 init_x_mean = 2.0
 init_y_mean = 0.0
-init_x_disturb_max = 1.0
+init_x_disturb_max = .5
 init_y_disturb_max = 1.0
 ego_width = 0.5
 ego_length = 2.0
@@ -41,7 +41,7 @@ if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
     @assert n_maps == 1
-    @assert init_x_mean - init_x_disturb_max - ego_length / 2 >= 0
+    @assert init_x_mean - init_x_disturb_max - ego_length / 2 >= .5
 
     param = (;
         n_maps,

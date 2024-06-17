@@ -175,7 +175,7 @@ function setup_sep_planes(
     )
 end
 
-function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_showing_sep_plane=false)
+function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_showing_sep_plane=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_t = n_per_col * n_obs * n_ego
