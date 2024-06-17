@@ -223,20 +223,21 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     assignments = Set{Set{Int}}()
     verts = []
     explored_verts = []
+    candidates = []
 
-    push!(verts, [primals; duals])
+    push!(candidates, [primals; duals])
 
     #@infiltrate
 
-    while !isempty(verts)
+    while !isempty(candidates)
         #@infiltrate
-        v = pop!(verts)
+        v = pop!(candidates)
         pp = v[1:3]
         dd = v[4:end]
         push!(explored_verts, v)
         cons = AA * pp + bb
         ### primal and dual tolerance is 1e-7
-        tol = 1e-2
+        tol = 1e-3
         I1 = dd .≥ tol .&& cons .< tol
         I2 = dd .< tol .&& cons .< tol
         I3 = dd .< tol .&& cons .≥ tol
@@ -287,7 +288,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
             vr = vrep(poly)
 
             local_verts = Polyhedra.points(vr)
-            #@infiltrate
+            @infiltrate isempty(local_verts)
 
             for v in local_verts
                 #@infiltrate
@@ -298,6 +299,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
                 vv = [xv; λv]
                 if !any(isapprox(vv, vi; atol=1e-6) for vi in [explored_verts; verts])
                     push!(verts, vv)
+                    push!(candidates, vv)
                 end
             end
 
@@ -307,7 +309,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
         end
     end
 
-    @infiltrate
+    #@infiltrate
 
 
 
@@ -353,7 +355,12 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
         push!(v_assignments, sort(collect(a)))
     end
     #@infiltrate
+
+    if length(v_assignments) < 1
+        @infiltrate
+    end
     v_assignments
+
 
     # do we need this??
     #if length(v_assignments) > max_derivs
@@ -605,8 +612,9 @@ function setup_quick(ego_polys;
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, 0; is_newsd=is_newsd)
                     # directly delete indices after 3 may cause some problems
                     #if t == 20
-                    #@info assignments
+                    @info "f assignments $assignments"
                     #end
+                    #@infiltrate
                     #@infiltrate
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
@@ -651,6 +659,7 @@ function setup_quick(ego_polys;
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, t; is_newsd=is_newsd)
+                    @info "J assignments $assignments"
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -886,6 +895,18 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
 
         Cint(0)
     end
+    function F2(n, θ, result)
+        result .= 0.0
+        @inbounds z = θ[1:n_z]
+        @inbounds α_f = θ[n_z+1:n_z+n_α]
+        @inbounds β_sd = θ[n_z+n_α+1:n_z+n_α+n_β]
+        @inbounds λ_nom = θ[n_z+n_α+n_β+n_s+1:n_z+n_α+n_β+n_s+n_nom]
+        @inbounds λ_col = θ[n_z+n_α+n_β+n_s+n_nom+1:n_z+n_α+n_β+n_s+n_nom+n_col]
+        fill_F!(result, z, x0, obs_polys, α_f, β_sd, λ_nom, λ_col)
+
+        Cint(0)
+    end
+
     function J(n, nnz, θ, col, len, row, data)
         @assert nnz == nnz_total
         data .= 0.0
@@ -900,6 +921,28 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         len .= J_len
         row .= J_row
         data .= JJ.nzval
+
+        @info "filling base F"
+        buf = zeros(n)
+        buf2 = zeros(n)
+        F(n, θ, buf)
+        @info "filling perturbed F"
+        #Jrows, Jcols, _ = findnz(J_example)
+
+        #Main.@infiltrate
+        #Jnum = sparse(Jrows, Jcols, Jbuf)
+        Jnum2 = spzeros(n, n)
+        #@info "Testing Jacobian accuracy numerically"
+        @showprogress for ni in 1:n
+            wi = copy(θ)
+            wi[ni] += 1e-3
+            F2(n, wi, buf2)
+            Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-3)
+        end
+        @info "Jacobian error is $(norm(Jnum2-JJ))"
+        if norm(Jnum2 - JJ) > 1e-1
+            @infiltrate
+        end
 
 
         #if is_displaying
@@ -940,7 +983,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         l,
         u,
         θ0;
-        silent=true,
+        silent=false,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",
