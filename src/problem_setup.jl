@@ -1,14 +1,52 @@
-function f(z, T, Rf, Qf)
+"""
+Create a tuple of grouped index arrays. Assume the inner-most dimension changes most rapidly.
+
+**usage:** 
+```
+for i in is
+    for j in js 
+        ...
+        idxs[group_id][..., j, i]
+    end
+end
+```
+
+**e.g.:**
+```
+julia> idxs = get_sub2idxs((2,2),(3,4))
+julia> idxs[1]
+2×2 Matrix{Int64}:
+ 1  3
+ 2  4
+julia> idxs[2]
+3×4 Matrix{Int64}:
+ 5   8  11  14
+ 6   9  12  15
+ 7  10  13  16
+```
+"""
+function get_sub2idxs(ns...)
+    # reminder: julia uses col major matrices
+    counter = 0
+    idxs = map(ns) do n
+        idx = zeros(Int, n...)
+        prod_n = prod(n)
+        idx[:] .= counter .+ collect(1:prod_n)
+        counter += prod_n
+        idx
+    end
+end
+
+function f(z, T, R_cost, Q_cost)
+    n_x = 6
+    n_u = 3
+    n_xu = n_x + n_u
+
     cost = 0.0
     for t in 1:T
-        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
-        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
-        #cost += ut'*R*ut - goal_dir'*xt[1:2]
-        #cost += xt[1:2]'*xt[1:2]
-        #cost += -0.01*goal_dir'*xt[1:2] + ut'*R*ut
-        #cost += 0.5*ut'*R*ut+ 0.001*xt'*xt
-        cost += ut' * Rf * ut + xt[1:2]' * Qf * xt[1:2]
-        #cost += 0.1*(xt[1:2]-goal_dir)'*(xt[1:2]-goal_dir) + ut'*R*ut
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
+        cost += ut' * R_cost * ut + xt[1:2]' * Q_cost * xt[1:2]
     end
     cost
 end
@@ -35,11 +73,15 @@ function identity_dyn(x, u, dt)
 end
 
 function g_dyn(z, x0, T, dt)
+    n_x = 6
+    n_u = 3
+    n_xu = n_x + n_u
+
     g = Num[]
     x_prev = x0
     for t in 1:T
-        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
-        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
         append!(g, xt - identity_dyn(x_prev, ut, dt))
         x_prev = xt
     end
@@ -47,11 +89,14 @@ function g_dyn(z, x0, T, dt)
 end
 
 function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
+    n_x = 6
+    n_u = 3
+    n_xu = n_x + n_u
+
     g = Num[]
     for t in 1:T
-        xt = @view(z[(t-1)*9+1:(t-1)*9+6])
-        ut = @view(z[(t-1)*9+7:(t-1)*9+9])
-        #append!(g, [p1_max + xt[1], p1_max-xt[1], xt[2]-p2_min, xt[3]-2π, 2π-xt[3]])
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
         append!(g, [p1_max + xt[1], p1_max - xt[1], xt[2] - p2_min, u1_max - ut[1], ut[1] + u1_max, u2_max - ut[2], ut[2] + u2_max, u3_max - ut[3], ut[3] + u3_max,])
     end
     g
@@ -71,7 +116,6 @@ function plot_polys(polys)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())
 
-    #colors = [:red, :orange, :yellow, :green, :red, :orange]
     colors = [:red for _ in 1:length(polys)]
     for (P, c) in zip(polys, colors)
         plot!(ax, P; color=c)

@@ -316,7 +316,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
             vr = vrep(poly) # V-representation
 
             local_verts = Polyhedra.points(vr)
-            @infiltrate isempty(local_verts)
+            #@infiltrate isempty(local_verts)
 
             # need to consider the order of indices
             for v in local_verts
@@ -450,7 +450,7 @@ end
 
 
 function setup_quick(ego_polys;
-    T=50,
+    T=2,
     dt=0.2,
     Q=0.01 * [1.0 0; 0 1],
     q=[0, 0.0],
@@ -568,7 +568,7 @@ function setup_quick(ego_polys;
     get_sd = Dict()
     get_Jlag = Dict()
     get_Jsd = Dict()
-    @infiltrate
+    #@infiltrate
     if enable_fvals
         get_gfv = Dict()
         get_Jfv = Dict()
@@ -598,7 +598,7 @@ function setup_quick(ego_polys;
             end
             get_Jlag[i, k] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jlag_rows)))
             get_Jsd[i, k] = (Jsd_rows, Jsd_cols, Symbolics.build_function(Jsd_vals, xt, Ao, bo, centroido, β, λsd; expression=Val(false))[2], zeros(length(Jsd_rows)))
-            @infiltrate
+            #@infiltrate
         end
     end
     if enable_fvals
@@ -611,7 +611,7 @@ function setup_quick(ego_polys;
                 Jfv = Symbolics.sparsejacobian(gfv, [xt; α]; simplify=false)
                 Jfv_rows, Jfv_cols, Jfv_vals = findnz(Jfv)
                 get_Jfv[i, k] = (Jfv_rows, Jfv_cols, Symbolics.build_function(Jfv_vals, xt, α; expression=Val(false))[2], zeros(length(Jfv_rows)))
-                @infiltrate    
+                #@infiltrate    
             end
         end
     end
@@ -626,7 +626,7 @@ function setup_quick(ego_polys;
     function fill_F!(F, z, x0, polys, α_f, β_sd, λ_nom, λ_col)
         F .= 0.0
         get_Fnom!(F, z, x0, λ_nom, α_f, β_sd)
-        @infiltrate
+        #@infiltrate
         for t in 1:T
             for i in 1:n_ego
                 xt_inds = (t-1)*n_xu+1:(t-1)*n_xu+n_x
@@ -643,14 +643,14 @@ function setup_quick(ego_polys;
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, 0; is_newsd=is_newsd)
                     # directly delete indices after 3 may cause some problems
                     #if t == 20
-                    @info "f assignments $assignments"
+                    #@info "f assignments $assignments"
                     #end
-                    @infiltrate
+                    #@infiltrate
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
                         end
-                        @infiltrate
+                        #@infiltrate
                         get_lag[i, assignment](lag_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         βsd = get_sd[i, assignment](xt, Ao, bo, centroido, βte[ee], λte)
 
@@ -670,7 +670,7 @@ function setup_quick(ego_polys;
                 end
             end
         end
-        @infiltrate
+        #@infiltrate
         nothing
     end
 
@@ -691,7 +691,7 @@ function setup_quick(ego_polys;
                     @inbounds λte = λ_col[λ_ind]
                     @inbounds βte = β_sd[β_inds]
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, t; is_newsd=is_newsd)
-                    @info "J assignments $assignments"
+                    #@info "J assignments $assignments"
                     for (ee, assignment) in enumerate(assignments)
                         if length(assignment) > 3
                             assignment = assignment[1:3]
@@ -702,7 +702,7 @@ function setup_quick(ego_polys;
                         Jsd_rows, Jsd_cols, Jsd_vals, Jsd_buf = get_Jsd[i, assignment]
                         Jsd_vals(Jsd_buf, xt, Ao, bo, centroido, βte[ee], λte)
                         Jsd = sparse(Jsd_rows, Jsd_cols, Jsd_buf, 1, 7)
-                        @infiltrate
+                        #@infiltrate
 
                         @inbounds JJ[xt_inds, xt_inds] .+= Jlag[1:6, 1:6]
                         @inbounds JJ[xt_inds, β_inds[ee]+β_offset] .+= Jlag[1:6, 7]
@@ -727,7 +727,7 @@ function setup_quick(ego_polys;
                 end
             end
         end
-        @infiltrate
+        #@infiltrate
         nothing
     end
 
@@ -955,27 +955,26 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         row .= J_row
         data .= JJ.nzval
 
-        @info "filling base F"
-        buf = zeros(n)
-        buf2 = zeros(n)
-        F(n, θ, buf)
-        @info "filling perturbed F"
+        #@info "filling base F"
+        #buf = zeros(n)
+        #buf2 = zeros(n)
+        #F(n, θ, buf)
+        #@info "filling perturbed F"
         #Jrows, Jcols, _ = findnz(J_example)
 
-        #Main.@infiltrate
         #Jnum = sparse(Jrows, Jcols, Jbuf)
-        Jnum2 = spzeros(n, n)
+        #Jnum2 = spzeros(n, n)
         #@info "Testing Jacobian accuracy numerically"
-        @showprogress for ni in 1:n
-            wi = copy(θ)
-            wi[ni] += 1e-3
-            F2(n, wi, buf2)
-            Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-3)
-        end
-        @info "Jacobian error is $(norm(Jnum2-JJ))"
-        if norm(Jnum2 - JJ) > 1e-1
-            @infiltrate
-        end
+        #@showprogress for ni in 1:n
+        #    wi = copy(θ)
+        #    wi[ni] += 1e-3
+        #    F2(n, wi, buf2)
+        #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-3)
+        #end
+        #@info "Jacobian error is $(norm(Jnum2-JJ))"
+        #if norm(Jnum2 - JJ) > 1e-1
+        #    @infiltrate
+        #end
 
 
         #if is_displaying
@@ -988,7 +987,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         Cint(0)
     end
 
-    @infiltrate
+    #@infiltrate
     # force compilation
     buf = zeros(n)
     Jbuf = zeros(nnz_total)
@@ -1026,7 +1025,7 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
         restart_limit=0,
         jacobian_data_contiguous=true,
         cumulative_iteration_limit=50_000,
-        convergence_tolerance=5e-4
+        convergence_tolerance=1e-3
         #proximal_perturbation=0,
         #crash_method="pnewton",
         #crash_nbchange_limit=10,
