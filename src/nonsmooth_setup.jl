@@ -33,6 +33,20 @@ end
 #     (A, b, q)
 # end
 
+function if_ass_feasible(ass, m1, m2)
+    if_ego = false
+    if_obs = false
+    for i in ass
+        if i ∈ [i for i in 1:m1]
+            if_ego=true
+        end
+        if i ∈ [i for i in m1+1:m1+m2]
+            if_obs=true
+        end
+    end
+    return if_ego && if_obs
+end
+
 function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     sds = Dict()
     Aex, bex = shift_to(Ae, be, xt)
@@ -47,6 +61,14 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     r = [qq; bb]
     all_active_inds = collect(1:m1+m2)
     Itr = powerset(all_active_inds) |> collect
+    Itr_reduced=[]
+    for ass in Itr
+        if if_ass_feasible(ass, m1, m2)
+            push!(Itr_reduced, ass)
+        end
+    end
+    Itr = copy(Itr_reduced)
+
     for active_inds in Itr
         length(active_inds) > 3 && continue
         assignment = [i ∈ active_inds for i in 1:m1+m2]
