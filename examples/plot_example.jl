@@ -249,6 +249,7 @@ PolyPlanning.plot!(ax, Po; color=:red)
 sds, AA, bb, qq = g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
 I1, I2, I3, primals, duals, cons = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, 4, 20; is_newsd=false)
 
+println("sds≥0 and corresponding assignments")
 for (i, val) in enumerate(sds)
     if val[2][3]≥-1
         println(val[1], " ",val[2][3])
@@ -266,17 +267,18 @@ end
 
 sds_k = collect(keys(sds))
 sds_val = collect(values(sds))
-# feasible_indices = findall(x -> x[3] >= -1, sds_val)
+feasible_indices = findall(x -> x[3] >= -1, sds_val)
 # i = feasible_indices[11]
 # println("ass = ", sds_k[i], "\nsigned distance = ", sds_val[i])
 # plot_shrk(Pex, Po, sds_val[i][3])
 
+println("\nassignment and corresponding sd which satisifies all 8 constraints:")
 tol = 1e-4
 for val in sds_val
     err = AA * val + bb 
     if sum(err .>= -tol) == 8
-        println(val)
-        println(err)
+        println("\nprimal vector = ", val)
+        println("value of constraints = ", err)
     end
 end
 
