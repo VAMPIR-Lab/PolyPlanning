@@ -220,43 +220,6 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     return I1, I2, I3, primals, duals, cons
 end
 
-
-Ve = [[-1, -1], [-1.1, 1.2], [0.6, 0.8], [1.7, -0.5]]
-Pe = PolyPlanning.ConvexPolygon2D(Ve)
-centroide = sum(Pe.V) / length(Pe.V)
-Ae = Pe.A
-be = Pe.b
-
-Vo = [[-1, -1], [-1, 1.0], [1, 1], [1, -1]]
-Po = PolyPlanning.ConvexPolygon2D(Ve)
-centroido = sum(Po.V) / length(Po.V)
-Ao = Po.A
-bo = Po.b
-
-xt=[2, 2, π*0, 0, 0, 0]
-Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
-Pex = PolyPlanning.ConvexPolygon2D(Aex, bex)
-centroidex = sum(Pex.V) / length(Pex.V)
-
-
-fig = PolyPlanning.Figure()
-ax = PolyPlanning.Axis(fig[1,1], aspect=PolyPlanning.DataAspect())
-PolyPlanning.plot!(ax, Pex; color=:blue)
-PolyPlanning.plot!(ax, Po; color=:red)
-
-
-
-sds, AA, bb, qq = g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
-I1, I2, I3, primals, duals, cons = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, 4, 20; is_newsd=false)
-
-println("sds≥0 and corresponding assignments")
-for (i, val) in enumerate(sds)
-    if val[2][3]≥-1
-        println(val[1], " ",val[2][3])
-    end
-end
-
-
 function plot_shrk(Pex, Po, s)
     Pex_shrk = ConvexPolygon2DPointShrunk(Pex; c=0, s=s)
     Po_shrk = ConvexPolygon2DPointShrunk(Po; c=0, s=s)
@@ -265,32 +228,91 @@ function plot_shrk(Pex, Po, s)
     display(GLMakie.Screen(), fig)
 end
 
-sds_k = collect(keys(sds))
-sds_val = collect(values(sds))
-feasible_indices = findall(x -> x[3] >= -1, sds_val)
-# i = feasible_indices[11]
-# println("ass = ", sds_k[i], "\nsigned distance = ", sds_val[i])
-# plot_shrk(Pex, Po, sds_val[i][3])
 
-println("\nassignment and corresponding sd which satisifies all 8 constraints:")
-tol = 1e-4
-for val in sds_val
-    err = AA * val + bb 
-    if sum(err .>= -tol) == 8
-        println("\nprimal vector = ", val)
-        println("value of constraints = ", err)
+function plot_polytope(Ve, Vo, xt)
+    Pe = PolyPlanning.ConvexPolygon2D(Ve)
+    centroide = sum(Pe.V) / length(Pe.V)
+    Ae = Pe.A
+    be = Pe.b
+
+    Po = PolyPlanning.ConvexPolygon2D(Vo)
+    centroido = sum(Po.V) / length(Po.V)
+    Ao = Po.A
+    bo = Po.b
+
+
+    Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
+    Pex = PolyPlanning.ConvexPolygon2D(Aex, bex)
+    centroidex = sum(Pex.V) / length(Pex.V)
+
+
+    fig = PolyPlanning.Figure()
+    ax = PolyPlanning.Axis(fig[1,1], aspect=PolyPlanning.DataAspect())
+    PolyPlanning.plot!(ax, Pex; color=:blue)
+    PolyPlanning.plot!(ax, Po; color=:red)
+
+
+
+    sds, AA, bb, qq = g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
+    I1, I2, I3, primals, duals, cons = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, 4, 20; is_newsd=false)
+
+    # println("sds≥-1 and corresponding assignments")
+    # for (i, val) in enumerate(sds)
+    #     if val[2][3]≥-1
+            # println(val[1], " ",val[2][3])
+    #     end
+    # end
+
+
+        
+
+    sds_k = collect(keys(sds))
+    sds_val = collect(values(sds))
+    feasible_indices = findall(x -> x[3] >= -1, sds_val)
+    # i = feasible_indices[11]
+    # println("ass = ", sds_k[i], "\nsigned distance = ", sds_val[i])
+    # plot_shrk(Pex, Po, sds_val[i][3])
+
+    # println("\nassignment and corresponding sd which satisifies all 8 constraints:")
+    # tol = 1e-4
+    # for val in sds_val
+    #     err = AA * val + bb 
+    #     if sum(err .>= -tol) == 8
+            # println("\nprimal vector = ", val)
+            # println("value of constraints = ", err)
+    #     end
+    # end
+
+
+    hss = map(1:8) do i
+        HalfSpace(-AA[i, :], bb[i])
+    end
+    hr = hrep(hss) # H-representation for polyhedron 
+    poly = Polyhedra.polyhedron(hr)
+    vr = vrep(poly) # V-representation
+
+    return poly, Polyhedra.points(vr)
+end
+
+Ve = [[-1, -1], [-1.1, 1.2], [0.6, 0.8], [1.7, -0.5]]
+# Vo = [[-1, -1], [-1, 1.0], [1, 1], [1, -1]]
+Vo = copy(Ve)
+xt = [2, 2, π*0.0, 0, 0, 0]
+num_vertices = []
+@showprogress for px in -1:0.1:1
+    for py in -1:0.1:1
+        for θ in 0:0.1π:2π
+            n = length(plot_polytope(Ve, Vo, [px, py, θ, 0, 0, 0])[2])
+            push!(num_vertices, n)
+        end
     end
 end
 
+@info mean(num_vertices)
+@info minimum(num_vertices)
+@info maximum(num_vertices)
 
-hss = map(1:8) do i
-    HalfSpace(-AA[i, :], bb[i])
-end
-hr = hrep(hss) # H-representation for polyhedron 
-poly = Polyhedra.polyhedron(hr)
-vr = vrep(poly) # V-representation
-
-
+poly = plot_polytope(Ve, Vo, xt)[1]
 mesh_poly = Polyhedra.Mesh(poly)
 Makie.mesh(mesh_poly, color=:blue)
 Makie.wireframe(mesh_poly)
