@@ -38,13 +38,13 @@ function if_ass_feasible(ass, m1, m2)
     if_obs = false
     for i in ass
         if i ∈ [i for i in 1:m1]
-            if_ego=true
+            if_ego = true
         end
         if i ∈ [i for i in m1+1:m1+m2]
-            if_obs=true
+            if_obs = true
         end
     end
-    return if_ego && if_obs
+    return length(ass) <= 3 && if_ego && if_obs
 end
 
 function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
@@ -61,7 +61,7 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     r = [qq; bb]
     all_active_inds = collect(1:m1+m2)
     Itr = powerset(all_active_inds) |> collect
-    Itr_reduced=[]
+    Itr_reduced = []
     for ass in Itr
         if if_ass_feasible(ass, m1, m2)
             push!(Itr_reduced, ass)
@@ -70,8 +70,11 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     Itr = copy(Itr_reduced)
 
     for active_inds in Itr
-        length(active_inds) > 3 && continue
-        assignment = [i ∈ active_inds for i in 1:m1+m2]
+        if !if_ass_feasible(active_inds, m1, m2)
+            continue
+        end
+        #length(active_inds) > 3 && continue
+        #assignment = [i ∈ active_inds for i in 1:m1+m2]
         try
             AA_active = collect(AA[active_inds, :])
             bb_active = collect(bb[active_inds])
@@ -306,7 +309,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
             hps = map(1:ma+3) do i
                 HyperPlane(-B_eq2[i, :], b_eq[i])
             end
-            
+
             # halfspaces, i.e., inequality constraints in the form of Ax≤b
             hss = map(1:m1+m2-ma) do i
                 HalfSpace(-B_ineq2[i, :], b_ineq[i])

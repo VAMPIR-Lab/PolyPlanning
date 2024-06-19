@@ -273,6 +273,7 @@ sds_val = collect(values(sds))
 
 tol = 1e-4
 for val in sds_val
+    @infiltrate
     err = AA * val + bb 
     if sum(err .>= -tol) == 8
         println(val)
