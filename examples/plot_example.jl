@@ -229,15 +229,6 @@ function plot_shrk(Pex, Po, s)
 end
 
 
-<<<<<<< HEAD
-tol = 1e-4
-for val in sds_val
-    @infiltrate
-    err = AA * val + bb 
-    if sum(err .>= -tol) == 8
-        println(val)
-        println(err)
-=======
 function plot_polytope(Ve, Vo, xt)
     Pe = PolyPlanning.ConvexPolygon2D(Ve)
     centroide = sum(Pe.V) / length(Pe.V)
@@ -314,7 +305,6 @@ num_vertices = []
             n = length(plot_polytope(Ve, Vo, [px, py, θ, 0, 0, 0])[2])
             push!(num_vertices, n)
         end
->>>>>>> refs/remotes/origin/clpnewsd
     end
 end
 
