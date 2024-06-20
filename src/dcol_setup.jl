@@ -34,17 +34,17 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
 end
 
 
-function get_sub2idxs(ns...)
-    counter = 0
+#function get_sub2idxs(ns...)
+#    counter = 0
 
-    map(ns) do n
-        idx = zeros(Int, n...)
-        prod_n = prod(n)
-        idx[:] .= counter .+ collect(1:prod_n)
-        counter += prod_n
-        idx
-    end
-end
+#    map(ns) do n
+#        idx = zeros(Int, n...)
+#        prod_n = prod(n)
+#        idx[:] .= counter .+ collect(1:prod_n)
+#        counter += prod_n
+#        idx
+#    end
+#end
 
 function setup_dcol(ego_polys;
     T=50,

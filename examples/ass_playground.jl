@@ -1,5 +1,13 @@
 using PolyPlanning
 using GLMakie
+using JuMP
+using Clp
+using Combinatorics
+using LinearAlgebra
+using Polyhedra
+
+
+
 
 function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido)
     Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
@@ -38,59 +46,71 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido)
     return primals, duals, cons, I1, I2, I3
 end
 
+function if_ass_feasible(ass, m1, m2)
+    if_ego = false
+    if_obs = false
+    for i in ass
+        if i ∈ [i for i in 1:m1]
+            if_ego = true
+        end
+        if i ∈ [i for i in m1+1:m1+m2]
+            if_obs = true
+        end
+    end
+    return length(ass) <= 3 && if_ego && if_obs
+end
 
-#function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
-#    sds = Dict()
-#    Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
-#    R = [cos(xt[3]) sin(xt[3])
-#        -sin(xt[3]) cos(xt[3])]
-#    centroidex = xt[1:2] + R * centroide
-#    AA, bb, qq = PolyPlanning.gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido; is_newsd=is_newsd)
-#    m1 = length(bex)
-#    m2 = length(bo)
-#    M = [zeros(Num, 3, 3) -AA'
-#        AA zeros(Num, m1 + m2, m1 + m2)]
-#    r = [qq; bb]
-#    all_active_inds = collect(1:m1+m2)
-#    Itr = powerset(all_active_inds) |> collect
-#    Itr_reduced = []
-#    for ass in Itr
-#        if if_ass_feasible(ass, m1, m2)
-#            push!(Itr_reduced, ass)
-#        end
-#    end
-#    Itr = copy(Itr_reduced)
 
-#    for active_inds in Itr
-#        if !if_ass_feasible(active_inds, m1, m2)
-#            continue
-#        end
-#        #length(active_inds) > 3 && continue
-#        #assignment = [i ∈ active_inds for i in 1:m1+m2]
-#        try
-#            AA_active = collect(AA[active_inds, :])
-#            bb_active = collect(bb[active_inds])
-#            # TODO what if not unique primal? Need to resolve
-#            if length(active_inds) == 3
-#                zz = -AA_active \ bb_active
-#                #zz = -(AA_active'*AA_active)\AA_active'*bb_active
-#            else
-#                #if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
-#                #Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
-#                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
-#            end
-#            sd = zz[3]
-#            sds[active_inds] = sd
-#        catch err
-#            if err isa LinearAlgebra.SingularException
-#                continue
-#            else
-#                @warn(err)
-#            end
-#        end
-#    end
-#    sds
-#end
+function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
+    sds = Dict()
+    Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
+    R = [cos(xt[3]) sin(xt[3])
+        -sin(xt[3]) cos(xt[3])]
+    centroidex = xt[1:2] + R * centroide
+    AA, bb, qq = PolyPlanning.gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido; is_newsd=is_newsd)
+    m1 = length(bex)
+    m2 = length(bo)
+
+    all_active_inds = collect(1:m1+m2)
+    Itr = powerset(all_active_inds) |> collect
+    Itr_reduced = []
+    for ass in Itr
+        if if_ass_feasible(ass, m1, m2)
+            push!(Itr_reduced, ass)
+        end
+    end
+    Itr = copy(Itr_reduced)
+
+    for active_inds in Itr
+        if !if_ass_feasible(active_inds, m1, m2)
+            continue
+        end
+        #length(active_inds) > 3 && continue
+        #assignment = [i ∈ active_inds for i in 1:m1+m2]
+        try
+            AA_active = collect(AA[active_inds, :])
+            bb_active = collect(bb[active_inds])
+            # TODO what if not unique primal? Need to resolve
+            if length(active_inds) == 3
+                zz = -AA_active \ bb_active
+                #zz = -(AA_active'*AA_active)\AA_active'*bb_active
+            else
+                #if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
+                #Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
+                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
+            end
+            sd = zz#[3]
+            sds[active_inds] = sd
+        catch err
+            if err isa LinearAlgebra.SingularException
+                continue
+            else
+                @warn(err)
+            end
+        end
+    end
+    sds
+end
 
 
 function ConvexPolygon2DPointShrunk(P; c=0, s=0)
@@ -104,13 +124,16 @@ function ConvexPolygon2DPointShrunk(P; c=0, s=0)
     PolyPlanning.ConvexPolygon2D(A, b)
 end
 
-function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
+function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is_displaying=true)
 
     range_max = 10
     step_size = 0.1
 
+    ax = Axis(fig[1, 1], aspect=DataAspect())
+    ax3 = Axis3(fig[2, 1])
+
     sg = SliderGrid(
-        fig[2, 1],
+        fig[3, 1],
         (label="x", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[1]),
         (label="y", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[2]),
         (label="θ", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[3]),
@@ -170,55 +193,108 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), ax=Axis(f
             scatter!(ax, p_intercept_x, p_intercept_y; color=:green)
 
             # draw sds
-            #sds_etc = @lift(g_col_single($x, Ae, be, centroide, Ao, bo, centroido))
-
-            #AAbb = @lift(PolyPlanning.gen_LP_data($x, $Ae_shifted, $be_shifted, $centroidex, Ao, bo, centroido))
-            #AA = GLMakie.lift(x -> x[1], AAbb)
-            #bb = GLMakie.lift(x -> x[2], AAbb)
-
-            ##@infiltrate
-            #function filter_sds(sds_val, AA, bb)
-            #    tol = 1e-4
-            #    filtered = []
-            #    for val in sds_val
-            #        @infiltrate
-            #        err = AA * val + bb
-            #        if sum(err .>= -tol) == 8
-            #            push!(filtered, val)
-            #        end
-            #    end
-            #    filtered
-            #end
-
-            #sds_k = @lift(collect(keys($sds_etc)))
-            #sds_val = @lift(collect(values($sds_etc)))
             #@infiltrate
-            #@lift(filter_sds($sds_val, $AA, $bb))
+            sds_etc = @lift(g_col_single($x, Ae, be, centroide, Ao, bo, centroido))
+
+            AAbb = @lift(PolyPlanning.gen_LP_data($x, $Ae_shifted, $be_shifted, $centroidex, Ao, bo, centroido))
+            AA = GLMakie.lift(x -> x[1], AAbb)
+            bb = GLMakie.lift(x -> x[2], AAbb)
+
+            function filter_sds(sds_val, AA, bb)
+                tol = 1e-4
+                filtered = []
+                for val in sds_val
+                    if all(AA * val + bb .>= -tol)
+                        push!(filtered, val)
+                    end
+                end
+                filtered
+            end
+
+            sds_k = @lift(collect(keys($sds_etc)))
+            sds_val = @lift(collect(values($sds_etc)))
+
+            filtered = @lift(filter_sds($sds_val, $AA, $bb))
+
+            max_intercepts = 16
+            sigdigits = 2
+            intercept_obs = Dict()
+
+            # draw all intercepts
+            map(1:max_intercepts) do i
+                intercept_obs[i] = Observable([0.0; 0; -Inf])
+                x = GLMakie.lift(x -> x[1], intercept_obs[i])
+                y = GLMakie.lift(x -> x[2], intercept_obs[i])
+                sd = GLMakie.lift(x -> x[3], intercept_obs[i])
+                scatter!(ax, x, y; color=:yellow)
+                text!(ax, x, y; align=(:center, :center), text=@lift("$(round($sd; sigdigits))"), color=:black, fontsize=10)
+            end
+
+            GLMakie.lift(filtered) do filtered
+                for (i, f) in enumerate(filtered)
+                    intercept_obs[i][] = copy(f[1:3])
+                end
+            end
+
+            # print list
+            point_text_obs = GLMakie.lift(filtered) do filtered
+                if isempty(filtered)
+                    return "nothing"
+                end
+                sigdigits = 2
+                mapreduce(*, filtered) do f
+                    "$(round(f[3]; sigdigits)): $(round.(f[1:2]; sigdigits) )\n"
+                end
+            end
+            text!(ax, 0, -3; align=(:center, :top), text=point_text_obs, color=:black, fontsize=10)
+
+            # 3d plot
 
 
-            #point_text_obs = GLMakie.lift(sds_etc) do sds
-            #    "Point: ($sds, $sds, $sds)"
-            #end
+            hss = map(1:8) do i
+                HalfSpace(-AA[][i, :], bb[][i])
+            end
+            hr = hrep(hss) # H-representation for polyhedron 
+            poly = Polyhedra.polyhedron(hr)
+            vr = vrep(poly) # V-representation
+            mesh_poly = Observable(Polyhedra.Mesh(poly))
+            Makie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
+            Makie.wireframe!(ax3, mesh_poly)
 
-            #text!(ax, point_text_obs, position=:lt, align=:left, fontsize=20, color=:black)
+            GLMakie.lift(AA, bb) do AA, bb
+                hss = map(1:8) do i
+                    HalfSpace(-AA[i, :], bb[i])
+                end
+                hr = hrep(hss) # H-representation for polyhedron 
+                poly = Polyhedra.polyhedron(hr)
+                vr = vrep(poly) # V-representation
+                mesh_poly[] = Polyhedra.Mesh(poly)
+            end
 
-            #hss = map(1:8) do i
-            #    HalfSpace(-AA[i, :], bb[i])
-            #end
-            #hr = hrep(hss) # H-representation for polyhedron 
-            #poly = Polyhedra.polyhedron(hr)
-            #vr = vrep(poly) # V-representation
+            # draw all intercepts
+            intercept3_obs = Dict()
 
+            map(1:max_intercepts) do i
+                intercept3_obs[i] = Observable([0.0; 0; -Inf])
+                x = GLMakie.lift(x -> x[1], intercept3_obs[i])
+                y = GLMakie.lift(x -> x[2], intercept3_obs[i])
+                sd = GLMakie.lift(x -> x[3], intercept3_obs[i])
+                scatter!(ax3, x, y, sd; color=:yellow)
+                text!(ax3, x, y, sd; align=(:center, :center), text=@lift("$(round($sd; sigdigits))"), color=:black, fontsize=10)
+            end
 
-            #mesh_poly = Polyhedra.Mesh(poly)
-            #Makie.mesh(mesh_poly, color=:blue)
-            #Makie.wireframe(mesh_poly)
+            GLMakie.lift(filtered) do filtered
+                for (i, f) in enumerate(filtered)
+                    intercept3_obs[i][] = copy(f[1:3])
+                end
+            end
         end
     end
 
     #scatter!(point, color=:red, markersize=20)
 
     limits!(ax, -range_max, range_max, -range_max, range_max)
+    limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, 3.0)
 
     fig
 end
