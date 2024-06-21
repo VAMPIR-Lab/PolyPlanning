@@ -142,13 +142,16 @@ function plot_inflated(xt, Ae, be, centroide, Ao, bo, centroido, p_intercept, sd
     Aeb = shift_to(Ae, be, xt)
     Aex = Aeb[1]
     bex = Aeb[2]
+    R = [cos(xt[3]) sin(xt[3])
+        -sin(xt[3]) cos(xt[3])]
+    centroidex = xt[1:2] + R * centroide
     ego_shifted = ConvexPolygon2D(Aex, bex)
     plot!(ax, ego_shifted; color=:blue)
     obs = ConvexPolygon2D(Ao, bo)
     plot!(ax, obs; color=:red)
 
     # draw inflated
-    be_inflated = bex + sd * (Aex * centroide + bex)
+    be_inflated = bex + sd * (Aex * centroidex + bex)
     bo_inflated = bo + sd * (Ao * centroido + bo)
     ego_inflated = ConvexPolygon2D(Aex, be_inflated)
     obs_inflated = ConvexPolygon2D(Ao, bo_inflated)
@@ -157,7 +160,7 @@ function plot_inflated(xt, Ae, be, centroide, Ao, bo, centroido, p_intercept, sd
     plot!(ax, obs_inflated; color=:pink, linewidth=2)
 
     # draw the intercept and centroids
-    scatter!(ax, centroide[1], centroide[2]; color=:blue)
+    scatter!(ax, centroidex[1], centroidex[2]; color=:blue)
     scatter!(ax, centroido[1], centroido[2]; color=:red)
     scatter!(ax, p_intercept[1], p_intercept[2]; color=:green)
 
@@ -208,12 +211,12 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
 
     status = JuMP.termination_status(model)
     if status != OPTIMAL
+        @infiltrate
         duals = zeros(m1 + m2)
         cons = duals
         xx = JuMP.value.(xx)
         @warn status
-        #Main.@infiltrate
-        #plot_inflated(xt, Ae, be, centroidex, Ao, bo, centroido, xx[1:2], xx[3])
+        #plot_inflated(xt, Ae, be, centroide, Ao, bo, centroido, [0,0], 0)
     else
         primals = JuMP.value.(xx)
         duals = JuMP.dual.(constraint)
@@ -692,6 +695,7 @@ function setup_quick(ego_polys;
                 for (e, P) in enumerate(polys)
                     Ao = collect(P.A)
                     bo = P.b
+                    centroido = sum(P.V) / length(P.V)
                     λ_ind = (i - 1) * T * n_obs + (t - 1) * n_obs + e
                     β_inds = (1:derivs_per_sd) .+ (((i - 1) * T * n_obs * derivs_per_sd) + (t - 1) * n_obs * derivs_per_sd + (e - 1) * derivs_per_sd)
                     @inbounds λte = λ_col[λ_ind]

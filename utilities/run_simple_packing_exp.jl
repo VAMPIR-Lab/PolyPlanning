@@ -5,9 +5,9 @@ using GLMakie
 
 # user options
 is_saving = false
-is_running_sep = true
+is_running_sep = false
 is_running_dcol = false
-is_running_kkt = false
+is_running_kkt = true
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
 exp_file_date = "2024-06-17_1454"
