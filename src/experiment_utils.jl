@@ -1,32 +1,27 @@
-function multi_solve_ours(ego_poly, x0s, maps, param)
+function multi_solve_nonsmooth(ego_polys, x0s, maps, param)
     @argcheck length(x0s) == param.n_x0s
     @argcheck length(maps) == param.n_maps
     for map in maps
         @argcheck length(map) == param.n_obs
     end
 
-    prob = setup_quick(
-        ego_poly;
-        param.T,
-        param.dt,
-        Q=0.0 * PolyPlanning.I(2), # disabled final cost
-        q=[0, 0.0],
-        param.Rf,
-        param.Qf,
-        param.u1_max,
-        param.u2_max,
-        param.u3_max,
-        sides_per_poly=4,
-        derivs_per_sd=4,
-        derivs_per_fv=4,
-        param.n_obs
-    )
-
     sols = Dict()
     p = Progress(param.n_maps * param.n_x0s, dt=1.0)
     for (i, map) in enumerate(maps)
+        nonsmooth_prob = setup_nonsmooth(
+            ego_polys,
+            map;
+            param.T,
+            param.dt,
+            R_cost=param.Rf,
+            Q_cost=param.Qf,
+            param.u1_max,
+            param.u2_max,
+            param.u3_max,
+            n_sd_slots=2
+        )
         for (j, x0) in enumerate(x0s)
-            res = solve_quick(prob, x0, map; is_displaying=false)
+            res = solve_nonsmooth(nonsmooth_prob, x0; is_displaying=false)
             mcp_success = res.status == PATHSolver.MCP_Solved
             time = res.info.total_time
             cost = f(res.z, param.T, param.Rf, param.Qf)
@@ -175,7 +170,7 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
     #n_x0s = length(x0s)
     @info "Computing nonsmooth solutions..."
     start_t = time()
-    our_sols = multi_solve_ours(ego_poly, x0s, maps, param)
+    our_sols = multi_solve_nonsmooth(ego_poly, x0s, maps, param)
     @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
     if is_saving
