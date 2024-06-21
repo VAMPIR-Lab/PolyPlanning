@@ -1,6 +1,6 @@
 using PolyPlanning
 
-x0 = [5.0, 0.0, π / 2 + .2, 0, 0, 0];
+x0 = [5.0, 0.0, π / 2, 0, 0, 0];
 obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0);
 ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
 
@@ -17,7 +17,7 @@ nonsmooth_prob = PolyPlanning.setup_nonsmooth(
     u1_max=10.0,
     u2_max=10.0,
     u3_max=π,
-	n_sd_slots=2
+	n_sd_slots=4
 )
 
-PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.25)
+PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.)

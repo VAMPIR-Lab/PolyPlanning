@@ -251,39 +251,44 @@ function setup_nonsmooth(
         (sorted_sds, sorted_ass)
     end
 
-    function compute_ass_map(sorted_ass, sd_slot_mem, n_slots)
-        k_dict = Dict()
-        k_map = collect(1:n_sd_slots)
+    # compute the most consistent mapping between sd slot memory and current assignments
+    sd_slot_mem = [Vector{Int64}() for _ in 1:n_sd_slots]
+
+    function compute_ass_ind_map(sorted_ass, n_ass)
+        ind_dict = Dict()
+        ind_map = collect(1:n_ass)
 
         # identify which assignments exist in sd_slot_mem
-        for i in 1:n_slots
+        for i in 1:n_ass
             for (k, mem) in enumerate(sd_slot_mem)
                 if sorted_ass[i] == mem
-                    k_dict[i] = k
+                    ind_dict[i] = k
                 end
             end
         end
 
         # place remaining keys arbitrarily
-        for i in 1:n_slots
-            if !haskey(k_dict, i)
+        for i in 1:n_ass
+            if !haskey(ind_dict, i)
                 k = 1
-                while k ∈ values(k_dict)
+                while k ∈ values(ind_dict)
                     k += 1
                 end
-                k_dict[i] = k
+
+                ind_dict[i] = k
             end
         end
 
-        for (k, i) in k_dict
-            k_map[k] = i
+        for (k, i) in ind_dict
+            ind_map[k] = i
         end
-        k_map
+
+        #@infiltrate any(ind_map .!= collect(1:n_ass))
+        ind_map
     end
 
     # fill_F!
     λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
-    sd_slot_mem = [Vector{Int64}() for _ in 1:n_sd_slots]
 
     function fill_F!(F, θ, x0)
         # TODO obs_polys as parameters
@@ -300,15 +305,14 @@ function setup_nonsmooth(
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
 
-                    # if k > length(sorted_sds), should we copy or skip??
-                    n_sd = min(n_sd_slots, length(sorted_sds)) # skipping
-                    k_map = compute_ass_map(sorted_ass, sd_slot_mem, n_sd)
-                    #k_map = collect(1:n_sd_slots)
+                    n_ass = min(length(sorted_ass), n_sd_slots)
+                    k_map = compute_ass_ind_map(sorted_ass, n_ass)
+                    # copy if there are less assignments than there are slots
+                    #if length(ind_map) < n_sd_slots
+                    #    append!(ind_map, [ind_map[end] for _ in 1:(n_sd_slots-length(ind_map))])
+                    #end
 
-                    # check k_map
-                    #@infiltrate any(k_map .!= collect(1:n_sd_slots))
-
-                    for sd_rank in 1:n_sd
+                    for sd_rank in 1:n_ass # needs to be n_sd_slots
                         ass = sorted_ass[sd_rank]
                         k = k_map[sd_rank]
                         sd_ind = sd_cons_s2i[k, j, i, t]
@@ -319,7 +323,7 @@ function setup_nonsmooth(
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
 
-                    sd_slot_mem[1:n_sd] = sorted_ass[1:n_sd]
+                    # don't update sd slot buffer in F
                 end
             end
         end
@@ -360,13 +364,15 @@ function setup_nonsmooth(
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
-                    # if k > length(sorted_sds), should we copy or skip??
 
-                    n_sd = min(n_sd_slots, length(sorted_sds)) # skipping
-                    k_map = compute_ass_map(sorted_ass, sd_slot_mem, n_sd)
-                    #k_map = collect(1:n_sd_slots)
+                    n_ass = min(length(sorted_ass), n_sd_slots)
+                    k_map = compute_ass_ind_map(sorted_ass, n_ass)
+                    # copy if there are less assignments than there are slots
+                    #if length(ind_map) < n_sd_slots
+                    #    append!(ind_map, [ind_map[end] for _ in 1:(n_sd_slots-length(ind_map))])
+                    #end
 
-                    for sd_rank in 1:n_sd
+                    for sd_rank in 1:n_ass
                         ass = sorted_ass[sd_rank]
                         k = k_map[sd_rank]
                         sd_ind = sd_cons_s2i[k, j, i, t]
@@ -384,7 +390,8 @@ function setup_nonsmooth(
                         @inbounds J_vals[sd_ind, xt_ind] += Jsd_buf
                     end
 
-                    sd_slot_mem[1:n_sd] = sorted_ass[1:n_sd]
+                    # update sd slot memory
+                    sd_slot_mem[1:n_ass] = sorted_ass[1:n_ass]
                 end
             end
         end
@@ -544,11 +551,11 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
     end
 
     # force compilation
-    buf = zeros(n)
-    Jbuf = zeros(nnz_total)
-    w = randn(length(θ0))
-    F(n, w, buf)
-    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    #buf = zeros(n)
+    #Jbuf = zeros(nnz_total)
+    #w = randn(length(θ0))
+    #F(n, w, buf)
+    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     # check Jacobian
     #buf2 = zeros(n)
