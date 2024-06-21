@@ -99,8 +99,6 @@ function setup_nonsmooth(
     @assert all([length(obs_polys[i].b) for i in 1:n_obs] .== n_side_obs)
 
     # θ indexing
-    #z_s2i, dyn_cons_s2i, env_cons_s2i, sd_cons_s2i = get_sub2idxs((n_xu, T), (n_dyn_cons), (n_env_cons), (n_sd_cons_per_col, n_ego, n_obs, T))
-    # hacky
     z_s2i, dyn_cons_s2i, env_cons_s2i, sd_cons_s2i = get_sub2idxs((n_xu, T), (n_dyn_cons), (n_env_cons), (n_sd_slots, n_ego, n_obs, T))
 
     z = Symbolics.@variables(z[1:n_z])[1] |> Symbolics.scalarize
@@ -111,14 +109,33 @@ function setup_nonsmooth(
     dyn_cons = g_dyn(z, x0, T, dt)
     env_cons = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
 
-    # indexing consistency
+    # check indexing consistency
     @assert length(z_s2i) == n_z
     @assert length(dyn_cons_s2i) == length(dyn_cons)
     @assert length(env_cons_s2i) == length(env_cons)
     @assert length(sd_cons_s2i) == n_sd_cons
 
-    sdsinterceptsAAbb = map(ego_polys) do Pe
-        map(obs_polys) do Po
+    # sds, intercepts, AAs, bbs, etc to fill F and J
+    @info "Generating symbolic sds, intercepts, AAs, bbs"
+
+    sds_dict = Dict()
+    sds_keys = Dict()
+    get_sds = Dict()
+    get_intercepts = Dict()
+    get_AA = Dict()
+    get_bb = Dict()
+    get_sd_lag = Dict()
+    get_Jsd = Dict()
+    get_Jsdlag = Dict()
+
+
+    # we solve sds symbolically for given ego and obs at problem creation, 
+    # TODO could be done in a more flexible by abstracting problem parameters (obs_polys) and filling them in fill_F, fill_J instead as we did before
+    λsd = Symbolics.@variables(λsd)
+
+    p = Progress(n_sds * n_ego * n_obs, dt=1.0)
+    for (i, Pe) in enumerate(ego_polys)
+        for (j, Po) in enumerate(obs_polys)
             A_ego = collect(Pe.A)
             A_obs = collect(Po.A)
             b_ego = Pe.b
@@ -127,55 +144,55 @@ function setup_nonsmooth(
             V_obs = Po.V
             centr_ego = sum(V_ego) / length(V_ego)
             centr_obs = sum(V_obs) / length(V_obs)
-            g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
-        end
-    end
 
-    #@infiltrate
-    # instead of something smarter:
-    #sd_cons_hack =
-    #    mapreduce(vcat, 1:T) do t
-    #        [
-    #            substitute(sds[1][1][[1, 2, 8]], xt .=> z[z_s2i[1:n_x, t]])
-    #            substitute(sds[1][1][[1, 4, 8]], xt .=> z[z_s2i[1:n_x, t]])
-    #        ]
-    #    end
+            sds, intercepts, AA, bb = g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
 
-    sds_keys = Dict()
-    get_sds = Dict()
-    get_intercepts = Dict()
-    get_AAs = Dict()
-    get_bbs = Dict()
+            sds_dict[i, j] = sds
+            sds_keys[i, j] = collect(keys(sds))
+            sds_vals = collect(values(sds)) |> Symbolics.scalarize
+            intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
 
-    for (i, Pe) in enumerate(ego_polys)
-        for (j, Po) in enumerate(obs_polys)
-            sds_keys[i, j] = collect(keys(sdsinterceptsAAbb[i][j][1]))
-            sds_vals = collect(values(sdsinterceptsAAbb[i][j][1])) |> Symbolics.scalarize
-            intercepts = vcat(collect(values(sdsinterceptsAAbb[i][j][2]))'...)
-
-            AA_vals = collect(values(sdsinterceptsAAbb[i][j][3])) |> Symbolics.scalarize
-            bb_vals = collect(values(sdsinterceptsAAbb[i][j][4])) |> Symbolics.scalarize
             get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
+            get_intercepts[i, j] = Symbolics.build_function(intercepts_vals, xt; expression=Val(false))[2]
+            get_AA[i, j] = Symbolics.build_function(AA, xt; expression=Val(false))[2]
+            get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
 
-            get_intercepts[i, j] = Symbolics.build_function(intercepts, xt; expression=Val(false))[2]
-            get_AAs[i, j] = Symbolics.build_function(AA_vals, xt; expression=Val(false))[2]
-            get_bbs[i, j] = Symbolics.build_function(bb_vals, xt; expression=Val(false))[2]
+            # for each assignment
+            for (ass, sd) in sds
+                sd_lag = Symbolics.gradient(-λsd[1] * sd, xt; simplify=false)
+                J_sd = Symbolics.gradient(sd, xt; simplify=false)
+                J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
+
+                get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
+                get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
+
+                Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
+                if length(Jsdlag_vals) == 0
+                    Jsdlag_rows = [1]
+                    Jsdlag_cols = [1]
+                    Jsdlag_vals = Num[0.0]
+                end
+                get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
+
+                next!(p)
+            end
         end
     end
-
-
+    #@infiltrate
     nom_cons = [dyn_cons; env_cons]
-    λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
-
-
     λ_nom = Symbolics.@variables(λ_nom[1:length(nom_cons)])[1] |> Symbolics.scalarize
     λ_sd = Symbolics.@variables(λ_col[1:n_sd_cons])[1] |> Symbolics.scalarize
 
-    θ = [z; λ_nom; λ_sd]
+    # F = [F_nom; F_sd (to be filled later)]
+    # J = dJ/dθ
+    # we also need sds/dx
 
+    # F and J nominal (before filling)
+    θ = [z; λ_nom; λ_sd]
     lag = cost - nom_cons' * λ_nom
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; nom_cons; zeros(Num, n_sd_cons)]
+    J_nom = Symbolics.sparsejacobian(F_nom, θ)
 
     n = length(F_nom)
     l = zeros(n)
@@ -189,7 +206,7 @@ function setup_nonsmooth(
     l[dyn_cons_s2i[:]] .= -Inf
     u[dyn_cons_s2i[:]] .= Inf
 
-    # environment constraints
+    # environmental constraints
     l[env_cons_s2i[:]] .= 0.0
     u[env_cons_s2i[:]] .= Inf
 
@@ -197,53 +214,70 @@ function setup_nonsmooth(
     l[sd_cons_s2i[:]] .= 0.0
     u[sd_cons_s2i[:]] .= Inf
 
+    # get nominal F and J (later to be filled by fill_F! and fill_J!)
     get_Fnom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false))[2]
 
-    J_nom = Symbolics.sparsejacobian(F_nom, θ)
-    (J_rows_nom, J_cols_nom, J_vals) = findnz(J_nom)
-    J_vals_nom! = Symbolics.build_function(J_vals, z, x0, λ_nom; expression=Val(false))[2]
+    (Jnom_rows, Jnom_cols, Jnom_vals) = findnz(J_nom)
+    get_Jnom_vals! = Symbolics.build_function(Jnom_vals, z, x0, λ_nom; expression=Val(false))[2]
 
+    # sort sds and intercepts for given xt
     sds_buffer = zeros(n_sds)
     intercept_buffer = zeros(n_sds, 2)
     AA_buffer = zeros(n_side_ego + n_side_obs, 3)
     bb_buffer = zeros(n_side_ego + n_side_obs)
+    sd_lag_buf = zeros(n_x)
 
+    function get_sorted_sds(i, j, xt)
+        assignments = sds_keys[i, j]
+        get_sds[i, j](sds_buffer, xt)
+        get_intercepts[i, j](intercept_buffer, xt)
+        get_AA[i, j](AA_buffer, xt)
+        get_bb[i, j](bb_buffer, xt)
+
+        # sd must be greater than -1 to be valid
+        valid_mask = sds_buffer .>= -1.0
+
+        # sd and intercept must correspond to a  feasible vertex to be valid
+        tol = 1e-4
+        zz_check = hcat(intercept_buffer[valid_mask, :], sds_buffer[valid_mask])
+
+        valid_mask[valid_mask] = map(eachrow(zz_check)) do row
+            all(AA_buffer * row + bb_buffer .>= -tol)
+        end
+
+        sorted_sds_inds = sds_buffer[valid_mask] |> sortperm
+        sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
+        sorted_ass = assignments[valid_mask][sorted_sds_inds]
+
+        (sorted_sds, sorted_ass)
+    end
+
+    # fill_F!
+    λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
 
     function fill_F!(F, θ, x0)
+        # TODO obs_polys as parameters
+        F .= 0.0 # clear
         @inbounds z = θ[z_s2i[:]]
         @inbounds λ_nom = θ[λ_nom_s2i[:]]
 
-        F .= 0.0
-
         for t in 1:T
-            @inbounds xt = z[z_s2i[1:n_x, t]]
+            xt_ind = z_s2i[1:n_x, t]
+            @inbounds xt = z[xt_ind]
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    assignments = sds_keys[i, j]
-                    get_sds[i, j](sds_buffer, xt)
-                    get_intercepts[i, j](intercept_buffer, xt)
-                    get_AAs[i, j](AA_buffer, xt)
-                    get_bbs[i, j](bb_buffer, xt)
+                    (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
 
-                    # sd must be greater than -1 to be valid
-                    valid_mask = sds_buffer .>= -1.0
+                    for k in 1:n_sd_slots
+                        # TODO try to keep consistency with sds
+                        sd_ind = sd_cons_s2i[k, j, i, t]
+                        @inbounds λsd = θ[sd_ind]
 
-                    # sd and intercept must correspond to a  feasible vertex to be valid
-                    tol = 1e-4
-                    zz_check = hcat(intercept_buffer[valid_mask, :], sds_buffer[valid_mask])
-
-                    valid_mask[valid_mask] = map(eachrow(zz_check)) do row
-                        all(AA_buffer * row + bb_buffer .>= -tol)
+                        get_sd_lag[i, j, sorted_ass[k]](sd_lag_buf, xt, λsd)
+                        @inbounds F[xt_ind] .+= sd_lag_buf
+                        @inbounds F[sd_ind] += sorted_sds[k]
                     end
-
-                    sorted_sds_inds = sds_buffer[valid_mask] |> sortperm
-                    sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
-                    sorted_ass = assignments[valid_mask][sorted_sds_inds]
-
-                    # TODO use sorted_ass to keep consistency with sds
-                    # naively put them in
-                    F[sd_cons_s2i[:, j, i, t]] = sorted_sds[1:n_sd_slots]
                 end
             end
         end
@@ -252,25 +286,97 @@ function setup_nonsmooth(
         nothing
     end
 
-    function fill_J!(J_vals, z_local, x0_local, λ_nom_local)
-        J_vals .= 0.0
-        J_vals_nom!(J_vals, z_local, x0_local, λ_nom_local)
+    # fill_J!
+    Jnom_buf = zeros(length(Jnom_vals))
+    Jsd_buf = zeros(n_x)
+
+    function fill_J_vals!(J_vals, θ, x0)
+        # TODO obs_polys as parameters
+        J_vals.nzval .= 1e-16 # clear
+        @inbounds z = θ[z_s2i[:]]
+        @inbounds λ_nom = θ[λ_nom_s2i[:]]
+
+        get_Jnom_vals!(Jnom_buf, z, x0, λ_nom)
+        J_vals .+= sparse(Jnom_rows, Jnom_cols, Jnom_buf, n, n)
+
+        for t in 1:T
+            xt_ind = z_s2i[1:n_x, t]
+            @inbounds xt = z[xt_ind]
+
+            for (i, Pe) in enumerate(ego_polys)
+                for (j, Po) in enumerate(obs_polys)
+                    (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
+
+                    for k in 1:n_sd_slots
+                        # TODO try to keep consistency with sds
+                        sd_ind = sd_cons_s2i[k, j, i, t]
+                        @inbounds λsd = θ[sd_ind]
+
+                        get_sd_lag[i, j, sorted_ass[k]](sd_lag_buf, xt, λsd)
+                        get_Jsd[i, j, sorted_ass[k]](Jsd_buf, xt, λsd)
+
+                        Jsdlag_rows, Jsdlag_cols, Jsdlag_vals, Jsdlag_buf = get_Jsdlag[i, j, sorted_ass[k]]
+                        Jsdlag_vals(Jsdlag_buf, xt, λsd)
+                        J_sdlag = sparse(Jsdlag_rows, Jsdlag_cols, Jsdlag_buf, n_x, n_x + 1)
+
+                        @inbounds J_vals[xt_ind, xt_ind] .+= J_sdlag[1:n_x, 1:n_x]
+                        @inbounds J_vals[xt_ind, sd_ind] .+= J_sdlag[1:n_x, n_x+1]
+                        @inbounds J_vals[sd_ind, xt_ind] .+= Jsd_buf
+                    end
+                end
+            end
+        end
         nothing
     end
 
-    return (; fill_F!,
-        J_both=(J_rows_nom, J_cols_nom, fill_J!),
-        l,
-        u,
-        T,
+    J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
+
+    for t in 1:T
+        xt_ind = z_s2i[1:n_x, t]
+        @inbounds xt = z[xt_ind]
+
+        for (i, Pe) in enumerate(ego_polys)
+            for (j, Po) in enumerate(obs_polys)
+                sd_ind = sd_cons_s2i[:, j, i, t]
+                @inbounds J_example[xt_ind, xt_ind] .+= 1.0
+                @inbounds J_example[xt_ind, sd_ind] .+= 1.0
+                @inbounds J_example[sd_ind, xt_ind] .+= 1.0
+            end
+        end
+    end
+
+    # forced compilation and J example
+    # TODO verify this is okay
+    #@info "Forcing compilation by computing J example"
+    #J_example = sparse(Jnom_rows, Jnom_cols, ones(length(Jnom_cols)), n, n)
+    #fill_J_vals!(J_example, rand(length(θ)), rand(length(x0)))
+
+    param = (;
         ego_polys,
         obs_polys,
+        T,
+        dt,
+        R_cost,
+        Q_cost,
         p1_max,
         p2_min,
+        u1_max,
+        u2_max,
+        u3_max,
+        n_sd_slots,
         z_s2i,
         dyn_cons_s2i,
         env_cons_s2i,
         sd_cons_s2i
+    )
+
+    (;
+        fill_F!,
+        fill_J_vals!,
+        J_example,
+        l,
+        u,
+        param
     )
 end
 
@@ -323,37 +429,30 @@ function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(
 end
 
 function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
-    (; fill_F!, J_both, l, u, T, ego_polys, obs_polys, p1_max, p2_min, z_s2i, dyn_cons_s2i, env_cons_s2i, sd_cons_s2i) = prob
+    param = prob.param
 
     n_x = 6
     n_u = 3
     n_xu = n_x + n_u
-    J_rows, J_cols, fill_J! = J_both
-    nnz_total = length(J_rows)
-    n = length(l)
-    #n_obs = length(obs_polys)
-    #n_ego = length(ego_polys)
-    #@assert n == n_z + n_nom "did you forget to update l/u"
+    n = length(prob.l)
 
     if is_displaying
-        (fig, update_fig) = visualize_nonsmooth(x0, T, ego_polys, obs_polys)
+        (fig, update_fig) = visualize_nonsmooth(x0, param.T, param.ego_polys, param.obs_polys)
     end
 
+    # initialize
     if isnothing(θ0)
         θ0 = zeros(n)
-        for t in 1:T
+        for t in 1:param.T
             θ0[(t-1)*n_xu+1:(t-1)*n_xu+n_x] = x0
         end
     end
 
-    J_shape = sparse(J_rows, J_cols, Vector{Cdouble}(undef, nnz_total), n, n)
-    J_col = J_shape.colptr[1:end-1]
-    J_len = diff(J_shape.colptr)
-    J_row = J_shape.rowval
+    # F
+    function F(n, θ, FF)
+        FF .= 0.0
+        prob.fill_F!(FF, θ, x0)
 
-    function F(n, θ, result)
-        result .= 0.0
-        fill_F!(result, θ, x0)
         if is_displaying
             update_fig(θ)
             if sleep_duration > 0
@@ -362,15 +461,23 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
         end
         Cint(0)
     end
+
+    # J
+    J_vals = prob.J_example
+    J_col = J_vals.colptr[1:end-1]
+    J_len = diff(J_vals.colptr)
+    J_row = J_vals.rowval
+    nnz_total = length(J_vals.nzval)
+
     function J(n, nnz, θ, col, len, row, data)
         @assert nnz == nnz_total
         data .= 0.0
-        @inbounds z = θ[z_s2i[:]]
-        @inbounds λ_all = θ[λ_all_s2i[:]]
-        fill_J!(data, z, x0, λ_all)
+
+        prob.fill_J_vals!(J_vals, θ, x0)
         col .= J_col
         len .= J_len
         row .= J_row
+        data .= J_vals.nzval
         Cint(0)
     end
 
@@ -381,12 +488,26 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
+    # check Jacobian
+    buf2 = zeros(n)
+    Jrows, Jcols, _ = findnz(prob.J_example)
+    Jnum = sparse(Jrows, Jcols, Jbuf)
+    Jnum2 = spzeros(n, n)
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+        wi = copy(w)
+        wi[ni] += 1e-5
+        F(n, wi, buf2)
+        Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
         J,
-        l,
-        u,
+        prob.l,
+        prob.u,
         θ0;
         silent=true,
         nnz=nnz_total,
@@ -399,15 +520,14 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
         convergence_tolerance=5e-4
     )
 
-    fres = zeros(n)
-
-    F(n, θ, fres)
+    f_res = zeros(n)
+    F(n, θ, f_res)
 
     if is_displaying
         display(fig)
     end
 
-    @inbounds z = @view(θ[z_s2i[:]])
+    @inbounds z = @view(θ[param.z_s2i[:]])
 
-    (; status, info, θ, z, fres)
+    (; status, info, θ, z, f_res)
 end

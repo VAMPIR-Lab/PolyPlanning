@@ -256,6 +256,7 @@ function plot_polytope(Ve, Vo, xt)
     sds, AA, bb, qq = g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     I1, I2, I3, primals, duals, cons = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, 4, 20; is_newsd=false)
 
+    @infiltrate
     # println("sds≥-1 and corresponding assignments")
     # for (i, val) in enumerate(sds)
     #     if val[2][3]≥-1

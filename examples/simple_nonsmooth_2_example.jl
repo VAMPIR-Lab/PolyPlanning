@@ -10,8 +10,8 @@ R_cost[3, 3] = R_cost[3, 3] / 100.0;
 prob = PolyPlanning.setup_nonsmooth(
     ego_polys,
     obs_polys;
-    T=20,
-    dt=.2,
+    T=2,
+    dt=2.0,
     R_cost,
     Q_cost=2e-3 * PolyPlanning.I(2),
     u1_max=10.0,
