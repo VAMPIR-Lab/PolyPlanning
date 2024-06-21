@@ -181,6 +181,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     m1 = length(bex)
     m2 = length(bo)
 
+    #@infiltrate
     # use OSQP solver
     #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false, max_iter=4e4, eps_abs=1e-5)#, eps_abs=1e-5, eps_rel=1e-5, max_iter=1e6)
 
@@ -347,9 +348,6 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
     #@infiltrate
 
 
-
-
-
     #function does_it_exist(as, v)
     #    for (i, a) in enumerate(as)
     #        if a == v
@@ -395,6 +393,9 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, max_derivs,
         @infiltrate
     end
     v_assignments
+
+    #v_assignments = [[1,2,8],[1,4,8]]
+    #@infiltrate
 
 
     # do we need this??
@@ -496,6 +497,7 @@ function setup_quick(ego_polys;
         centroide = sum(Ve) / length(Ve)
         g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=is_newsd)
     end
+
 
     num_sd_cons = T * n_obs * n_ego
     num_sd_mults = T * n_obs * derivs_per_sd * n_ego
@@ -647,6 +649,7 @@ function setup_quick(ego_polys;
                     @inbounds βte = β_sd[β_inds]
 
                     assignments = get_single_sd_ids(xt, Aes[i], bes[i], centroides[i], Ao, bo, centroido, derivs_per_sd, 0; is_newsd=is_newsd)
+                    #@infiltrate
                     # directly delete indices after 3 may cause some problems
                     #if t == 20
                     #@info "f assignments $assignments"
@@ -996,11 +999,11 @@ function solve_quick(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep
 
     #@infiltrate
     # force compilation
-    buf = zeros(n)
-    Jbuf = zeros(nnz_total)
-    w = randn(length(θ0))
-    F(n, w, buf)
-    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    #buf = zeros(n)
+    #Jbuf = zeros(nnz_total)
+    #w = randn(length(θ0))
+    #F(n, w, buf)
+    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     #buf2 = zeros(n)
     #Jrows, Jcols, _ = findnz(J_example)
