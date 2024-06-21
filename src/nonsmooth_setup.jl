@@ -327,7 +327,9 @@ function setup_nonsmooth(
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
-                    # don't update sd slot buffer in F
+                    
+                    # not updating sd slot memory in F is less robust
+                    sd_slot_mem[1:n_ass] = sorted_ass[1:n_ass]
                 end
             end
         end
@@ -560,11 +562,11 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
     end
 
     # force compilation
-    #buf = zeros(n)
-    #Jbuf = zeros(nnz_total)
-    #w = randn(length(θ0))
-    #F(n, w, buf)
-    #J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
+    buf = zeros(n)
+    Jbuf = zeros(nnz_total)
+    w = randn(length(θ0))
+    F(n, w, buf)
+    J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     # check Jacobian
     #buf2 = zeros(n)
