@@ -307,14 +307,19 @@ function setup_nonsmooth(
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
-                    # copy if there are less assignments than there are slots
-                    #if length(ind_map) < n_sd_slots
-                    #    append!(ind_map, [ind_map[end] for _ in 1:(n_sd_slots-length(ind_map))])
-                    #end
 
-                    for sd_rank in 1:n_ass # needs to be n_sd_slots
+                    for slot_i in 1:n_sd_slots
+                        if slot_i < n_ass
+                            # smart allocation for existing assignments
+                            sd_rank = slot_i
+                            k = k_map[sd_rank]
+                        else
+                            # copy last assignment for others
+                            sd_rank = n_ass
+                            k = slot_i
+                        end
                         ass = sorted_ass[sd_rank]
-                        k = k_map[sd_rank]
+
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
@@ -322,7 +327,6 @@ function setup_nonsmooth(
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
-
                     # don't update sd slot buffer in F
                 end
             end
@@ -367,14 +371,19 @@ function setup_nonsmooth(
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
-                    # copy if there are less assignments than there are slots
-                    #if length(ind_map) < n_sd_slots
-                    #    append!(ind_map, [ind_map[end] for _ in 1:(n_sd_slots-length(ind_map))])
-                    #end
 
-                    for sd_rank in 1:n_ass
+                    for slot_i in 1:n_sd_slots
+                        if slot_i < n_ass
+                            # smart allocation for existing assignments
+                            sd_rank = slot_i
+                            k = k_map[sd_rank]
+                        else
+                            # copy last assignment for others
+                            sd_rank = n_ass
+                            k = slot_i
+                        end
                         ass = sorted_ass[sd_rank]
-                        k = k_map[sd_rank]
+
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
