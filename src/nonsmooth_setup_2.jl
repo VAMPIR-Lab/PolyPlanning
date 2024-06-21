@@ -254,8 +254,39 @@ function setup_nonsmooth(
         (sorted_sds, sorted_ass)
     end
 
+    function compute_ass_map(sorted_ass, sd_slot_mem, n_slots)
+        k_dict = Dict()
+        k_map = collect(1:n_sd_slots)
+
+        # identify which assignments exist in sd_slot_mem
+        for i in 1:n_slots
+            for (k, mem) in enumerate(sd_slot_mem)
+                if sorted_ass[i] == mem
+                    k_dict[i] = k
+                end
+            end
+        end
+
+        # place remaining keys arbitrarily
+        for i in 1:n_slots
+            if !haskey(k_dict, i)
+                k = 1
+                while k ∈ values(k_dict)
+                    k += 1
+                end
+                k_dict[i] = k
+            end
+        end
+
+        for (k, i) in k_dict
+            k_map[k] = i
+        end
+        k_map
+    end
+
     # fill_F!
     λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
+    sd_slot_mem = [Vector{Int64}() for _ in 1:n_sd_slots]
 
     function fill_F!(F, θ, x0)
         # TODO obs_polys as parameters
@@ -272,16 +303,25 @@ function setup_nonsmooth(
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
 
-                    for k in 1:min(n_sd_slots, length(sorted_sds))
-                        # TODO try to keep consistency with sds
-                        # if k > length(sorted_sds), should we copy or skip??
+                    # if k > length(sorted_sds), should we copy or skip??
+                    n_sd = min(n_sd_slots, length(sorted_sds)) # skipping
+                    k_map = compute_ass_map(sorted_ass, sd_slot_mem, n_sd)
+
+                    # check k_map
+                    #@infiltrate any(k_map .!= collect(1:n_sd_slots))
+
+                    for sd_rank in 1:n_sd
+                        ass = sorted_ass[sd_rank]
+                        k = k_map[sd_rank]
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_sd_lag[i, j, sorted_ass[k]](sd_lag_buf, xt, λsd)
+                        get_sd_lag[i, j, ass](sd_lag_buf, xt, λsd)
                         @inbounds F[xt_ind] += sd_lag_buf
-                        @inbounds F[sd_ind] += sorted_sds[k]
+                        @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
+
+                    sd_slot_mem[1:n_sd] = sorted_ass[1:n_sd]
                 end
             end
         end
@@ -322,16 +362,21 @@ function setup_nonsmooth(
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
+                    # if k > length(sorted_sds), should we copy or skip??
 
-                    for k in 1:min(n_sd_slots, length(sorted_sds))
-                        # TODO try to keep consistency with sds
+                    n_sd = min(n_sd_slots, length(sorted_sds)) # skipping
+                    k_map = compute_ass_map(sorted_ass, sd_slot_mem, n_sd)
+
+                    for sd_rank in 1:n_sd
+                        ass = sorted_ass[sd_rank]
+                        k = k_map[sd_rank]
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_sd_lag[i, j, sorted_ass[k]](sd_lag_buf, xt, λsd)
-                        get_Jsd[i, j, sorted_ass[k]](Jsd_buf, xt, λsd)
+                        get_sd_lag[i, j, ass](sd_lag_buf, xt, λsd)
+                        get_Jsd[i, j, ass](Jsd_buf, xt, λsd)
 
-                        Jsdlag_rows, Jsdlag_cols, Jsdlag_vals, Jsdlag_buf = get_Jsdlag[i, j, sorted_ass[k]]
+                        Jsdlag_rows, Jsdlag_cols, Jsdlag_vals, Jsdlag_buf = get_Jsdlag[i, j, ass]
                         Jsdlag_vals(Jsdlag_buf, xt, λsd)
                         J_sdlag = sparse(Jsdlag_rows, Jsdlag_cols, Jsdlag_buf, n_x, n_x + 1)
 
@@ -339,6 +384,8 @@ function setup_nonsmooth(
                         @inbounds J_vals[xt_ind, sd_ind] += J_sdlag[1:n_x, n_x+1]
                         @inbounds J_vals[sd_ind, xt_ind] += Jsd_buf
                     end
+
+                    sd_slot_mem[1:n_sd] = sorted_ass[1:n_sd]
                 end
             end
         end
