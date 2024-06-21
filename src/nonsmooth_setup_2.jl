@@ -163,8 +163,10 @@ function setup_nonsmooth(
                 J_sd = Symbolics.gradient(sd, xt; simplify=false)
                 J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
 
-                get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
+
                 get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
+                get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
+
 
                 Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
                 if length(Jsdlag_vals) == 0
@@ -189,7 +191,7 @@ function setup_nonsmooth(
 
     # F and J nominal (before filling)
     θ = [z; λ_nom; λ_sd]
-    lag = cost - nom_cons' * λ_nom
+    lag = cost - nom_cons' * λ_nom #- λ_sd' * nom_sd (to be filled later)
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; nom_cons; zeros(Num, n_sd_cons)]
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
@@ -235,7 +237,7 @@ function setup_nonsmooth(
         get_bb[i, j](bb_buffer, xt)
 
         # sd must be greater than -1 to be valid
-        valid_mask = sds_buffer .>= -1.0
+        valid_mask = sds_buffer .> -1.0
 
         # sd and intercept must correspond to a  feasible vertex to be valid
         tol = 1e-4
@@ -260,6 +262,7 @@ function setup_nonsmooth(
         F .= 0.0 # clear
         @inbounds z = θ[z_s2i[:]]
         @inbounds λ_nom = θ[λ_nom_s2i[:]]
+        get_Fnom!(F, z, x0, λ_nom)
 
         for t in 1:T
             xt_ind = z_s2i[1:n_x, t]
@@ -269,20 +272,19 @@ function setup_nonsmooth(
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
 
-                    for k in 1:n_sd_slots
+                    for k in 1:min(n_sd_slots, length(sorted_sds))
                         # TODO try to keep consistency with sds
+                        # if k > length(sorted_sds), should we copy or skip??
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
                         get_sd_lag[i, j, sorted_ass[k]](sd_lag_buf, xt, λsd)
-                        @inbounds F[xt_ind] .+= sd_lag_buf
+                        @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[k]
                     end
                 end
             end
         end
-
-        get_Fnom!(F, z, x0, λ_nom)
         nothing
     end
 
@@ -291,6 +293,20 @@ function setup_nonsmooth(
     Jsd_buf = zeros(n_x)
 
     function fill_J_vals!(J_vals, θ, x0)
+        ### check Jacobian numerically
+        #buf = zeros(n)
+        #fill_F!(buf, θ, x0)
+        #buf2 = zeros(n)
+        #Jnum = spzeros(n, n)
+        #for ni in 1:n
+        #    wi = deepcopy(θ)
+        #    wi[ni] += 1e-5
+        #    fill_F!(buf2, wi, x0)
+        #    #@infiltrate ni == 49
+        #    Jnum[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+        #end
+        ####
+
         # TODO obs_polys as parameters
         J_vals.nzval .= 1e-16 # clear
         @inbounds z = θ[z_s2i[:]]
@@ -307,7 +323,7 @@ function setup_nonsmooth(
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
 
-                    for k in 1:n_sd_slots
+                    for k in 1:min(n_sd_slots, length(sorted_sds))
                         # TODO try to keep consistency with sds
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
@@ -319,9 +335,9 @@ function setup_nonsmooth(
                         Jsdlag_vals(Jsdlag_buf, xt, λsd)
                         J_sdlag = sparse(Jsdlag_rows, Jsdlag_cols, Jsdlag_buf, n_x, n_x + 1)
 
-                        @inbounds J_vals[xt_ind, xt_ind] .+= J_sdlag[1:n_x, 1:n_x]
-                        @inbounds J_vals[xt_ind, sd_ind] .+= J_sdlag[1:n_x, n_x+1]
-                        @inbounds J_vals[sd_ind, xt_ind] .+= Jsd_buf
+                        @inbounds J_vals[xt_ind, xt_ind] += J_sdlag[1:n_x, 1:n_x]
+                        @inbounds J_vals[xt_ind, sd_ind] += J_sdlag[1:n_x, n_x+1]
+                        @inbounds J_vals[sd_ind, xt_ind] += Jsd_buf
                     end
                 end
             end
@@ -489,18 +505,19 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     # check Jacobian
-    buf2 = zeros(n)
-    Jrows, Jcols, _ = findnz(prob.J_example)
-    Jnum = sparse(Jrows, Jcols, Jbuf)
-    Jnum2 = spzeros(n, n)
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-        wi = copy(w)
-        wi[ni] += 1e-5
-        F(n, wi, buf2)
-        Jnum2[:,ni] = sparse((buf2-buf) ./ 1e-5)
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    #buf2 = zeros(n)
+    #Jrows, Jcols, _ = findnz(prob.J_example)
+    #Jnum = sparse(Jrows, Jcols, Jbuf)
+    #Jnum2 = spzeros(n, n)
+    #@info "Testing Jacobian accuracy numerically"
+    #@showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-5
+    #    F(n, wi, buf2)
+    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+    #end
+    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
+    #@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
