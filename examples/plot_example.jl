@@ -256,7 +256,6 @@ function plot_polytope(Ve, Vo, xt)
     sds, AA, bb, qq = g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     I1, I2, I3, primals, duals, cons = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, 4, 20; is_newsd=false)
 
-    @infiltrate
     # println("sds≥-1 and corresponding assignments")
     # for (i, val) in enumerate(sds)
     #     if val[2][3]≥-1
@@ -299,21 +298,38 @@ Ve = [[-1, -1], [-1.1, 1.2], [0.6, 0.8], [1.7, -0.5]]
 # Vo = [[-1, -1], [-1, 1.0], [1, 1], [1, -1]]
 Vo = copy(Ve)
 xt = [2, 2, π*0.0, 0, 0, 0]
-num_vertices = []
-@showprogress for px in -1:0.1:1
-    for py in -1:0.1:1
-        for θ in 0:0.1π:2π
-            n = length(plot_polytope(Ve, Vo, [px, py, θ, 0, 0, 0])[2])
-            push!(num_vertices, n)
-        end
-    end
-end
+# num_vertices = []
+# @showprogress for px in -1:0.1:1
+#     for py in -1:0.1:1
+#         for θ in 0:0.1π:2π
+#             n = length(plot_polytope(Ve, Vo, [px, py, θ, 0, 0, 0])[2])
+#             push!(num_vertices, n)
+#         end
+#     end
+# end
 
-@info mean(num_vertices)
-@info minimum(num_vertices)
-@info maximum(num_vertices)
+# @info mean(num_vertices)
+# @info minimum(num_vertices)
+# @info maximum(num_vertices)
 
-poly = plot_polytope(Ve, Vo, xt)[1]
-mesh_poly = Polyhedra.Mesh(poly)
-Makie.mesh(mesh_poly, color=:blue)
-Makie.wireframe(mesh_poly)
+
+fig = Figure()
+polytope = plot_polytope(Ve, Vo, xt)[1]
+mesh_poly = Polyhedra.Mesh(polytope)
+# Makie.mesh(mesh_poly, color=:blue)
+# # Makie.wireframe(mesh_poly)
+
+# fig=Figure()
+# # ax = Axis(fig[1, 1], aspect=DataAspect())
+# ax3 = Axis3(fig[1, 1])
+
+# # Makie.wireframe!(ax, mesh_poly)
+# Makie.wireframe!(ax3, mesh_poly)
+# fig
+
+
+ax3 = LScene(fig[2,1], scenekw = (camera = cam3d!, show_axis = true))
+GLMakie.wireframe!(ax3.scene, mesh_poly)
+fig
+# zoom!(ax.scene, cameracontrols(ax.scene), 3)
+# update_cam!(ax.scene, cameracontrols(ax.scene))

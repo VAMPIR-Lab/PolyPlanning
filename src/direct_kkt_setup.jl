@@ -26,13 +26,11 @@ function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
                 Ao = Matrix(Po.A)
                 bo = Po.b
                 centroido = sum(Po.V) / length(Po.V)
-
                 # min x' q, s.t. A x >= b
                 R = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 centroidex = xt[1:2] + R * centroide
                 AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido)
-                #AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
 
                 push!(cons_kkt, λt' * (AA * xxt + bb)) # = 0 (1)
                 push!(l_kkt, -Inf)
@@ -205,7 +203,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_
     n = length(l)
 
     @assert n == n_z + n_nom "did you forget to update l/u"
-
     if is_displaying
         (fig, update_fig) = visualize_direct_kkt(x0, T, ego_polys, obs_polys)
     end
@@ -227,7 +224,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_
     J_col = J_shape.colptr[1:end-1]
     J_len = diff(J_shape.colptr)
     J_row = J_shape.rowval
-
     function F(n, θ, result)
         result .= 0.0
         @inbounds z = θ[1:n_z]
@@ -266,7 +262,6 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_
     w = randn(length(θ0))
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
@@ -274,27 +269,24 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_
         l,
         u,
         θ0;
-        silent=true,
+        silent=false,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",
-        preprocess=1,
+        preprocess=0,
         output_warnings="no",
         jacobian_data_contiguous=true,
         cumulative_iteration_limit=100_000,
         #convergence_tolerance=1e-8
         convergence_tolerance=5e-4
     )
-
     fres = zeros(n)
     F(n, θ, fres)
-
     if is_displaying
         display(fig)
     end
 
     @inbounds z = @view(θ[1:n_z])
     #@inbounds λ_nom = @view(θ[n_z+1:n_z+n_nom])
-
     (; status, info, θ, z, fres)
 end
