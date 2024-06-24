@@ -130,16 +130,16 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     range_max = 10
     step_size = 0.1
 
-    ax = Axis(fig[1, 1], aspect=DataAspect())
-    ax3 = Axis3(fig[2, 1])
-
+    ax = Axis(fig[1:3, 1], aspect=DataAspect())
+    # ax3 = Axis3(fig[2, 1])
+    ax3 = LScene(fig[1:3,2], scenekw = (camera = cam3d!, show_axis = true))
     sg = SliderGrid(
-        fig[3, 1],
+        fig[4, 1:2],
         (label="x", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[1]),
         (label="y", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[2]),
         (label="θ", range=-range_max:step_size/10:range_max, format="{:.2f}", startvalue=x0[3]),
         (label="sd", range=-1.0:step_size:100.0, format="{:.1f}", startvalue=0),
-        (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=2.0)
+        # (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=2.0)
     )
 
     for Pe in ego_polys
@@ -274,28 +274,28 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             poly = @lift(Polyhedra.polyhedron($hr))
             mesh_poly = @lift(Polyhedra.Mesh($poly))
             # GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
-            GLMakie.wireframe!(ax3, mesh_poly)
+            GLMakie.wireframe!(ax3.scene, mesh_poly)
 
             # # plot 3d ego and obs
-            # hss_ego = GLMakie.lift(AA, bb) do AA, bb
-            #     map(1:length(be)) do i
-            #         HalfSpace(-AA[i, :], bb[i])
-            #     end
-            # end
-            # hr_ego = @lift(hrep($hss_ego)) # H-representation for polyhedron 
-            # poly_ego = @lift(Polyhedra.polyhedron($hr_ego))
-            # mesh_poly_ego = @lift(Polyhedra.Mesh($poly_ego))
-            # GLMakie.wireframe!(ax3, mesh_poly_ego)
+            hss_ego = GLMakie.lift(AA, bb) do AA, bb
+                map(1:length(be)) do i
+                    HalfSpace(-AA[i, :], bb[i])
+                end
+            end
+            hr_ego = @lift(hrep($hss_ego)) # H-representation for polyhedron 
+            poly_ego = @lift(Polyhedra.polyhedron($hr_ego))
+            mesh_poly_ego = @lift(Polyhedra.Mesh($poly_ego))
+            GLMakie.wireframe!(ax3.scene, mesh_poly_ego)
 
-            # hss_obs = GLMakie.lift(AA, bb) do AA, bb
-            #     map(length(be)+1:length(bb)) do i
-            #         HalfSpace(-AA[i, :], bb[i])
-            #     end
-            # end
-            # hr_obs = @lift(hrep($hss_obs)) # H-representation for polyhedron 
-            # poly_obs = @lift(Polyhedra.polyhedron($hr_obs))
-            # mesh_poly_obs = @lift(Polyhedra.Mesh($poly_obs))
-            # GLMakie.wireframe!(ax3, mesh_poly_obs)
+            hss_obs = GLMakie.lift(AA, bb) do AA, bb
+                map(length(be)+1:length(bb)) do i
+                    HalfSpace(-AA[i, :], bb[i])
+                end
+            end
+            hr_obs = @lift(hrep($hss_obs)) # H-representation for polyhedron 
+            poly_obs = @lift(Polyhedra.polyhedron($hr_obs))
+            mesh_poly_obs = @lift(Polyhedra.Mesh($poly_obs))
+            GLMakie.wireframe!(ax3.scene, mesh_poly_obs)
 
             # draw all intercepts on 3d
             intercept3_obs = Dict()
@@ -319,9 +319,9 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
 
     #scatter!(point, color=:red, markersize=20)
 
-    z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
+    # z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
     limits!(ax, -range_max, range_max, -range_max, range_max)
-    @lift(limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, $z_lim))
+    # @lift(limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, $z_lim))
 
     fig
 end
