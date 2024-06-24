@@ -18,7 +18,7 @@ function multi_solve_nonsmooth(ego_polys, x0s, maps, param)
             param.u1_max,
             param.u2_max,
             param.u3_max,
-            n_sd_slots=2
+            n_sd_slots=4
         )
         for (j, x0) in enumerate(x0s)
             res = solve_nonsmooth(nonsmooth_prob, x0; is_displaying=false)
@@ -237,13 +237,6 @@ function process_into_bins(sols; global_success_radius=0.5)
             push!(success.idx, i)
             push!(success.time, sol.time)
             push!(success.cost, sol.cost)
-
-            # for now, assume global success depends on local success
-            #if sol.final_pos'sol.final_pos <= global_success_radius^2
-            #    push!(global_success.idx, i)
-            #    push!(global_success.time, sol.time)
-            #    push!(global_success.cost, sol.cost)
-            #end
         else
             push!(fail.idx, i)
             push!(fail.time, sol.time)
@@ -336,18 +329,6 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     println("time   $(round.(time_stats.mean; sigdigits))    $(round.(ref_time_stats.mean; sigdigits))  ")
     println("cost   $(round.(cost_stats.mean; sigdigits))    $(round.(ref_cost_stats.mean; sigdigits))  ")
 end
-#function print_table(bin, n_maps, n_x0s; title="our")
-#our_success_ratio = length(bin.successes.idx) / (n_maps * n_x0s)
-#    #our_global_success_ratio = length(bin.global_success.idx) / (n_maps * n_x0s)
-#    our_fail_ratio = length(bin.fails.idx) / (n_maps * n_x0s)
-
-#    println("             local       fails")
-#    println("$title ratio    $(round(our_success_ratio*100; sigdigits))%      $(round(our_fail_ratio*100; sigdigits))%")
-#    println("          (mean, CI)  (mean, CI)")
-#    println("$title time $(round.(get_mean_CI(bin.successes.time); sigdigits)) $(round.(get_mean_CI(bin.fails.time); sigdigits))")
-#    println("$title cost $(round.(get_mean_CI(bin.successes.cost); sigdigits)) $(round.(get_mean_CI(bin.fails.cost); sigdigits))")
-#end
-
 
 function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth", sigdigits=2)
 
@@ -440,31 +421,27 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
                         ax.title = "$type\nmaps[$(map_idx)], x0s[$(x0_idx)] = $(round.(x0[1:3];sigdigits)), $(sol.mcp_success ? "success" : "FAIL")\ntime = $(round(sol.time; sigdigits)) s, cost = $(round(sol.cost; sigdigits)), pT = $(round.(sol.final_pos; sigdigits)) "
 
                         if type == "nonsmooth"
-                            if sol.mcp_success
-                                (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                            else
-                                (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_nonsmooth(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+
+                            if !sol.mcp_success
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         elseif type == "sep_planes"
-                            if sol.mcp_success
-                                (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                            else
-                                (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+
+                            if !sol.mcp_success
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         elseif type == "dcol"
-                            if sol.mcp_success
-                                (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                            else
-                                (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_dcol(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+
+                            if !sol.mcp_success
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         elseif type == "direct_kkt"
-                            if sol.mcp_success
-                                (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
-                            else
-                                (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_direct_kkt(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+
+                            if !sol.mcp_success
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         end

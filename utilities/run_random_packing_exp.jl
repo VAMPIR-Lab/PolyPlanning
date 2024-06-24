@@ -3,20 +3,20 @@ using JLD2
 using Dates
 
 # user options
-is_saving = false
+is_saving = true
 is_running_sep = false
-is_running_kkt = true
+is_running_kkt = false
 is_running_dcol = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
-exp_file_date = "2024-06-20_1801"
+exp_file_date = "2024-06-24_1507"
 res_file_date = "2024-06-20_1801"
 exp_name = "random_packing"
 data_dir = "data"
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 10
-n_x0s = 30
+n_maps = 3
+n_x0s = 10
 n_sides = 4
 n_obs = 4
 n_xu = 9
@@ -24,7 +24,7 @@ T = 20
 dt = 0.2
 Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 5e-3 * PolyPlanning.I(2)
+Qf = 2e-3 * PolyPlanning.I(2)
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π

@@ -5,12 +5,12 @@ using Statistics
 
 # user options
 is_saving = true
-is_running_sep = true
-is_running_dcol = true
-is_running_kkt = true
-is_loading_exp = false # skip experiment generation and load from file
+is_running_sep = false
+is_running_dcol = false
+is_running_kkt = false
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
-exp_file_date = "2024-06-03_0140"
+exp_file_date = "2024-06-24_1608"
 res_file_date = "2024-06-03_0140"
 exp_name = "piano"
 data_dir = "data"
@@ -18,7 +18,7 @@ date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 3
-n_x0s = 100
+n_x0s = 10
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -26,22 +26,22 @@ T = 20
 dt = 0.2
 Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 5e-3 * PolyPlanning.I(2)
+Qf = 2e-3 * PolyPlanning.I(2)
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
 ego_width = 0.5
 ego_length = 2.0
-corridor_w_min = sqrt((ego_length / 2)^2 + ego_width^2)
+corridor_w_min = sqrt((ego_length / 2)^2 + ego_width^2) + 0.2
 corridor_w_max = ego_length
 corridor_w_array = [corridor_w_min, (corridor_w_min + corridor_w_max) / 2, corridor_w_max]
 pre_L_length_base = 5.0
 post_L_length = 3.0
-init_x_min = pre_L_length_base + ego_length / 2 + 0.1
-init_y_mean = -post_L_length - corridor_w_min / 2
-init_x_disturb_max = corridor_w_min / 2
-init_y_disturb_max = corridor_w_min / 2
-init_θ_disturb_max = π / 4
+init_x_min = pre_L_length_base - ego_length
+init_y_mean = -post_L_length - (corridor_w_min + corridor_w_max) / 2 / 2
+init_x_disturb_max = corridor_w_min / 2 
+init_y_disturb_max = corridor_w_min / 2 - ego_width
+init_θ_disturb_max = 0
 
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)

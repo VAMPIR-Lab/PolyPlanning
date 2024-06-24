@@ -33,19 +33,6 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     c' * y - λsd' * (AA * y + bb)
 end
 
-
-#function get_sub2idxs(ns...)
-#    counter = 0
-
-#    map(ns) do n
-#        idx = zeros(Int, n...)
-#        prod_n = prod(n)
-#        idx[:] .= counter .+ collect(1:prod_n)
-#        counter += prod_n
-#        idx
-#    end
-#end
-
 function setup_dcol(ego_polys;
     T=50,
     dt=0.2,
@@ -166,15 +153,42 @@ function setup_dcol(ego_polys;
         AA = [Ae*Q' be; Ao bo+Ao*xto]
         bb = [-Ae * Q' * x; -Ao * xto]
 
-        ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false) #, max_iter=100000)
+        #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false) #, max_iter=100000)
+        #p = ret.x[1:2]
+        #sd = ret.x[3]
+        #λsd = -ret.y
 
+        # use JuMP and Clp solver
+        model = JuMP.Model(Clp.Optimizer)
+        JuMP.set_attribute(model, "LogLevel", 0) # disable printing log
+        JuMP.@variable(model, xx[1:3])
+        JuMP.@constraint(model, constraint, AA * xx + bb .>= 0)
+        JuMP.@objective(model, Min, qq' * xx)
+        JuMP.optimize!(model)
+
+        status = JuMP.termination_status(model)
+        if status != OPTIMAL
+            @infiltrate
+            duals = zeros(m1 + m2)
+            cons = duals
+            xx = JuMP.value.(xx)
+            @warn status
+            #plot_inflated(xt, Ae, be, centroide, Ao, bo, centroido, [0,0], 0)
+        else
+            primals = JuMP.value.(xx)
+            duals = JuMP.dual.(constraint)
+            cons = AA * primals + bb
+        end
+        p = primals[1:2]
+        sd = primals[3]
+        λsd = duals
+
+        #@infiltrate
         #if ret.info.status_val != 1
         #    @warn "OSQP failed $(ret.info.status)"
         #    #Main.@infiltrate
         #end
-        p = ret.x[1:2]
-        sd = ret.x[3]
-        λsd = -ret.y
+
 
         (p, sd, λsd)
     end
