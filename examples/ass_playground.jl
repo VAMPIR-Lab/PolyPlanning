@@ -273,8 +273,29 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             hr = @lift(hrep($hss)) # H-representation for polyhedron 
             poly = @lift(Polyhedra.polyhedron($hr))
             mesh_poly = @lift(Polyhedra.Mesh($poly))
-            GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
+            # GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
             GLMakie.wireframe!(ax3, mesh_poly)
+
+            # # plot 3d ego and obs
+            # hss_ego = GLMakie.lift(AA, bb) do AA, bb
+            #     map(1:length(be)) do i
+            #         HalfSpace(-AA[i, :], bb[i])
+            #     end
+            # end
+            # hr_ego = @lift(hrep($hss_ego)) # H-representation for polyhedron 
+            # poly_ego = @lift(Polyhedra.polyhedron($hr_ego))
+            # mesh_poly_ego = @lift(Polyhedra.Mesh($poly_ego))
+            # GLMakie.wireframe!(ax3, mesh_poly_ego)
+
+            # hss_obs = GLMakie.lift(AA, bb) do AA, bb
+            #     map(length(be)+1:length(bb)) do i
+            #         HalfSpace(-AA[i, :], bb[i])
+            #     end
+            # end
+            # hr_obs = @lift(hrep($hss_obs)) # H-representation for polyhedron 
+            # poly_obs = @lift(Polyhedra.polyhedron($hr_obs))
+            # mesh_poly_obs = @lift(Polyhedra.Mesh($poly_obs))
+            # GLMakie.wireframe!(ax3, mesh_poly_obs)
 
             # draw all intercepts on 3d
             intercept3_obs = Dict()
