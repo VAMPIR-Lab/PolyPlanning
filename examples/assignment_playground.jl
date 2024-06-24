@@ -130,11 +130,11 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     range_max = 10
     step_size = 0.1
 
-    ax = Axis(fig[1:3, 1], aspect=DataAspect())
+    ax = Axis(fig[1, 2], aspect=DataAspect())
     # ax3 = Axis3(fig[2, 1])
-    ax3 = LScene(fig[1:3,2], scenekw = (camera = cam3d!, show_axis = true))
+    ax3 = LScene(fig[1, 1], scenekw = (camera = cam3d!, show_axis = true))
     sg = SliderGrid(
-        fig[4, 1:2],
+        fig[2, 1:2],
         (label="x", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[1]),
         (label="y", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[2]),
         (label="θ", range=-range_max:step_size/10:range_max, format="{:.2f}", startvalue=x0[3]),
