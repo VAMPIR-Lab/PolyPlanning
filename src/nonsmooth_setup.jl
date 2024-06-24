@@ -236,7 +236,7 @@ function setup_nonsmooth(
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .> -1.0
 
-        # sd and intercept must correspond to a  feasible vertex to be valid
+        # sd and intercept must correspond to a feasible vertex to be valid
         tol = 1e-4
         zz_check = hcat(intercept_buffer[valid_mask, :], sds_buffer[valid_mask])
 
@@ -259,31 +259,32 @@ function setup_nonsmooth(
         ind_map = collect(1:n_ass)
 
         # identify which assignments exist in sd_slot_mem
-        for i in 1:n_ass
-            for (k, mem) in enumerate(sd_slot_mem)
-                if sorted_ass[i] == mem
-                    ind_dict[i] = k
-                end
-            end
-        end
+        #for i in 1:n_ass
+        #    for (k, mem) in enumerate(sd_slot_mem)
+        #        if sorted_ass[i] == mem
+        #            ind_dict[i] = k
+        #        end
+        #    end
+        #end
 
-        # place remaining keys arbitrarily
-        for i in 1:n_ass
-            if !haskey(ind_dict, i)
-                k = 1
-                while k ∈ values(ind_dict)
-                    k += 1
-                end
+        ## place remaining keys arbitrarily
+        #for i in 1:n_ass
+        #    if !haskey(ind_dict, i)
+        #        k = 1
+        #        while k ∈ values(ind_dict)
+        #            k += 1
+        #        end
 
-                ind_dict[i] = k
-            end
-        end
+        #        ind_dict[i] = k
+        #    end
+        #end
 
-        for (k, i) in ind_dict
-            ind_map[k] = i
-        end
+        #for (k, i) in ind_dict
+        #    ind_map[k] = i
+        #end
 
         #@infiltrate any(ind_map .!= collect(1:n_ass))
+        ind_map = collect(1:n_ass) # smart indexing disabled
         ind_map
     end
 
@@ -308,6 +309,7 @@ function setup_nonsmooth(
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
 
+
                     for slot_i in 1:n_sd_slots
                         if slot_i < n_ass
                             # smart allocation for existing assignments
@@ -327,9 +329,9 @@ function setup_nonsmooth(
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
-                    
+
                     # not updating sd slot memory in F is less robust
-                    sd_slot_mem[1:n_ass] = sorted_ass[1:n_ass]
+                    #sd_slot_mem[1:n_ass] = sorted_ass[1:n_ass]
                 end
             end
         end

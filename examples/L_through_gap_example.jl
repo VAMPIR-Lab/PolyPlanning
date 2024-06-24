@@ -19,4 +19,4 @@ nonsmooth_prob = PolyPlanning.setup_nonsmooth(
     n_sd_slots=2
 );
 
-our_sol = PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true)
+our_sol = PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.01)
