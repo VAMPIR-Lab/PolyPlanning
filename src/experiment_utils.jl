@@ -126,7 +126,7 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
             param.u2_max,
             param.u3_max
         )
-        @info i
+        #@info i
 
         for (j, x0) in enumerate(x0s)
             res = solve_prob_direct_kkt(prob, x0; is_displaying=false)
