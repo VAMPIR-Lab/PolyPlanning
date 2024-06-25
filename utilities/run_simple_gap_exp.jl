@@ -7,7 +7,7 @@ using GLMakie
 is_saving = true
 is_running_sep = true
 is_running_dcol = true
-is_running_kkt = true
+is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
 exp_file_date = "2024-05-30_2351"
@@ -36,7 +36,7 @@ init_x_disturb_max = 1.0
 init_y_disturb_max = 1.0
 ego_width = 0.5
 ego_length = 2.0
-gap_min = ego_width + 0.1
+gap_min = ego_width + 0.2
 gap_max = ego_width * 2
 gap_array = [gap_min, (gap_min + gap_max) / 2, gap_max]
 gap_offset = 2.5

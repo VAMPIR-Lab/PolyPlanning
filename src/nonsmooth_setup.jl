@@ -284,7 +284,7 @@ function setup_nonsmooth(
         #end
 
         #@infiltrate any(ind_map .!= collect(1:n_ass))
-        ind_map = collect(1:n_ass) # smart indexing disabled
+        #ind_map = collect(1:n_ass) # smart indexing disabled
         ind_map
     end
 
@@ -308,7 +308,11 @@ function setup_nonsmooth(
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
-
+                    if (n_ass == 0)
+                        continue
+                        @warn("No assignments t=$t i=$i j=$j")
+                        #@infiltrate
+                    end
 
                     for slot_i in 1:n_sd_slots
                         if slot_i < n_ass
@@ -320,6 +324,7 @@ function setup_nonsmooth(
                             sd_rank = n_ass
                             k = slot_i
                         end
+
                         ass = sorted_ass[sd_rank]
 
                         sd_ind = sd_cons_s2i[k, j, i, t]
@@ -375,6 +380,12 @@ function setup_nonsmooth(
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
+
+                    if (n_ass == 0)
+                        continue
+                        @warn("No assignments t=$t i=$i j=$j")
+                        #@infiltrate
+                    end
 
                     for slot_i in 1:n_sd_slots
                         if slot_i < n_ass
