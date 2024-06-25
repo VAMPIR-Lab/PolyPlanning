@@ -18,7 +18,7 @@ function multi_solve_nonsmooth(ego_polys, x0s, maps, param)
             param.u1_max,
             param.u2_max,
             param.u3_max,
-            n_sd_slots=4
+            param.n_sd_slots
         )
         for (j, x0) in enumerate(x0s)
             res = solve_nonsmooth(nonsmooth_prob, x0; is_displaying=false)

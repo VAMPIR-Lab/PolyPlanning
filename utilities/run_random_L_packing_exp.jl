@@ -25,10 +25,11 @@ T = 20
 dt = 0.2
 Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 2e-3 * PolyPlanning.I(2)
+Qf = 1e-2 * PolyPlanning.I(2)
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
+n_sd_slots=4
 init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
@@ -54,6 +55,7 @@ else # generate ego_poly, x0s and maps
         u1_max,
         u2_max,
         u3_max,
+        n_sd_slots,
         init_x_mean,
         init_y_mean,
         init_x_disturb_max,

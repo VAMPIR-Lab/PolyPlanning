@@ -1,8 +1,11 @@
 using PolyPlanning
 
-x0 = [5.0, 0.0, π / 2 + .1, 0, 0, 0];
-obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0);
+#x0 = [5.0, 0.0, π / 2 + .1, 0, 0, 0];
+#obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0);
+x0 = x0s[1] # fail
+obs_polys = maps[1]
 ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+
 
 R_cost = 1e-3 * PolyPlanning.I(3);
 R_cost[3, 3] = R_cost[3, 3] / 100.0;
@@ -13,11 +16,11 @@ nonsmooth_prob = PolyPlanning.setup_nonsmooth(
     T=20,
     dt=.2,
     R_cost,
-    Q_cost=2e-3 * PolyPlanning.I(2),
+    Q_cost=1e-2 * PolyPlanning.I(2),
     u1_max=10.0,
     u2_max=10.0,
     u3_max=π,
 	n_sd_slots=4
 )
 
-PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.25)
+PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.01)
