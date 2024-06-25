@@ -23,17 +23,17 @@ n_sides = 4 #
 n_obs = 1
 n_xu = 9 # 6-state variable + control variable
 T = 20 # timestep
-dt = .2 #
+dt = 0.2 #
 Rf = 1e-3 * PolyPlanning.I(3) # penalty for control variable
 Rf[3, 3] = Rf[3, 3] / 100.0
-Qf = 4e-3 * PolyPlanning.I(2) # penalty for translation
+Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
 u1_max = 10.0
 u2_max = 10.0
 u3_max = π
-n_sd_slots=4
+n_sd_slots = 4
 init_x_mean = 2.0
 init_y_mean = 0.0
-init_x_disturb_max = .5
+init_x_disturb_max = 0.5
 init_y_disturb_max = 1.0
 ego_width = 0.5
 ego_length = 2.0
@@ -42,7 +42,7 @@ if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
     @assert n_maps == 1
-    @assert init_x_mean - init_x_disturb_max - ego_length / 2 >= .5
+    @assert init_x_mean - init_x_disturb_max - ego_length / 2 >= 0.5
 
     param = (;
         n_maps,
