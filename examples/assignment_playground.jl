@@ -262,7 +262,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             perm = @lift(sortperm($filtered_ran[1], by = x -> x[3]))
             filtered = @lift([($filtered_ran[1])[$perm], ($filtered_ran[2])[$perm]])
             
-            max_intercepts = 12
+            max_intercepts = 32
             sigdigits = 2
             intercept_obs = Dict()
 
@@ -376,16 +376,16 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     fig
 end
 
-#Ve = [[-1, -1], [-1.1, 1.2], [0.6, 0.8], [1.7, -0.5]]
-#obs_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+Ve = [[.25, -1], [.25, 1], [-.25, 1], [-.25, -1]]
+ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
 
-#Vo = [[-1, -1], [-1, 1.0], [1, 1], [1, -1]]
-#ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
+obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
 
 #x0 = [5.0, 0.0, 0.1, 0, 0, 0];
 x0 = [2.0, 0.0, 2.89, 0, 0, 0];
-obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
-ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+# obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
+# ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
 
 create_ass_playground(x0, ego_polys, obs_polys)
 
