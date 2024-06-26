@@ -141,12 +141,13 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
     sols
 end
 
-function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
+function load_all(exp_name, exp_file_date, res_file_date; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
     our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
     our_sols = our_file["our_sols"]
     sep_sols = []
     kkt_sols = []
+    dcol_sols = []
     if is_loading_sep
         sep_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(res_file_date).jld2", "r")
         sep_sols = sep_file["sep_sols"]
@@ -163,6 +164,96 @@ function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false
     end
 
     (our_sols, sep_sols, dcol_sols, kkt_sols)
+end
+
+function merge_results(exp_name, exp_file_date_1, res_file_date_1, exp_file_date_2, res_file_date_2; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data", is_saving=false)
+
+    ego_poly_1, x0s_1, maps_1, param_1 = load_experiment(exp_name, exp_file_date_1; data_dir="data")
+
+    (our_sols_1, sep_sols_1, dcol_sols_1, kkt_sols_1) = load_all(exp_name, exp_file_date_1, res_file_date_1; is_loading_sep, is_loading_dcol, is_loading_kkt, data_dir)
+
+    ego_poly_2, x0s_2, maps_2, param_2 = load_experiment(exp_name, exp_file_date_2; data_dir="data")
+    (our_sols_2, sep_sols_2, dcol_sols_2, kkt_sols_2) = load_all(exp_name, exp_file_date_2, res_file_date_2; is_loading_sep, is_loading_dcol, is_loading_kkt, data_dir)
+
+    # to verify
+    #@assert ego_poly_1 == ego_poly_2 "different ego polys!!" # does not work
+    #@infiltrate
+    @info ego_poly_1
+    @info ego_poly_2
+    @info param_1
+    @info param_2
+    for i in 1:14
+        @assert param_1[i] == param_2[i] "different parameters!! $i"
+    end
+
+    # merge x0s
+    x0_shift = length(x0s_1)
+    x0s_merged = [x0s_1; x0s_2]
+
+    # merge maps
+    map_shift = length(maps_1)
+    maps_merged = [maps_1; maps_2]
+
+    if is_saving
+        jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date_1)_merged.jld2"; ego_poly=ego_poly_1, x0s=x0s_merged, maps=maps_merged, param=param_1)
+    end
+
+    our_sols_merged = []
+    sep_sols_merged = []
+    dcol_sols_merged = []
+    kkt_sols_merged = []
+
+    our_sols_merged = copy(our_sols_1)
+
+    shift = [map_shift, x0_shift]
+
+    for (key, val) in our_sols_2
+        our_sols_merged[key.+shift] = val
+    end
+
+    if is_saving
+        jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date_1)_merged_our_sols_$(exp_file_date_2).jld2"; our_sols=our_sols_merged)
+    end
+
+    if is_loading_sep
+        sep_sols_merged = copy(sep_sols_1)
+
+        for (key, val) in sep_sols_2
+            sep_sols_merged[key.+shift] = val
+        end
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date_1)_merged_sep_sols_$(exp_file_date_2).jld2"; sep_sols=sep_sols_merged)
+        end
+    end
+
+    if is_loading_dcol
+        dcol_sols_merged = copy(dcol_sols_1)
+
+        for (key, val) in dcol_sols_2
+            dcol_sols_merged[key.+shift] = val
+        end
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date_1)_merged_dcol_sols_$(exp_file_date_2).jld2"; dcol_sols=dcol_sols_merged)
+        end
+    end
+
+    if is_loading_kkt
+        kkt_sols_merged = copy(kkt_sols_1)
+
+        for (key, val) in kkt_sols_2
+            kkt_sols_merged[key.+shift] = val
+        end
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date_1)_merged_kkt_sols_$(exp_file_date_2).jld2"; kkt_sols=kkt_sols_merged)
+        end
+    end
+
+
+
+    (x0s_merged, maps_merged, our_sols_merged, sep_sols_merged, dcol_sols_merged, kkt_sols_merged)
 end
 
 function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
@@ -281,17 +372,17 @@ function get_mean_std_CI(v)
     end
 end
 
-function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=3)
 
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
 
-    bin_success_percent = length(bin.success.idx) / (n_maps * n_x0s) * 100
-    ref_success_percent = length(ref_bin.success.idx) / (n_maps * n_x0s) * 100
-    both_success_percent = length(common_success.idx) / (n_maps * n_x0s) * 100
-    bin_fail_percent = length(bin.fail.idx) / (n_maps * n_x0s) * 100
-    ref_fail_percent = length(ref_bin.fail.idx) / (n_maps * n_x0s) * 100
-    both_fail_percent = length(common_fail.idx) / (n_maps * n_x0s) * 100
+    bin_success_percent = length(bin.success.idx) / n_samples * 100
+    ref_success_percent = length(ref_bin.success.idx) / n_samples * 100
+    both_success_percent = length(common_success.idx) / n_samples * 100
+    bin_fail_percent = length(bin.fail.idx) / n_samples * 100
+    ref_fail_percent = length(ref_bin.fail.idx) / n_samples * 100
+    both_fail_percent = length(common_fail.idx) / n_samples * 100
 
 
     println("           $name     $ref_name     both    both(ct)")
@@ -306,7 +397,7 @@ function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin"
     #end
 end
 
-function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=3)
 
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100
