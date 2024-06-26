@@ -104,6 +104,17 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     V = @lift($P.V)
     A = @lift($P.A)
     b = @lift($P.b)
+    function get_edge_ind(A, b, vi, vii)
+        ind_vi = A * vi + b .< 1e-4
+        ind_vii = A * vii + b .< 1e-4
+        ind_edge = findall(x -> x==2, ind_vi + ind_vii)
+        if length(ind_edge) == 0
+            return 0
+        else
+            return ind_edge[1]
+        end
+    end
+    
     for i in 1:N-1
         vii = @lift($V[i+1])
         vi = @lift($V[i])
@@ -111,13 +122,12 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
         ys = @lift([$vi[2], $vii[2]])
         x_center = @lift(($vi[1] + $vii[1])/2)
         y_center = @lift(($vi[2] + $vii[2])/2)
-        ind_vi = @lift($A * $vi + $b .< 1e-4)
-        ind_vii = @lift($A * $vii + $b .< 1e-4)
-        ind_edge = @lift(findall(x -> x==2, $ind_vi+$ind_vii))
-        @info ind_edge
+        ind = @lift(get_edge_ind($A, $b, $vi, $vii))
+        ind_text = GLMakie.lift(ind) do in
+            "$(in)"
+        end
         lines!(ax, xs, ys; kwargs...)
-        # text=@lift("$(round($ind_edge; 1))")
-        text!(ax, x_center, y_center; align=(:center, :center), text="$ind_edge", color=:black, fontsize=10)
+        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
     end
     
     vii = @lift($V[1])
@@ -126,11 +136,12 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     ys = @lift([$vi[2], $vii[2]])
     x_center = @lift(($vi[1] + $vii[1])/2)
     y_center = @lift(($vi[2] + $vii[2])/2)
-    ind_vi = @lift($A * $vi + $b .< 1e-4)
-    ind_vii = @lift($A * $vii + $b .< 1e-4)
-    ind_edge = @lift(findall(x -> x==2, $ind_vi+$ind_vii))
+    ind = @lift(get_edge_ind($A, $b, $vi, $vii))
+    ind_text = GLMakie.lift(ind) do in
+        "$(in)"
+    end
     lines!(ax, xs, ys; kwargs...)
-    text!(ax, x_center, y_center; align=(:center, :center), text="$ind_edge", color=:black, fontsize=10)
+    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
 end
 
 function signed_distance(P1::ConvexPolygon2D, 
