@@ -87,9 +87,21 @@ struct ConvexPolygon2D
     end
 end
 
+function delete_first_if_m1(; kwargs...)
+    kwargs_list = collect(kwargs)
+    m1 = 0
+    if length(kwargs_list) > 0 && kwargs_list[1][1] == :m1
+        m1 = kwargs_list[1][2]
+        deleteat!(kwargs_list, 1)
+    end
+    new_kwargs = (; kwargs_list...)
+    return m1, new_kwargs
+end
+
 function plot!(ax, P::ConvexPolygon2D; kwargs...)
     N = length(P.V) 
     V = P.V
+    m1, kwargs = delete_first_if_m1(; kwargs...)
     for i in 1:N-1
         vii = V[i+1]
         vi = V[i]
@@ -104,6 +116,8 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     V = @lift($P.V)
     A = @lift($P.A)
     b = @lift($P.b)
+    m1, kwargs = delete_first_if_m1(; kwargs...)
+
     function get_edge_ind(A, b, vi, vii)
         ind_vi = A * vi + b .< 1e-4
         ind_vii = A * vii + b .< 1e-4
@@ -122,7 +136,7 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
         ys = @lift([$vi[2], $vii[2]])
         x_center = @lift(($vi[1] + $vii[1])/2)
         y_center = @lift(($vi[2] + $vii[2])/2)
-        ind = @lift(get_edge_ind($A, $b, $vi, $vii))
+        ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
         ind_text = GLMakie.lift(ind) do in
             "$(in)"
         end
@@ -136,7 +150,7 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     ys = @lift([$vi[2], $vii[2]])
     x_center = @lift(($vi[1] + $vii[1])/2)
     y_center = @lift(($vi[2] + $vii[2])/2)
-    ind = @lift(get_edge_ind($A, $b, $vi, $vii))
+    ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
     ind_text = GLMakie.lift(ind) do in
         "$(in)"
     end

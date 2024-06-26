@@ -211,7 +211,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             obs_inflated = @lift(ConvexPolygon2DPointShrunk(Po; c=0, s=$sd))
 
             PolyPlanning.plot!(ax, ego_inflated; color=:lightblue, linewidth=2)
-            PolyPlanning.plot!(ax, obs_inflated; color=:pink, linewidth=2)
+            PolyPlanning.plot!(ax, obs_inflated; m1=length(be), color=:pink, linewidth=2)
 
             # draw arbitrary inflation
             sd_arbitrary = GLMakie.lift(x -> x, sg.sliders[4].value)
