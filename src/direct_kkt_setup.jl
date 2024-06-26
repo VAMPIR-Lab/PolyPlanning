@@ -269,7 +269,7 @@ function solve_prob_direct_kkt(prob, x0; θ0=nothing, is_displaying=true, sleep_
         l,
         u,
         θ0;
-        silent=false,
+        silent=true,
         nnz=nnz_total,
         jacobian_structure_constant=true,
         output_linear_model="no",

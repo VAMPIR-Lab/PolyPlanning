@@ -100,20 +100,37 @@ function plot!(ax, P::ConvexPolygon2D; kwargs...)
     lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
 end
 function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
-    N = length(P[].V) 
+    N = length(P[].V)
     V = @lift($P.V)
+    A = @lift($P.A)
+    b = @lift($P.b)
     for i in 1:N-1
         vii = @lift($V[i+1])
         vi = @lift($V[i])
         xs = @lift([$vi[1], $vii[1]])
         ys = @lift([$vi[2], $vii[2]])
+        x_center = @lift(($vi[1] + $vii[1])/2)
+        y_center = @lift(($vi[2] + $vii[2])/2)
+        ind_vi = @lift($A * $vi + $b .< 1e-4)
+        ind_vii = @lift($A * $vii + $b .< 1e-4)
+        ind_edge = @lift(findall(x -> x==2, $ind_vi+$ind_vii))
+        @info ind_edge
         lines!(ax, xs, ys; kwargs...)
+        # text=@lift("$(round($ind_edge; 1))")
+        text!(ax, x_center, y_center; align=(:center, :center), text="$ind_edge", color=:black, fontsize=10)
     end
+    
     vii = @lift($V[1])
     vi = @lift($V[N])
     xs = @lift([$vi[1], $vii[1]])
     ys = @lift([$vi[2], $vii[2]])
+    x_center = @lift(($vi[1] + $vii[1])/2)
+    y_center = @lift(($vi[2] + $vii[2])/2)
+    ind_vi = @lift($A * $vi + $b .< 1e-4)
+    ind_vii = @lift($A * $vii + $b .< 1e-4)
+    ind_edge = @lift(findall(x -> x==2, $ind_vi+$ind_vii))
     lines!(ax, xs, ys; kwargs...)
+    text!(ax, x_center, y_center; align=(:center, :center), text="$ind_edge", color=:black, fontsize=10)
 end
 
 function signed_distance(P1::ConvexPolygon2D, 
