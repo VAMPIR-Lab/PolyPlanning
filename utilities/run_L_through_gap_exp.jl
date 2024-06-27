@@ -3,21 +3,21 @@ using JLD2
 using Dates
 
 # user options
-is_saving = true
-is_running_sep = true
+is_saving = false
+is_running_sep = false
 is_running_dcol = true
-is_running_kkt = true
-is_loading_exp = false # skip experiment generation and load from file
+is_running_kkt = false
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
-exp_file_date = "2024-05-30_2351"
-res_file_date = "2024-05-30_2351"
+exp_file_date = "2024-06-26_1125"
+res_file_date = "2024-06-26_1125"
 exp_name = "L_piano"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 3
-n_x0s = 100
+n_maps = 10
+n_x0s = 10
 n_sides = 4
 n_obs = 2
 n_xu = 9
@@ -35,13 +35,14 @@ init_x_disturb_max = 1.0
 init_y_disturb_max = 3.0
 gap_min = 1.25
 gap_max = 2.5
-gap_array = [gap_min, (gap_min + gap_max) / 2, gap_max]
+gap_array = collect(gap_min : (gap_max-gap_min) / (n_maps-1) : gap_max)
 gap_offset = 3.0
+ego_a = 0.5 # one rect has size of (ego_a, 4 * ego_a)
 
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
-    @assert init_x_mean - init_x_disturb_max >= gap_offset
+    @assert init_x_mean - init_x_disturb_max >= gap_offset + ego_a * 5
     @assert n_obs == 2
     @assert n_maps == length(gap_array)
 
@@ -58,10 +59,6 @@ else # generate ego_poly, x0s and maps
         u1_max,
         u2_max,
         u3_max,
-        init_x_mean,
-        init_y_mean,
-        init_x_disturb_max,
-        init_y_disturb_max,
         data_dir,
         date_now,
         init_x_mean,
@@ -75,7 +72,7 @@ else # generate ego_poly, x0s and maps
     )
 
     # generate x0s and maps
-    ego_poly = PolyPlanning.gen_ego_L()
+    ego_poly = PolyPlanning.gen_ego_L(; a=ego_a)
 
     x0s = map(1:n_x0s) do i
         init_x = init_x_mean - init_x_disturb_max + 2 * init_x_disturb_max * rand()

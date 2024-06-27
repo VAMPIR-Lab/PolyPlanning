@@ -134,28 +134,30 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
         vi = @lift($V[i])
         xs = @lift([$vi[1], $vii[1]])
         ys = @lift([$vi[2], $vii[2]])
-        x_center = @lift(($vi[1] + $vii[1])/2)
-        y_center = @lift(($vi[2] + $vii[2])/2)
-        ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
-        ind_text = GLMakie.lift(ind) do in
-            "$(in)"
-        end
         lines!(ax, xs, ys; kwargs...)
-        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+
+        # x_center = @lift(($vi[1] + $vii[1])/2)
+        # y_center = @lift(($vi[2] + $vii[2])/2)
+        # ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
+        # ind_text = GLMakie.lift(ind) do in
+        #     "$(in)"
+        # end
+        # text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
     end
     
     vii = @lift($V[1])
     vi = @lift($V[N])
     xs = @lift([$vi[1], $vii[1]])
     ys = @lift([$vi[2], $vii[2]])
-    x_center = @lift(($vi[1] + $vii[1])/2)
-    y_center = @lift(($vi[2] + $vii[2])/2)
-    ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
-    ind_text = GLMakie.lift(ind) do in
-        "$(in)"
-    end
     lines!(ax, xs, ys; kwargs...)
-    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+
+    # x_center = @lift(($vi[1] + $vii[1])/2)
+    # y_center = @lift(($vi[2] + $vii[2])/2)
+    # ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
+    # ind_text = GLMakie.lift(ind) do in
+    #     "$(in)"
+    # end
+    # text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
 end
 
 function signed_distance(P1::ConvexPolygon2D, 

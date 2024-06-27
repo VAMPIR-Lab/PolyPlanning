@@ -132,8 +132,8 @@ function setup_dcol(ego_polys;
         get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))[2], zeros(length(Jlag_rows)))
     end
 
-    Aes = [deepcopy(P.A) for P in ego_polys]
-    bes = [deepcopy(P.b) for P in ego_polys]
+    # Aes = [deepcopy(P.A) for P in ego_polys]
+    # bes = [deepcopy(P.b) for P in ego_polys]
     dlag_buf = zeros(n_x)
 
     #F[xt_inds] .+= -λ_dcol .* dlag_buf
@@ -150,7 +150,7 @@ function setup_dcol(ego_polys;
             -sin(θ) cos(θ)]
         qq = [0; 0; 1.0]
 
-        AA = [Ae*Q' be; Ao bo+Ao*xto]
+        AA = [Ae*Q' be; Ao bo]
         bb = [-Ae * Q' * x; -Ao * xto]
 
         #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false) #, max_iter=100000)
@@ -216,14 +216,16 @@ function setup_dcol(ego_polys;
                 xte = [xt[1:2] .+ Q * c; xt[3:end]]
                 #Main.@infiltrate
                 for (j, Po) in enumerate(polys)
-                    Ao = Po.A
-                    bo = Po.b
-                    xto = sum(Po.V) / length(Po.V)
+                    co = sum(Po.V) / length(Po.V)
+                    Abo = shift_to(Po.A, Po.b, [-co; 0])
+                    Po_shifted = ConvexPolygon2D(Abo[1], Abo[2])
+                    Ao = Po_shifted.A
+                    bo = Po_shifted.b
+                    xto = co
+
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
-                    #Ae = Aes[i]
-                    #be = bes[i]
                     (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
                     get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
 
@@ -266,23 +268,24 @@ function setup_dcol(ego_polys;
                 # shift ith ego poly to the origin (the method needs this)
                 c = sum(Pe.V) / length(Pe.V)
                 Abe = shift_to(Pe.A, Pe.b, [-c; 0])
-                Pe = ConvexPolygon2D(Abe[1], Abe[2])
-                Ae = Pe.A
-                be = Pe.b
+                Pe_shifted = ConvexPolygon2D(Abe[1], Abe[2])
+                Ae = Pe_shifted.A
+                be = Pe_shifted.b
                 # replace xte[1:2] with a point inside ith ego poly (the method needs this)
                 Q = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 xte = [xt[1:2] .+ Q * c; xt[3:end]]
-                for (j, P) in enumerate(polys)
-                    Ao = P.A
-                    bo = P.b
-                    xto = sum(P.V) / length(P.V)
+                for (j, Po) in enumerate(polys)
+                    co = sum(Po.V) / length(Po.V)
+                    Abo = shift_to(Po.A, Po.b, [-co; 0])
+                    Po_shifted = ConvexPolygon2D(Abo[1], Abo[2])
+                    Ao = Po_shifted.A
+                    bo = Po_shifted.b
+                    xto = co
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
                     # osqp solver -> sd, p, λsd
-                    Ae = Aes[i]
-                    be = bes[i]
                     (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
 
                     get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)

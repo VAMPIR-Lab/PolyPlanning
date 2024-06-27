@@ -32,6 +32,29 @@ function get_possible_constraint_ids(A, b)
     feasible_inds
 end
 
+# enumerate possible assignments (2 indices from one poly, and 1 index from the other)
+function get_possible_assignments(Ae, be, Ao, bo)
+    m1 = length(be)
+    m2 = length(bo)
+    inds_e = get_possible_constraint_ids(Ae, be)
+    inds_o = get_possible_constraint_ids(Ao, bo)
+    for i in eachindex(inds_o)
+        inds_o[i] += [m1 , m1]
+    end
+    Itr=[]
+    for i in 1:m1
+        for ind in inds_o
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    for i in m1+1:m1+m2
+        for ind in inds_e
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    Itr
+end
+
 function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido)
     Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
     R = [cos(xt[3]) sin(xt[3])
@@ -96,23 +119,8 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     m2 = length(bo)
 
     # get 32 assignments for 2 quadrilaterals
-    inds_e = get_possible_constraint_ids(Ae, be)
-    inds_o = get_possible_constraint_ids(Ao, bo)
-    for i in 1:length(inds_o)
-        inds_o[i] += [m1 , m1]
-    end
-    Itr=[]
-    for i in 1:m1
-        for ind in inds_o
-            push!(Itr, sort(vcat(ind, i)))
-        end
-    end
-    for i in m1+1:m1+m2
-        for ind in inds_e
-            push!(Itr, sort(vcat(ind, i)))
-        end
-    end
-
+    Itr = get_possible_assignments(Ae, be, Ao, bo)
+    
     # get 48 assignments for 2 quadrilaterals
     # all_active_inds = collect(1:m1+m2)
     # Itr = powerset(all_active_inds) |> collect
