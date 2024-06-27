@@ -388,6 +388,15 @@ function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", si
     println("           $name     $ref_name     both    both(ct)")
     println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
     println("fail       $(round(bin_fail_percent; sigdigits))%    $(round(ref_fail_percent; sigdigits))%    $(round(both_fail_percent; sigdigits))%    $(length(common_fail.idx))")
+
+    time_stats = get_mean_std_CI(bin.success.time)
+    cost_stats = get_mean_std_CI(bin.success.cost)
+    ref_time_stats = get_mean_std_CI(ref_bin.success.time)
+    ref_cost_stats = get_mean_std_CI(ref_bin.success.cost)
+    println("       $name successes     $ref_name successes")
+    println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits))     $(round.(ref_time_stats.mean; sigdigits)) ± $(round.(ref_time_stats.CI; sigdigits))")
+    println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits))     $(round.(ref_cost_stats.mean; sigdigits)) ± $(round.(ref_cost_stats.CI; sigdigits))")
+
     if length(common_success.idx) > 0
         print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
     end
@@ -417,9 +426,9 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     ref_time_stats = get_mean_std_CI(ref_time)
     cost_stats = get_mean_std_CI(cost)
     ref_cost_stats = get_mean_std_CI(ref_cost)
-    println("mean   $name vs $ref_name")
-    println("time   $(round.(time_stats.mean; sigdigits))    $(round.(ref_time_stats.mean; sigdigits))  ")
-    println("cost   $(round.(cost_stats.mean; sigdigits))    $(round.(ref_cost_stats.mean; sigdigits))  ")
+    println("common successes   $name     $ref_name")
+    println("time               $(round.(time_stats.mean; sigdigits))    $(round.(ref_time_stats.mean; sigdigits))  ")
+    println("cost               $(round.(cost_stats.mean; sigdigits))    $(round.(ref_cost_stats.mean; sigdigits))  ")
 end
 
 function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1, is_displaying=true, type="nonsmooth", sigdigits=2)
