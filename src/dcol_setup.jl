@@ -168,7 +168,7 @@ function setup_dcol(ego_polys;
 
         status = JuMP.termination_status(model)
         if status != OPTIMAL
-            #@infiltrate
+            @infiltrate
             duals = zeros(m1 + m2)
             cons = duals
             xx = JuMP.value.(xx)

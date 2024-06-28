@@ -5,10 +5,10 @@ using Dates
 # user options
 is_saving = true
 is_running_sep = true
-is_running_dcol = false
+is_running_dcol = true
 is_running_kkt = false
-is_loading_exp = true # skip experiment generation and load from file
-is_loading_res = true # skip compute and load from file
+is_loading_exp = false # skip experiment generation and load from file
+is_loading_res = false # skip compute and load from file
 exp_file_date = "2024-06-25_1908_merged"
 res_file_date = "2024-06-25_2117"
 exp_name = "L_through_gap"
@@ -30,7 +30,7 @@ u1_max = 10.0
 u2_max = 10.0
 u3_max = π
 n_sd_slots=4
-init_x_mean = 5.0
+init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
 init_y_disturb_max = 3.0
@@ -42,7 +42,7 @@ gap_offset = 3.0
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
-    @assert init_x_mean - init_x_disturb_max >= gap_offset
+    @assert init_x_mean - init_x_disturb_max >= gap_offset + 2.
     @assert n_obs == 2
     @assert n_maps == length(gap_array)
 
