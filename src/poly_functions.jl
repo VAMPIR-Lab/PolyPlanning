@@ -87,6 +87,47 @@ struct ConvexPolygon2D
     end
 end
 
+function plot!(ax, P::ConvexPolygon2D; kwargs...)
+    N = length(P.V) 
+    V = P.V
+    for i in 1:N-1
+        vii = V[i+1]
+        vi = V[i]
+        lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
+    end
+    vii = V[1]
+    vi = V[N]
+    lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
+end
+
+function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
+    N = length(P[].V)
+    V = @lift($P.V)    
+    for i in 1:N-1
+        vii = @lift($V[i+1])
+        vi = @lift($V[i])
+        xs = @lift([$vi[1], $vii[1]])
+        ys = @lift([$vi[2], $vii[2]])
+        lines!(ax, xs, ys; kwargs...)
+    end
+    vii = @lift($V[1])
+    vi = @lift($V[N])
+    xs = @lift([$vi[1], $vii[1]])
+    ys = @lift([$vi[2], $vii[2]])
+    lines!(ax, xs, ys; kwargs...)
+end
+
+function get_edge_ind(A, b, vi, vii)
+    ind_vi = A * vi + b .< 1e-4
+    ind_vii = A * vii + b .< 1e-4
+    ind_edge = findall(x -> x==2, ind_vi + ind_vii)
+    if length(ind_edge) == 0
+        return 0
+    else
+        return ind_edge[1]
+    end
+end
+
 function delete_first_if_m1(; kwargs...)
     kwargs_list = collect(kwargs)
     m1 = 0
@@ -98,36 +139,40 @@ function delete_first_if_m1(; kwargs...)
     return m1, new_kwargs
 end
 
-function plot!(ax, P::ConvexPolygon2D; kwargs...)
-    N = length(P.V) 
+function plot_with_indices(ax, P::ConvexPolygon2D; kwargs...)
+    N = length(P.V)
     V = P.V
+    A = P.A
+    b = P.b
     m1, kwargs = delete_first_if_m1(; kwargs...)
     for i in 1:N-1
         vii = V[i+1]
         vi = V[i]
         lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
+
+        x_center = (vi[1] + vii[1])/2
+        y_center = (vi[2] + vii[2])/2
+        ind = get_edge_ind(A, b, vi, vii) + m1
+        ind_text = "$ind"
+        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
     end
     vii = V[1]
     vi = V[N]
     lines!(ax, [vi[1], vii[1]], [vi[2], vii[2]]; kwargs...)
+
+    x_center = (vi[1] + vii[1])/2
+    y_center = (vi[2] + vii[2])/2
+    ind = get_edge_ind(A, b, vi, vii) + m1
+    ind_text = "$ind"
+    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
 end
-function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
+
+function plot_with_indices(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     N = length(P[].V)
     V = @lift($P.V)
     A = @lift($P.A)
     b = @lift($P.b)
     m1, kwargs = delete_first_if_m1(; kwargs...)
-
-    function get_edge_ind(A, b, vi, vii)
-        ind_vi = A * vi + b .< 1e-4
-        ind_vii = A * vii + b .< 1e-4
-        ind_edge = findall(x -> x==2, ind_vi + ind_vii)
-        if length(ind_edge) == 0
-            return 0
-        else
-            return ind_edge[1]
-        end
-    end
     
     for i in 1:N-1
         vii = @lift($V[i+1])
@@ -136,13 +181,13 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
         ys = @lift([$vi[2], $vii[2]])
         lines!(ax, xs, ys; kwargs...)
 
-        # x_center = @lift(($vi[1] + $vii[1])/2)
-        # y_center = @lift(($vi[2] + $vii[2])/2)
-        # ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
-        # ind_text = GLMakie.lift(ind) do in
-        #     "$(in)"
-        # end
-        # text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+        x_center = @lift(($vi[1] + $vii[1])/2)
+        y_center = @lift(($vi[2] + $vii[2])/2)
+        ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
+        ind_text = GLMakie.lift(ind) do in
+            "$(in)"
+        end
+        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
     end
     
     vii = @lift($V[1])
@@ -151,13 +196,68 @@ function plot!(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     ys = @lift([$vi[2], $vii[2]])
     lines!(ax, xs, ys; kwargs...)
 
-    # x_center = @lift(($vi[1] + $vii[1])/2)
-    # y_center = @lift(($vi[2] + $vii[2])/2)
-    # ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
-    # ind_text = GLMakie.lift(ind) do in
-    #     "$(in)"
-    # end
-    # text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+    x_center = @lift(($vi[1] + $vii[1])/2)
+    y_center = @lift(($vi[2] + $vii[2])/2)
+    ind = @lift(get_edge_ind($A, $b, $vi, $vii) + m1)
+    ind_text = GLMakie.lift(ind) do in
+        "$(in)"
+    end
+    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+end
+# PolyPlanning.plot_xt(x0, Pe.A, Pe.b, Po.A, Po.b)
+function plot_xt(xt, Ae, be, Ao, bo; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))
+    xx = xt[1:3]
+    Aeb = shift_to(Ae, be, xx)
+    self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
+    plot_with_indices(ax, self_poly; color=:blue)
+    obs_poly = ConvexPolygon2D(Ao, bo)
+    plot_with_indices(ax, obs_poly; m1=length(be), color=:red)
+    
+    display(GLMakie.Screen(), fig)
+    (fig, ax)
+end
+
+function plot_xt(xt, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))
+    xx = xt[1:3]
+    for ego_poly in ego_polys
+        Aeb = shift_to(ego_poly.A, ego_poly.b, xx)
+        self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
+        plot!(ax, self_poly; color=:blue)
+    end
+
+    for obs_poly in obs_polys
+        plot!(ax, obs_poly; color=:red)
+    end
+    display(GLMakie.Screen(), fig)
+    (fig, ax)
+end
+# PolyPlanning.plot_inflated(x0, Pe.A, Pe.b, Po.A, Po.b, [.675, 2.45], 1.7)
+function plot_inflated(xt, Ae, be, Ao, bo, p_intercept, sd; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))
+    xx = xt[1:3]
+    Aex, bex = shift_to(Ae, be, xx)
+    self_poly = ConvexPolygon2D(Aex, bex)
+    centroidex = sum(self_poly.V)/length(self_poly.V)
+    plot!(ax, self_poly; color=:blue)
+    obs_poly = ConvexPolygon2D(Ao, bo)
+    centroido = sum(obs_poly.V)/length(obs_poly.V)
+    plot!(ax, obs_poly; color=:red)
+    
+    # draw inflated
+    be_inflated = bex + sd * (Aex * centroidex + bex)
+    bo_inflated = bo + sd * (Ao * centroido + bo)
+    ego_inflated = ConvexPolygon2D(Aex, be_inflated)
+    obs_inflated = ConvexPolygon2D(Ao, bo_inflated)
+
+    plot_with_indices(ax, ego_inflated; color=:lightblue, linewidth=2)
+    plot_with_indices(ax, obs_inflated; m1=length(be), color=:pink, linewidth=2)
+
+    # draw the intercept and centroids
+    scatter!(ax, centroidex[1], centroidex[2]; color=:blue)
+    scatter!(ax, centroido[1], centroido[2]; color=:red)
+    scatter!(ax, p_intercept[1], p_intercept[2]; color=:green)
+
+    display(GLMakie.Screen(), fig)
+    (fig, ax)
 end
 
 function signed_distance(P1::ConvexPolygon2D, 
