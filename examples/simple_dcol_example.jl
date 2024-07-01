@@ -13,11 +13,11 @@ dcol_prob = PolyPlanning.setup_dcol(
     T=20,
     dt=0.2,
     Rf,
-    Qf=2e-3 * PolyPlanning.I(2),
+    Qf=1e-3 * PolyPlanning.I(2),
     u1_max=10.0,
     u2_max=10.0,
     u3_max=π,
     n_obs=length(obs_polys)
 );
 
-dcol_sol = PolyPlanning.solve_dcol(dcol_prob, x0, obs_polys; is_displaying=true, sleep_duration=0.25)
+dcol_sol = PolyPlanning.solve_dcol(dcol_prob, x0, obs_polys; is_displaying=true, sleep_duration=0.1)
