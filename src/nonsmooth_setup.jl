@@ -281,14 +281,14 @@ function setup_nonsmooth(
     bb_buffer = zeros(n_side_ego + n_side_obs)
     sd_lag_buf = zeros(n_x)
 
-    function get_sorted_sds(i, j, xt)
+    function get_sorted_sds(i, j, xt; tol=1e-4, local_factor=1.5)
         assignments = sds_keys[i, j]
         get_sds[i, j](sds_buffer, xt)
         get_intercepts[i, j](intercept_buffer, xt)
         get_AA[i, j](AA_buffer, xt)
         get_bb[i, j](bb_buffer, xt)
 
-        tol = 1e-4
+        # tol = 1e-4
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .>= -1.0 - tol
 
@@ -303,10 +303,11 @@ function setup_nonsmooth(
         sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
         sorted_ass = assignments[valid_mask][sorted_sds_inds]
         
+        # need to consider smarter way to filter out distant sds
         # local_factor = 1.5 # regard sds which are less than sd*local_factor as potential true sds
-        # local_sd_mask = (sorted_sds.+1) .<= (sorted_sds[1]+1) * local_factor
-        # sorted_sds = sorted_sds[local_sd_mask]
-        # sorted_ass = sorted_ass[local_sd_mask]
+        local_sd_mask = (sorted_sds.+1) .<= (sorted_sds[1]+1) * local_factor
+        sorted_sds = sorted_sds[local_sd_mask]
+        sorted_ass = sorted_ass[local_sd_mask]
         (sorted_sds, sorted_ass)
     end
 
