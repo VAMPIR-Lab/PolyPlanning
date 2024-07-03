@@ -109,6 +109,9 @@ function setup_direct_kkt(
     J_vals_nom! = Symbolics.build_function(J_vals, z, x0, λ_nom; expression=Val(false), parallel=Symbolics.SerialForm())[2]
 
     function F_both!(F, z_local, x0_local, λ_nom_local)
+        # allval = [z_local; λ_nom_local]
+        # stsf = ((allval .>= l) + (allval .<= u)) .== 2
+        # println(1760-sum(stsf))
         F .= 0.0
         F_nom!(F, z_local, x0_local, λ_nom_local)
         nothing

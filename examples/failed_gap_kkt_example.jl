@@ -131,25 +131,33 @@ kkt_prob = PolyPlanning.setup_direct_kkt(
     u1_max=10.0,
     u2_max=10.0,
     u3_max=π
-);
-
-nonsmooth_prob = PolyPlanning.setup_nonsmooth(
-    ego_rect,
-    obs_polys;
-    T=20,
-    dt=.2,
-    R_cost=Rf,
-    Q_cost=2e-3 * PolyPlanning.I(2),
-    u1_max=10.0,
-    u2_max=10.0,
-    u3_max=π,
-	n_sd_slots=4
 )
-
 
 # x0s[11] failed
 x0 = x0s[11]
 sol_kkt = PolyPlanning.solve_prob_direct_kkt(kkt_prob, x0; is_displaying=false, sleep_duration=0.2)
+
+
+# sols = Dict()
+# for i in 1:20
+#     obs_polys = maps[i]
+#     kkt_prob = PolyPlanning.setup_direct_kkt(
+#         ego_rect,
+#         obs_polys;
+#         T=20,
+#         dt=0.2,
+#         Rf,
+#         Qf=2e-3 * PolyPlanning.I(2),
+#         u1_max=10.0,
+#         u2_max=10.0,
+#         u3_max=π
+#     )
+#     for j in 1:20
+#         println("maps[$i], x0s[$j]")
+#         x0 = x0s[j]
+#         sols[i,j] = PolyPlanning.solve_prob_direct_kkt(kkt_prob, x0; is_displaying=false, sleep_duration=0.2)
+#     end
+# end
 
 
 

@@ -5,11 +5,11 @@ using Dates
 # user options
 is_saving = true
 is_running_sep = false
-is_running_dcol = true
+is_running_dcol = false
 is_running_kkt = false
-is_loading_exp = false # skip experiment generation and load from file
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-05-30_2351"
+exp_file_date = "2024-07-02_1828"
 res_file_date = "2024-05-30_2351"
 exp_name = "random_L_packing"
 data_dir = "data"

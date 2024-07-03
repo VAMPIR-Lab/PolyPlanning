@@ -288,11 +288,11 @@ function setup_nonsmooth(
         get_AA[i, j](AA_buffer, xt)
         get_bb[i, j](bb_buffer, xt)
 
+        tol = 1e-4
         # sd must be greater than -1 to be valid
-        valid_mask = sds_buffer .> -1.0
+        valid_mask = sds_buffer .>= -1.0 - tol
 
         # sd and intercept must correspond to a feasible vertex to be valid
-        tol = 1e-4
         zz_check = hcat(intercept_buffer[valid_mask, :], sds_buffer[valid_mask])
 
         valid_mask[valid_mask] = map(eachrow(zz_check)) do row
@@ -302,7 +302,11 @@ function setup_nonsmooth(
         sorted_sds_inds = sds_buffer[valid_mask] |> sortperm
         sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
         sorted_ass = assignments[valid_mask][sorted_sds_inds]
-
+        
+        # local_factor = 1.5 # regard sds which are less than sd*local_factor as potential true sds
+        # local_sd_mask = (sorted_sds.+1) .<= (sorted_sds[1]+1) * local_factor
+        # sorted_sds = sorted_sds[local_sd_mask]
+        # sorted_ass = sorted_ass[local_sd_mask]
         (sorted_sds, sorted_ass)
     end
 

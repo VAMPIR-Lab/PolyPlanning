@@ -4,13 +4,13 @@ using Dates
 using GLMakie
 
 # user options
-is_saving = false
+is_saving = true
 is_running_sep = false
-is_running_dcol = true
+is_running_dcol = false
 is_running_kkt = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-07-01_0103"
+exp_file_date = "2024-07-02_1717"
 res_file_date = "2024-06-17_1454"
 exp_name = "simple_packing"
 data_dir = "data"

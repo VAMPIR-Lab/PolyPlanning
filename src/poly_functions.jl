@@ -154,7 +154,7 @@ function plot_with_indices(ax, P::ConvexPolygon2D; kwargs...)
         y_center = (vi[2] + vii[2])/2
         ind = get_edge_ind(A, b, vi, vii) + m1
         ind_text = "$ind"
-        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=20)
     end
     vii = V[1]
     vi = V[N]
@@ -164,7 +164,7 @@ function plot_with_indices(ax, P::ConvexPolygon2D; kwargs...)
     y_center = (vi[2] + vii[2])/2
     ind = get_edge_ind(A, b, vi, vii) + m1
     ind_text = "$ind"
-    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=20)
 end
 
 function plot_with_indices(ax, P::Observable{ConvexPolygon2D}; kwargs...)
@@ -187,7 +187,7 @@ function plot_with_indices(ax, P::Observable{ConvexPolygon2D}; kwargs...)
         ind_text = GLMakie.lift(ind) do in
             "$(in)"
         end
-        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+        text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=20)
     end
     
     vii = @lift($V[1])
@@ -202,7 +202,7 @@ function plot_with_indices(ax, P::Observable{ConvexPolygon2D}; kwargs...)
     ind_text = GLMakie.lift(ind) do in
         "$(in)"
     end
-    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=10)
+    text!(ax, x_center, y_center; align=(:center, :center), text=ind_text, color=:black, fontsize=20)
 end
 # PolyPlanning.plot_xt(x0, Pe.A, Pe.b, Po.A, Po.b)
 function plot_xt(xt, Ae, be, Ao, bo; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))

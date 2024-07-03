@@ -5,8 +5,8 @@ using Statistics
 
 # user options
 is_saving = true
-is_running_sep = false
-is_running_dcol = true
+is_running_sep = true
+is_running_dcol = false
 is_running_kkt = false
 is_loading_exp = false # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
