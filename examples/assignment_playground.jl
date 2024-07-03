@@ -6,8 +6,54 @@ using Combinatorics
 using LinearAlgebra
 using Polyhedra
 
+# filter indices which are impossible to be active at the same time for one poly
+function get_possible_constraint_ids(A, b)
+    AA = Matrix(A)
+    bb = b
+    tol = 1e-3
+    ind = collect(1:length(bb))
+    inds = powerset(ind) |> collect
+    itr = [i for i in inds if length(i)==2]
+    feasible_inds=[]
+    for i in itr
+        try
+            xx = - AA[i,:] \ bb[i]
+            if all(AA*xx +bb .> -tol)
+                push!(feasible_inds, i)
+            end
+        catch err
+            if err isa LinearAlgebra.SingularException
+                continue
+            else
+                # @warn(err)
+            end
+        end
+    end
+    feasible_inds
+end
 
-
+# enumerate possible assignments (2 indices from one poly, and 1 index from the other)
+function get_possible_assignments(Ae, be, Ao, bo)
+    m1 = length(be)
+    m2 = length(bo)
+    inds_e = get_possible_constraint_ids(Ae, be)
+    inds_o = get_possible_constraint_ids(Ao, bo)
+    for i in eachindex(inds_o)
+        inds_o[i] += [m1 , m1]
+    end
+    Itr=[]
+    for i in 1:m1
+        for ind in inds_o
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    for i in m1+1:m1+m2
+        for ind in inds_e
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    Itr
+end
 
 function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido)
     Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
@@ -72,20 +118,20 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
     m1 = length(bex)
     m2 = length(bo)
 
-    all_active_inds = collect(1:m1+m2)
-    Itr = powerset(all_active_inds) |> collect
-    Itr_reduced = []
-    for ass in Itr
-        if if_ass_feasible(ass, m1, m2)
-            push!(Itr_reduced, ass)
-        end
-    end
-    Itr = copy(Itr_reduced)
-
+    # get 32 assignments for 2 quadrilaterals
+    Itr = get_possible_assignments(Ae, be, Ao, bo)
+    
+    # get 48 assignments for 2 quadrilaterals
+    # all_active_inds = collect(1:m1+m2)
+    # Itr = powerset(all_active_inds) |> collect
+    # Itr_reduced = []
+    # for ass in Itr
+    #     if if_ass_feasible(ass, m1, m2)
+    #         push!(Itr_reduced, ass)
+    #     end
+    # end
+    # Itr = copy(Itr_reduced)
     for active_inds in Itr
-        if !if_ass_feasible(active_inds, m1, m2)
-            continue
-        end
         #length(active_inds) > 3 && continue
         #assignment = [i ∈ active_inds for i in 1:m1+m2]
         try
@@ -129,17 +175,18 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
 
     range_max = 10
     step_size = 0.1
+    dim = size(ego_polys[1].A)[2]
 
-    ax = Axis(fig[1, 1], aspect=DataAspect())
-    ax3 = Axis3(fig[2, 1])
-
+    ax = Axis(fig[1, 2], aspect=DataAspect())
+    # ax3 = Axis3(fig[2, 1])
+    ax3 = LScene(fig[1, 1], scenekw = (camera = cam3d!, show_axis = true))
     sg = SliderGrid(
-        fig[3, 1],
+        fig[2, 1:2],
         (label="x", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[1]),
         (label="y", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[2]),
-        (label="θ", range=-range_max:step_size/10:range_max, format="{:.2f}", startvalue=x0[3]),
+        (label="θ", range=-2π:π/100:2π, format="{:.2f}", startvalue=x0[3]),
         (label="sd", range=-1.0:step_size:100.0, format="{:.1f}", startvalue=0),
-        (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=2.0)
+        (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=10.0)
     )
 
     for Pe in ego_polys
@@ -171,8 +218,8 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             ego_inflated = @lift(ConvexPolygon2DPointShrunk($Pe_shifted; c=0, s=$sd))
             obs_inflated = @lift(ConvexPolygon2DPointShrunk(Po; c=0, s=$sd))
 
-            PolyPlanning.plot!(ax, ego_inflated; color=:lightblue, linewidth=2)
-            PolyPlanning.plot!(ax, obs_inflated; color=:pink, linewidth=2)
+            PolyPlanning.plot_with_indices(ax, ego_inflated; color=:lightblue, linewidth=2)
+            PolyPlanning.plot_with_indices(ax, obs_inflated; m1=length(be), color=:pink, linewidth=2)
 
             # draw arbitrary inflation
             sd_arbitrary = GLMakie.lift(x -> x, sg.sliders[4].value)
@@ -205,24 +252,25 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
 
             function filter_sds(sds_etc, AA, bb)
                 tol = 1e-4
-                filtered = []
+                filtered_values = []
                 filtered_keys = []
                 for (key, val) in sds_etc
                     if all(AA * val + bb .>= -tol)
                         #@infiltrate
-                        push!(filtered, val)
+                        push!(filtered_values, val)
                         push!(filtered_keys, key)
                     end
                 end
-                filtered, filtered_keys
+                filtered_values, filtered_keys
             end
 
             sds_k = @lift(collect(keys($sds_etc)))
             sds_val = @lift(collect(values($sds_etc)))
-
-            filtered = @lift(filter_sds($sds_etc, $AA, $bb))
-
-            max_intercepts = 8
+            filtered_ran = @lift(filter_sds($sds_etc, $AA, $bb))
+            perm = @lift(sortperm($filtered_ran[1], by = x -> x[3]))
+            filtered = @lift([($filtered_ran[1])[$perm], ($filtered_ran[2])[$perm]])
+            
+            max_intercepts = 32
             sigdigits = 2
             intercept_obs = Dict()
 
@@ -256,13 +304,19 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
                 if isempty(filtered[1])
                     return ""
                 end
-                sigdigits = 2
+                sigdigits = 3
                 #@infiltrate
                 mapreduce(*, zip(filtered[1], filtered[2])) do (f, i)
                     "$(i), $(round(f[3]; sigdigits)), $(round.(f[1:2]; sigdigits) )\n"
                 end
             end
-            text!(ax, 0, -3; align=(:left, :top), text=point_text_obs, color=:black, fontsize=10)
+            text!(ax, -5, -3; align=(:left, :top), text=point_text_obs, color=:black, fontsize=10)
+
+            # manually add a bound to poly
+            z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
+            A_bound = zeros(dim+1)
+            A_bound[end] = 1
+            b_bound = @lift($primals_etc[1][3] + $z_lim)
 
             # 3d plot
             hss = GLMakie.lift(AA, bb) do AA, bb
@@ -270,11 +324,36 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
                     HalfSpace(-AA[i, :], bb[i])
                 end
             end
+            hss = @lift(push!($hss, HalfSpace(A_bound, $b_bound)))
             hr = @lift(hrep($hss)) # H-representation for polyhedron 
             poly = @lift(Polyhedra.polyhedron($hr))
             mesh_poly = @lift(Polyhedra.Mesh($poly))
-            GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
-            GLMakie.wireframe!(ax3, mesh_poly)
+            # GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
+            # GLMakie.wireframe!(ax3.scene, mesh_poly)
+            GLMakie.mesh!(ax3.scene, mesh_poly, color=:green)
+
+            # # plot 3d ego and obs
+            hss_ego = GLMakie.lift(AA, bb) do AA, bb
+                map(1:length(be)) do i
+                    HalfSpace(-AA[i, :], bb[i])
+                end
+            end
+            hss_ego = @lift(push!($hss_ego, HalfSpace(A_bound, $b_bound)))
+            hr_ego = @lift(hrep($hss_ego)) # H-representation for polyhedron 
+            poly_ego = @lift(Polyhedra.polyhedron($hr_ego))
+            mesh_poly_ego = @lift(Polyhedra.Mesh($poly_ego))
+            GLMakie.wireframe!(ax3.scene, mesh_poly_ego, color=:blue)
+
+            hss_obs = GLMakie.lift(AA, bb) do AA, bb
+                map(length(be)+1:length(bb)) do i
+                    HalfSpace(-AA[i, :], bb[i])
+                end
+            end
+            hss_obs = @lift(push!($hss_obs, HalfSpace(A_bound, $b_bound)))
+            hr_obs = @lift(hrep($hss_obs)) # H-representation for polyhedron 
+            poly_obs = @lift(Polyhedra.polyhedron($hr_obs))
+            mesh_poly_obs = @lift(Polyhedra.Mesh($poly_obs))
+            GLMakie.wireframe!(ax3.scene, mesh_poly_obs, color=:red)
 
             # draw all intercepts on 3d
             intercept3_obs = Dict()
@@ -298,23 +377,23 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
 
     #scatter!(point, color=:red, markersize=20)
 
-    z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
+    # z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
     limits!(ax, -range_max, range_max, -range_max, range_max)
-    @lift(limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, $z_lim))
+    # @lift(limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, $z_lim))
 
     fig
 end
 
-#Ve = [[-1, -1], [-1.1, 1.2], [0.6, 0.8], [1.7, -0.5]]
-#obs_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+Ve = [[.25, -1], [.25, 1], [-.25, 1], [-.25, -1]]
+ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
 
-#Vo = [[-1, -1], [-1, 1.0], [1, 1], [1, -1]]
-#ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
+obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
 
 #x0 = [5.0, 0.0, 0.1, 0, 0, 0];
-x0 = [2.0, 0.0, π/2+.01, 0, 0, 0];
-obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
-ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+x0 = [2.0, 0.0, 2.89, 0, 0, 0];
+# obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
+# ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
 
 create_ass_playground(x0, ego_polys, obs_polys)
 

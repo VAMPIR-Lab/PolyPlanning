@@ -1,4 +1,4 @@
-function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
+function get_lagrangian(xte, Ae, be, Ao, bo, p, sd, λsd, xo)
     # min c'y
     # s.t. h - G y in K
     # KKT:
@@ -21,12 +21,12 @@ function get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
     #AA = [Ae*Q' be; Ao bo+Ao*xto]
     #bb = [-Ae * Q' * xt[1:2]; -Ao * xto]
 
-    Q = [cos(xt[3]) sin(xt[3])
-        -sin(xt[3]) cos(xt[3])]
+    Q = [cos(xte[3]) sin(xte[3])
+        -sin(xte[3]) cos(xte[3])]
     c = [0; 0; 1.0]
     #Main.@infiltrate
-    AA = [Ae*Q' be; Ao bo+Ao*xo]
-    bb = [-Ae * Q' * xt[1:2]; -Ao * xo]
+    AA = [Ae*Q' be; Ao bo]#+Ao*xo]
+    bb = [-Ae * Q' * xte[1:2]; -Ao * xo]
     y = [p; sd .- 1.0]
 
 
@@ -105,10 +105,15 @@ function setup_dcol(ego_polys;
     get_Fnom! = Symbolics.build_function(F_nom, z, x0, λ_nom, λ_dcol; expression=Val(false))[2]
     get_Jnom_vals! = Symbolics.build_function(Jnom_vals, z, x0, λ_nom, λ_dcol; expression=Val(false))[2]
 
-    col_lags = map(ego_polys) do P
-        Ae = collect(P.A)
-        be = P.b
-        get_lagrangian(xt, Ae, be, Ao, bo, p, sd, λsd, xo)
+    col_lags = map(ego_polys) do Pe
+        c = sum(Pe.V) / length(Pe.V)
+        Abe = shift_to(Pe.A, Pe.b, [-c; 0])
+        Ae = Abe[1]
+        be = Abe[2]
+        Q = [cos(xt[3]) sin(xt[3])
+            -sin(xt[3]) cos(xt[3])]
+        xte = [xt[1:2] .+ Q * c; xt[3:end]]
+        get_lagrangian(xte, Ae, be, Ao, bo, p, sd, λsd, xo) # accept shifted Ae, be and Ao, bo (centroid is at the origin)
     end
 
     get_lag = Dict()
@@ -132,8 +137,8 @@ function setup_dcol(ego_polys;
         get_Jlag[i] = (Jlag_rows, Jlag_cols, Symbolics.build_function(Jlag_vals, xt, Ao, bo, p, sd, λsd, xo; expression=Val(false))[2], zeros(length(Jlag_rows)))
     end
 
-    Aes = [deepcopy(P.A) for P in ego_polys]
-    bes = [deepcopy(P.b) for P in ego_polys]
+    # Aes = [deepcopy(P.A) for P in ego_polys]
+    # bes = [deepcopy(P.b) for P in ego_polys]
     dlag_buf = zeros(n_x)
 
     #F[xt_inds] .+= -λ_dcol .* dlag_buf
@@ -150,7 +155,7 @@ function setup_dcol(ego_polys;
             -sin(θ) cos(θ)]
         qq = [0; 0; 1.0]
 
-        AA = [Ae*Q' be; Ao bo+Ao*xto]
+        AA = [Ae*Q' be; Ao bo]
         bb = [-Ae * Q' * x; -Ao * xto]
 
         #ret = solve_qp(UseOSQPSolver(); A=sparse(AA), l=-bb, q=qq, polish=true, verbose=false) #, max_iter=100000)
@@ -207,23 +212,22 @@ function setup_dcol(ego_polys;
                 # shift ith ego poly to the origin (the method needs this)
                 c = sum(Pe.V) / length(Pe.V)
                 Abe = shift_to(Pe.A, Pe.b, [-c; 0])
-                Pe_shifted = ConvexPolygon2D(Abe[1], Abe[2])
-                Ae = Pe_shifted.A
-                be = Pe_shifted.b
-                # replace xte[1:2] with a point inside ith ego poly (the method needs this)
+                Ae = Abe[1]
+                be = Abe[2]
                 Q = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 xte = [xt[1:2] .+ Q * c; xt[3:end]]
                 #Main.@infiltrate
                 for (j, Po) in enumerate(polys)
-                    Ao = Po.A
-                    bo = Po.b
-                    xto = sum(Po.V) / length(Po.V)
+                    co = sum(Po.V) / length(Po.V)
+                    Abo = shift_to(Po.A, Po.b, [-co; 0])
+                    Ao = Abo[1]
+                    bo = Abo[2]
+                    xto = co
+
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
-                    #Ae = Aes[i]
-                    #be = bes[i]
                     (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
                     get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
 
@@ -266,23 +270,22 @@ function setup_dcol(ego_polys;
                 # shift ith ego poly to the origin (the method needs this)
                 c = sum(Pe.V) / length(Pe.V)
                 Abe = shift_to(Pe.A, Pe.b, [-c; 0])
-                Pe = ConvexPolygon2D(Abe[1], Abe[2])
-                Ae = Pe.A
-                be = Pe.b
+                Ae = Abe[1]
+                be = Abe[2]
                 # replace xte[1:2] with a point inside ith ego poly (the method needs this)
                 Q = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 xte = [xt[1:2] .+ Q * c; xt[3:end]]
-                for (j, P) in enumerate(polys)
-                    Ao = P.A
-                    bo = P.b
-                    xto = sum(P.V) / length(P.V)
+                for (j, Po) in enumerate(polys)
+                    co = sum(Po.V) / length(Po.V)
+                    Abo = shift_to(Po.A, Po.b, [-co; 0])
+                    Ao = Abo[1]
+                    bo = Abo[2]
+                    xto = co
                     dcol_inds = λ_dcol_s2i[:, j, i, t]
                     @inbounds λ_dcol = θ[dcol_inds]
 
                     # osqp solver -> sd, p, λsd
-                    Ae = Aes[i]
-                    be = bes[i]
                     (p, sd, λsd) = solve_sd(xte, Ae, be, xto, Ao, bo)
 
                     get_dlag[i](dlag_buf, xte, Ao, bo, p, sd, λsd, xto)
@@ -396,7 +399,7 @@ function visualize_dcol(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1
     (fig, update_fig, ax)
 end
 
-function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
+function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_duration=0.0)
     (; fill_F!, J_rows_cols_fill, J_example, ego_polys, l, u, T, n_z, n_xu, n_x, n_λ_nom, n_obs, z_s2i,
         λ_dcol_s2i, sides_per_poly, p1_max, p2_min) = prob
 
@@ -439,8 +442,10 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true)
         fill_F!(result, θ, x0, obs_polys)
 
         if is_displaying
-            #Main.@infiltrate
             update_fig(θ)
+            if sleep_duration > 0
+                sleep(sleep_duration)
+            end
         end
 
         Cint(0)

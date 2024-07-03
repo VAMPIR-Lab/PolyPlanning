@@ -6,18 +6,67 @@ function gen_LP_data(xt, A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs
     (A, b, q)
 end
 
-function is_ass_feasible(ass, m1, m2)
-    if_ego = false
-    if_obs = false
-    for i in ass
-        if i ∈ [i for i in 1:m1]
-            if_ego = true
-        end
-        if i ∈ [i for i in m1+1:m1+m2]
-            if_obs = true
+# function is_ass_feasible(ass, m1, m2)
+#     if_ego = false
+#     if_obs = false
+#     for i in ass
+#         if i ∈ [i for i in 1:m1]
+#             if_ego = true
+#         end
+#         if i ∈ [i for i in m1+1:m1+m2]
+#             if_obs = true
+#         end
+#     end
+#     return length(ass) == 3 && if_ego && if_obs
+# end
+
+# filter indices which are impossible to be active at the same time for one poly
+function get_possible_ass_single(A, b)
+    AA = Matrix(A)
+    bb = b
+    tol = 1e-3
+    ind = collect(1:length(bb))
+    inds = powerset(ind) |> collect
+    itr = [i for i in inds if length(i)==2]
+    feasible_inds=[]
+    for i in itr
+        try
+            xx = - AA[i,:] \ bb[i]
+            if all(AA*xx +bb .> -tol)
+                push!(feasible_inds, i)
+            end
+        catch err
+            if err isa LinearAlgebra.SingularException
+                continue
+            else
+                # @warn(err)
+            end
         end
     end
-    return length(ass) == 3 && if_ego && if_obs
+    feasible_inds
+end
+
+# enumerate possible assignments (at least one index from one poly, and at least one index from the other)
+function get_possible_ass_pair(Ae, be, Ao, bo)
+    m1 = length(be)
+    m2 = length(bo)
+    inds_e = get_possible_ass_single(Ae, be)
+    inds_o = get_possible_ass_single(Ao, bo)
+    for i in eachindex(inds_o)
+        inds_o[i] += [m1 , m1]
+    end
+    Itr=[]
+    for i in 1:m1
+        for ind in inds_o
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    for i in m1+1:m1+m2
+        for ind in inds_e
+            push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+    Itr
 end
 
 function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
@@ -29,15 +78,15 @@ function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
         -sin(xt[3]) cos(xt[3])]
     centroidex = xt[1:2] + R * centr_ego
     AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, A_obs, b_obs, centr_obs)
-    m1 = length(bex)
-    m2 = length(b_obs)
-    all_active_inds = collect(1:m1+m2)
-    Itr = powerset(all_active_inds) |> collect
-
+    # m1 = length(bex)
+    # m2 = length(b_obs)
+    # all_active_inds = collect(1:m1+m2)
+    # Itr = powerset(all_active_inds) |> collect
+    Itr = get_possible_ass_pair(A_ego, b_ego, A_obs, b_obs)
     for active_inds in Itr
-        if !is_ass_feasible(active_inds, m1, m2)
-            continue
-        end
+        # if !is_ass_feasible(active_inds, m1, m2)
+        #     continue
+        # end
 
         try
             AA_active = collect(AA[active_inds, :])
@@ -90,8 +139,8 @@ function setup_nonsmooth(
     n_side_obs = length(obs_polys[1].b)
     n_dyn_cons = T * n_x
     n_env_cons = T * n_xu
-    combin_2_from_n = n::Int -> n * (n - 1) ÷ 2
-    n_sds = (combin_2_from_n(n_side_ego) * n_side_obs + n_side_ego * combin_2_from_n(n_side_obs))
+    # combin_2_from_n = n::Int -> n * (n - 1) ÷ 2
+    # n_sds = (combin_2_from_n(n_side_ego) * n_side_obs + n_side_ego * combin_2_from_n(n_side_obs))
     n_sd_cons = T * n_ego * n_obs * n_sd_slots
 
     # assume number of sides are the same for all ego polys, obs polys
@@ -177,7 +226,13 @@ function setup_nonsmooth(
             end
         end
     end
-    #@infiltrate
+    # different ego-obs pair may have different numbers of possible assignments
+    n_sds = []
+    for (i, dic) in enumerate(sds_dict)
+        push!(n_sds, length(keys(dic[2])))
+    end
+    n_sds = maximum(n_sds)
+
     nom_cons = [dyn_cons; env_cons]
     λ_nom = Symbolics.@variables(λ_nom[1:length(nom_cons)])[1] |> Symbolics.scalarize
     λ_sd = Symbolics.@variables(λ_col[1:n_sd_cons])[1] |> Symbolics.scalarize
@@ -401,6 +456,10 @@ function setup_nonsmooth(
                         @inbounds J_vals[xt_ind, xt_ind] += J_sdlag[1:n_x, 1:n_x]
                         @inbounds J_vals[xt_ind, sd_ind] += J_sdlag[1:n_x, n_x+1]
                         @inbounds J_vals[sd_ind, xt_ind] += Jsd_buf
+                        # if maximum(J_vals) > 1e8
+                        #     @infiltrate
+                        #     # plot_xt(xt, Pe.A, Pe.b, Po.A, Po.b)
+                        # end
                     end
 
                     # update sd slot memory
@@ -408,6 +467,12 @@ function setup_nonsmooth(
                 end
             end
         end
+        # check if Jacobian has exploded
+        # @infiltrate
+        # max_val, max_ind = findmax(J_vals)
+        # min_val, min_ind = findmin(J_vals)
+        # println("max", Tuple(max_ind), "=", round(max_val; sigdigits=3), " min", Tuple(min_ind), "=", round(min_val; sigdigits=3))
+        # println("J[30,494]", J_vals[30,494])
         nothing
     end
 
@@ -583,7 +648,6 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
     #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
     #end
     #@info "Jacobian error is $(norm(Jnum2-Jnum))"
-    #@infiltrate
 
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
