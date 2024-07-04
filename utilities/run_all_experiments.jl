@@ -22,9 +22,20 @@ u1_max = 10.0
 u2_max = 10.0
 u3_max = π
 
+@info "Running simple gap experiment..."
 include("run_simple_gap_exp.jl")
+
+@info "Running Simple packing experiment..."
 include("run_simple_packing_exp.jl")
+
+@info "Running Piano experiment..."
 include("run_piano_exp.jl")
+
+@info "Running Random packing experiment..."
 include("run_random_packing_exp.jl")
+
+@info "Running L through gap experiment..."
 include("run_L_through_gap_exp.jl")
+
+@info "Running Random L packing experiment..."
 include("run_random_L_packing_exp.jl")
