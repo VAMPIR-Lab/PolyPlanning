@@ -4,32 +4,32 @@ using Dates
 using GLMakie
 
 # user options
-is_saving = true
-is_running_sep = false
-is_running_dcol = true
+#is_saving = true
+#is_running_sep = false
+#is_running_dcol = true
 is_running_kkt = false
-is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-06-25_1105"
-res_file_date = "2024-06-25_1105"
+#is_loading_exp = false # skip experiment generation and load from file
+#is_loading_res = false  # skip compute and load from file
+#exp_file_date = "2024-06-25_1105"
+#res_file_date = "2024-06-25_1105"
 exp_name = "simple_gap"
-data_dir = "data"
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
+#data_dir = "data"
+#date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 3 # number of maps
-n_x0s = 30 # number of initial conditions
+n_maps = 5 # number of maps
+n_x0s = 200 # number of initial conditions
 n_sides = 4 # 
 n_obs = 2
-n_xu = 9 # 6-state variable + control variable
-T = 20 # timestep
-dt = 0.2 #
-Rf = 1e-3 * PolyPlanning.I(3); # penalty for control variable
-Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
-u1_max = 10.0
-u2_max = 10.0
-u3_max = π
+#n_xu = 9 # 6-state variable + control variable
+#T = 20 # timestep
+#dt = 0.2 #
+#Rf = 1e-3 * PolyPlanning.I(3); # penalty for control variable
+#Rf[3, 3] = Rf[3, 3] / 100.0;
+#Qf = 2e-3 * PolyPlanning.I(2) # penalty for translation
+#u1_max = 10.0
+#u2_max = 10.0
+#u3_max = π
 init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
@@ -37,7 +37,7 @@ init_y_disturb_max = 1.0
 ego_width = 0.5
 ego_length = 2.0
 gap_min = ego_width + 0.1
-gap_max = ego_width * 2
+gap_max = 3 * ego_width 
 gap_array = collect(gap_min : (gap_max-gap_min) / (n_maps-1) : gap_max)
 gap_offset = 2.5
 if is_loading_exp || is_loading_res

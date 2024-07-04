@@ -3,32 +3,33 @@ using JLD2
 using Dates
 
 # user options
-is_saving = true
-is_running_sep = true
-is_running_dcol = true
-is_running_kkt = true
-is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-05-30_2351"
-res_file_date = "2024-05-30_2351"
+#is_saving = true
+#is_running_sep = true
+#is_running_dcol = true
+is_running_kkt = false
+#is_loading_exp = false # skip experiment generation and load from file
+#is_loading_res = false  # skip compute and load from file
+#exp_file_date = "2024-05-30_2351"
+#res_file_date = "2024-05-30_2351"
 exp_name = "random_L_packing"
-data_dir = "data"
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
+#data_dir = "data"
+#date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
 n_maps = 10
-n_x0s = 30
+n_x0s = 100
 n_sides = 4
 n_obs = 3
-n_xu = 9
-T = 20
-dt = 0.2
-Rf = 1e-3 * PolyPlanning.I(3);
-Rf[3, 3] = Rf[3, 3] / 100.0;
-Qf = 5e-3 * PolyPlanning.I(2)
-u1_max = 10.0
-u2_max = 10.0
-u3_max = π
+#n_xu = 9
+#T = 20
+#dt = 0.2
+#Rf = 1e-3 * PolyPlanning.I(3);
+#Rf[3, 3] = Rf[3, 3] / 100.0;
+#Qf = 5e-3 * PolyPlanning.I(2)
+#u1_max = 10.0
+#u2_max = 10.0
+#u3_max = π
+ego_a = 0.5
 init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
@@ -39,7 +40,7 @@ wall_l = 5.0
 if is_loading_exp
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
-    @assert init_x_mean - init_x_disturb_max >= wall_w
+    @assert init_x_mean - init_x_disturb_max - 4 * ego_a >= wall_w
 
     param = (;
         n_maps,
@@ -65,7 +66,7 @@ else # generate ego_poly, x0s and maps
         exp_name
     )
 
-    ego_poly = PolyPlanning.gen_ego_L()
+    ego_poly = PolyPlanning.gen_ego_L(; a=ego_a)
 
     x0s = map(1:n_x0s) do i
         init_x = init_x_mean - init_x_disturb_max + 2 * init_x_disturb_max * rand()
