@@ -108,7 +108,7 @@ function if_ass_feasible(ass, m1, m2)
 end
 
 
-function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido; is_newsd=false)
+function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido)
     sds = Dict()
     Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
     R = [cos(xt[3]) sin(xt[3])
@@ -386,16 +386,19 @@ end
 
 Ve = [[.25, -1], [.25, 1], [-.25, 1], [-.25, -1]]
 ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
-
 Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
 obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
+x0 = [0.0, 0.0, 0, 0, 0, 0]
 
-#x0 = [5.0, 0.0, 0.1, 0, 0, 0];
-x0 = [2.0, 0.0, 2.89, 0, 0, 0];
-# obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
-# ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
+# Ve = [[.5, -.5], [.5, .5], [-.5, .5], [-.5, -.5]]
+# ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+# Vo = [[.5, -.5], [.5, .5], [-.5, .5], [-.5, -.5]]
+# obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
+# x0 = [2.0, .0, 0.1*π/4, 0, 0, 0]
 
-create_ass_playground(x0, ego_polys, obs_polys)
+
+fig = create_ass_playground(x0, ego_polys, obs_polys)
+# GLMakie.save("./plots/playground.png", fig)
 
 #obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
 #ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
