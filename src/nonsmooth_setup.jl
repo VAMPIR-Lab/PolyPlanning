@@ -1,4 +1,4 @@
-function gen_LP_data(xt, A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
+function gen_LP_data(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
     A = [A_ego A_ego*centr_ego+b_ego
         A_obs A_obs*centr_obs+b_obs]
     b = [b_ego; b_obs]
@@ -21,10 +21,9 @@ end
 # end
 
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_ass_single(A, b)
+function get_possible_ass_single(A, b; tol = 1e-4)
     AA = Matrix(A)
     bb = b
-    tol = 1e-3
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
     itr = [i for i in inds if length(i)==2]
@@ -53,7 +52,7 @@ function get_possible_ass_pair(Ae, be, Ao, bo)
     inds_e = get_possible_ass_single(Ae, be)
     inds_o = get_possible_ass_single(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 , m1]
+        inds_o[i] += [m1 ,m1]
     end
     Itr=[]
     for i in 1:m1
@@ -77,7 +76,7 @@ function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
     R = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     centroidex = xt[1:2] + R * centr_ego
-    AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, A_obs, b_obs, centr_obs)
+    AA, bb, qq = gen_LP_data(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
     # m1 = length(bex)
     # m2 = length(b_obs)
     # all_active_inds = collect(1:m1+m2)

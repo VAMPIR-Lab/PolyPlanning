@@ -231,8 +231,30 @@ function plot_xt(xt, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspe
     display(GLMakie.Screen(), fig)
     (fig, ax)
 end
-# PolyPlanning.plot_inflated(x0, Pe.A, Pe.b, Po.A, Po.b, [.675, 2.45], 1.7)
-function plot_inflated(xt, Ae, be, Ao, bo, p_intercept, sd; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))
+
+function solve_lp(AA, bb, qq)
+    ## use JuMP and Clp solver
+    model = JuMP.Model(Clp.Optimizer)
+    JuMP.set_attribute(model, "LogLevel", 0) # disable printing log
+    JuMP.@variable(model, xx[1:3])
+    JuMP.@constraint(model, constraint, AA * xx + bb .>= 0)
+    JuMP.@objective(model, Min, qq' * xx)
+    JuMP.optimize!(model)
+
+    status = JuMP.termination_status(model)
+    if status != OPTIMAL
+        @warn status
+        @infiltrate
+    else
+        primals = JuMP.value.(xx)
+        duals = JuMP.dual.(constraint)
+        cons = AA * primals + bb
+    end
+    primals, duals, cons
+end
+
+# PolyPlanning.plot_inflated(x0, Pe.A, Pe.b, Po.A, Po.b)
+function plot_inflated(xt, Ae, be, Ao, bo; p_intercept=nothing, sd=nothing, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()))
     xx = xt[1:3]
     Aex, bex = shift_to(Ae, be, xx)
     self_poly = ConvexPolygon2D(Aex, bex)
@@ -242,6 +264,13 @@ function plot_inflated(xt, Ae, be, Ao, bo, p_intercept, sd; fig=Figure(), ax=Axi
     centroido = sum(obs_poly.V)/length(obs_poly.V)
     plot!(ax, obs_poly; color=:red)
     
+    if isnothing(sd)
+        AA, bb, qq = gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
+        primals = solve_lp(AA, bb, qq)[1]
+        p_intercept = primals[1:2]
+        sd = primals[3]
+    end
+
     # draw inflated
     be_inflated = bex + sd * (Aex * centroidex + bex)
     bo_inflated = bo + sd * (Ao * centroido + bo)
@@ -254,7 +283,9 @@ function plot_inflated(xt, Ae, be, Ao, bo, p_intercept, sd; fig=Figure(), ax=Axi
     # draw the intercept and centroids
     scatter!(ax, centroidex[1], centroidex[2]; color=:blue)
     scatter!(ax, centroido[1], centroido[2]; color=:red)
-    scatter!(ax, p_intercept[1], p_intercept[2]; color=:green)
+    if !isnothing(p_intercept)
+        scatter!(ax, p_intercept[1], p_intercept[2]; color=:green)
+    end
 
     display(GLMakie.Screen(), fig)
     (fig, ax)
