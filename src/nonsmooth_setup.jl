@@ -1,4 +1,4 @@
-function gen_LP_data(xt, A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
+function gen_LP_data(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
     A = [A_ego A_ego*centr_ego+b_ego
         A_obs A_obs*centr_obs+b_obs]
     b = [b_ego; b_obs]
@@ -21,10 +21,9 @@ end
 # end
 
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_ass_single(A, b)
+function get_possible_ass_single(A, b; tol = 1e-4)
     AA = Matrix(A)
     bb = b
-    tol = 1e-3
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
     itr = [i for i in inds if length(i)==2]
@@ -53,7 +52,7 @@ function get_possible_ass_pair(Ae, be, Ao, bo)
     inds_e = get_possible_ass_single(Ae, be)
     inds_o = get_possible_ass_single(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 , m1]
+        inds_o[i] += [m1 ,m1]
     end
     Itr=[]
     for i in 1:m1
@@ -77,7 +76,7 @@ function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
     R = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     centroidex = xt[1:2] + R * centr_ego
-    AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, A_obs, b_obs, centr_obs)
+    AA, bb, qq = gen_LP_data(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
     # m1 = length(bex)
     # m2 = length(b_obs)
     # all_active_inds = collect(1:m1+m2)
@@ -135,8 +134,10 @@ function setup_nonsmooth(
     n_z = T * n_xu
     n_ego = length(ego_polys)
     n_obs = length(obs_polys)
-    n_side_ego = length(ego_polys[1].b)
-    n_side_obs = length(obs_polys[1].b)
+    # n_side_ego = length(ego_polys[1].b)
+    # n_side_obs = length(obs_polys[1].b)
+    n_side_ego = maximum([length(i.b) for i in ego_polys])
+    n_side_obs = maximum([length(i.b) for i in obs_polys])
     n_dyn_cons = T * n_x
     n_env_cons = T * n_xu
     # combin_2_from_n = n::Int -> n * (n - 1) ÷ 2
@@ -144,8 +145,8 @@ function setup_nonsmooth(
     n_sd_cons = T * n_ego * n_obs * n_sd_slots
 
     # assume number of sides are the same for all ego polys, obs polys
-    @assert all([length(ego_polys[i].b) for i in 1:n_ego] .== n_side_ego)
-    @assert all([length(obs_polys[i].b) for i in 1:n_obs] .== n_side_obs)
+    # @assert all([length(ego_polys[i].b) for i in 1:n_ego] .== n_side_ego)
+    # @assert all([length(obs_polys[i].b) for i in 1:n_obs] .== n_side_obs)
 
     # θ indexing
     z_s2i, dyn_cons_s2i, env_cons_s2i, sd_cons_s2i = get_sub2idxs((n_xu, T), (n_dyn_cons), (n_env_cons), (n_sd_slots, n_obs, n_ego, T))
@@ -200,8 +201,8 @@ function setup_nonsmooth(
             intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
 
             get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
-            get_intercepts[i, j] = Symbolics.build_function(intercepts_vals, xt; expression=Val(false))[2]
-            get_AA[i, j] = Symbolics.build_function(AA, xt; expression=Val(false))[2]
+            get_intercepts[i, j] = Symbolics.build_function(intercepts_vals', xt; expression=Val(false))[2]
+            get_AA[i, j] = Symbolics.build_function(AA', xt; expression=Val(false))[2]
             get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
 
             # for each assignment
@@ -275,19 +276,25 @@ function setup_nonsmooth(
     get_Jnom_vals! = Symbolics.build_function(Jnom_vals, z, x0, λ_nom; expression=Val(false))[2]
 
     # sort sds and intercepts for given xt
-    sds_buffer = zeros(n_sds)
-    intercept_buffer = zeros(n_sds, 2)
-    AA_buffer = zeros(n_side_ego + n_side_obs, 3)
-    bb_buffer = zeros(n_side_ego + n_side_obs)
+    sds_buffer_full = zeros(n_sds)
+    intercept_buffer_full = zeros(2, n_sds)
+    AA_buffer_full = zeros(3, n_side_ego + n_side_obs)
+    bb_buffer_full = zeros(n_side_ego + n_side_obs)
     sd_lag_buf = zeros(n_x)
 
-    function get_sorted_sds(i, j, xt; tol=1e-4, local_factor=1.5)
+    function get_sorted_sds(i, m1, j, m2, xt; tol=1e-4, local_factor=1.5)
         assignments = sds_keys[i, j]
-        get_sds[i, j](sds_buffer, xt)
-        get_intercepts[i, j](intercept_buffer, xt)
-        get_AA[i, j](AA_buffer, xt)
-        get_bb[i, j](bb_buffer, xt)
-
+        get_sds[i, j](sds_buffer_full, xt)
+        get_intercepts[i, j](intercept_buffer_full, xt)
+        get_AA[i, j](AA_buffer_full, xt)
+        get_bb[i, j](bb_buffer_full, xt)
+        
+        # if the size of buffer is larger than what the function returns, it is filled by column, so here AA and intercept is transposed
+        n_ass = length(assignments)
+        sds_buffer = sds_buffer_full[1:n_ass]
+        intercept_buffer = intercept_buffer_full'[1:n_ass, :]
+        AA_buffer = AA_buffer_full'[1:m1+m2, :]
+        bb_buffer = bb_buffer_full[1:m1+m2]
         # tol = 1e-4
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .>= -1.0 - tol
@@ -364,7 +371,7 @@ function setup_nonsmooth(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
+                    (sorted_sds, sorted_ass) = get_sorted_sds(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
@@ -431,7 +438,7 @@ function setup_nonsmooth(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    (sorted_sds, sorted_ass) = get_sorted_sds(i, j, xt)
+                    (sorted_sds, sorted_ass) = get_sorted_sds(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
