@@ -22,6 +22,8 @@ u1_max = 10.0
 u2_max = 10.0
 u3_max = π
 
+@info date_now
+
 @info "Running simple gap experiment..."
 include("run_simple_gap_exp.jl")
 

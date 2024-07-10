@@ -18,4 +18,4 @@ kkt_prob = PolyPlanning.setup_direct_kkt(
     u3_max=π
 );
 
-kkt_sol = PolyPlanning.solve_prob_direct_kkt(kkt_prob, x0; is_displaying=true)
+kkt_sol = PolyPlanning.solve_prob_direct_kkt(kkt_prob, x0; is_displaying=true, sleep_duration=0.25)
