@@ -101,25 +101,25 @@ end
 our_bins = []
 if is_running_ours
     our_bins = PolyPlanning.process_into_bins(our_sols)
-    @info "$(length(our_bins.success.idx)/(length(our_sols))*100)% our success rate"
+    #@info "$(length(our_bins.success.idx)/(length(our_sols))*100)% our success rate"
 end
 
 sep_bins = []
 if is_running_sep
     sep_bins = PolyPlanning.process_into_bins(sep_sols)
-    @info "$(length(sep_bins.success.idx)/(length(sep_sols))*100)% sep success rate"
+    #@info "$(length(sep_bins.success.idx)/(length(sep_sols))*100)% sep success rate"
 end
 
 dcol_bins = []
 if is_running_dcol
     dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
-    @info "$(length(dcol_bins.success.idx)/(length(dcol_sols))*100)% dcol success rate"
+    #@info "$(length(dcol_bins.success.idx)/(length(dcol_sols))*100)% dcol success rate"
 end
 
 kkt_bins = []
 if is_running_kkt
     kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
-    @info "$(length(kkt_bins.success.idx)/(length(kkt_sols))*100)% kkt success rate"
+    #@info "$(length(kkt_bins.success.idx)/(length(kkt_sols))*100)% kkt success rate"
 end
 
 # tables

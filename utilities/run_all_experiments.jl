@@ -24,8 +24,8 @@ u3_max = π
 
 @info date_now
 
-#@info "Running Simple packing experiment..."
-#include("run_simple_packing_exp.jl")
+@info "Running Simple packing experiment..."
+include("run_simple_packing_exp.jl")
 
 @info "Running simple gap experiment..."
 include("run_simple_gap_exp.jl")
