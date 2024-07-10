@@ -135,6 +135,23 @@ function gen_gap(; width=1.25, length=0.25, xs=-3.0)
     [p1 p2]
 end
 
+## P1 
+## ### P2
+##
+function gen_T_obstacle(; base_width=2.0, width=1.0, length=1.0)
+    wall_width = 1.0
+    #w = base_width / 2
+
+    P1_top_left = [0, base_width / 2]
+    P2_top_left = [wall_width, width / 2]
+
+    P1 = ConvexPolygon2D([P1_top_left, P1_top_left + [wall_width, 0], P1_top_left + [wall_width, -base_width], P1_top_left + [0, -base_width]])
+    P2 = ConvexPolygon2D([P2_top_left, P2_top_left + [length, 0], P2_top_left + [length, -width], P2_top_left + [0, -width]])
+
+    [P1 P2]
+end
+
+
 #  ___    [  P1  ]
 #| P2 |_______     | w
 # ___| ___P3 |
@@ -207,7 +224,7 @@ function gen_polys(N; side_length=4)
 end
 
 function gen_rect_obs(; a=0.25, b=5 * a, x_shift=0.0)
-    offset = 0*a / 20
+    offset = 0 * a / 20
     P = ConvexPolygon2D([[x_shift, -b], [x_shift, b], [-a, b + offset], [-a, -b - offset]])
     [P]
 end
@@ -220,7 +237,7 @@ end
 # |______|  
 # <-----> b
 function gen_ego_rect(; a=0.5, b=1.0)
-    offset = 0*a / 20
+    offset = 0 * a / 20
     P = ConvexPolygon2D([[0, 0], [0, a + offset], [b - offset, a], [b, 0]])
 
     # shift center of mass to the origin

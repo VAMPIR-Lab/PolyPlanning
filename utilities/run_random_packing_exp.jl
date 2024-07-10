@@ -30,6 +30,7 @@ n_obs = 4
 #u1_max = 10.0
 #u2_max = 10.0
 #u3_max = π
+n_sd_slots = 4
 init_x_mean = 6.0
 init_y_mean = 0.0
 init_x_disturb_max = 1.0
@@ -42,7 +43,7 @@ ego_length = 2.0
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
-    @assert init_x_mean - init_x_disturb_max >= wall_w
+    @assert init_x_mean - init_x_disturb_max - ego_length >= wall_w
 
     param = (;
         n_maps,
@@ -57,6 +58,7 @@ else # generate ego_poly, x0s and maps
         u1_max,
         u2_max,
         u3_max,
+        n_sd_slots,
         init_x_mean,
         init_y_mean,
         init_x_disturb_max,
@@ -99,38 +101,38 @@ end
 our_bins = []
 if is_running_ours
     our_bins = PolyPlanning.process_into_bins(our_sols)
-    @info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+    @info "$(length(our_bins.success.idx)/(length(our_sols))*100)% our success rate"
 end
 
 sep_bins = []
 if is_running_sep
     sep_bins = PolyPlanning.process_into_bins(sep_sols)
-    @info "$(length(sep_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+    @info "$(length(sep_bins.success.idx)/(length(sep_sols))*100)% sep success rate"
 end
 
 dcol_bins = []
 if is_running_dcol
     dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
-    @info "$(length(dcol_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% dcol success rate"
+    @info "$(length(dcol_bins.success.idx)/(length(dcol_sols))*100)% dcol success rate"
 end
 
 kkt_bins = []
 if is_running_kkt
     kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
-    @info "$(length(kkt_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
+    @info "$(length(kkt_bins.success.idx)/(length(kkt_sols))*100)% kkt success rate"
 end
 
 # tables
-if is_running_ours 
+if is_running_ours
     if is_running_sep
-        PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
+        PolyPlanning.print_stats(our_bins, sep_bins, length(our_sols); name="ours", ref_name="sep")
     end
 
     if is_running_dcol
-        PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
+        PolyPlanning.print_stats(our_bins, dcol_bins, length(our_sols); name="ours", ref_name="dcol")
     end
 
     if is_running_kkt
-        PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
+        PolyPlanning.print_stats(our_bins, kkt_bins, length(our_sols); name="ours", ref_name="kkt")
     end
 end
