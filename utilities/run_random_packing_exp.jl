@@ -38,8 +38,6 @@ wall_l = 5.0
 ego_width = 0.5
 ego_length = 2.0
 
-date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
-
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
