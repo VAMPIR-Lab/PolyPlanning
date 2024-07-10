@@ -126,7 +126,6 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
             param.u2_max,
             param.u3_max
         )
-        @info i
 
         for (j, x0) in enumerate(x0s)
             res = solve_prob_direct_kkt(prob, x0; is_displaying=false)
@@ -135,18 +134,23 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
             cost = f(res.z, param.T, param.Rf, param.Qf)
             final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
             sols[i, j] = (; mcp_success, time, cost, final_pos, res)
+            @info j
             next!(p)
         end
     end
     sols
 end
 
-function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
+function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_ours=true, is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
-    our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
-    our_sols = our_file["our_sols"]
+    our_sols = []
     sep_sols = []
+    dcol_sols = []
     kkt_sols = []
+    if is_loading_ours
+        our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
+        our_sols = our_file["our_sols"]
+    end
     if is_loading_sep
         sep_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(res_file_date).jld2", "r")
         sep_sols = sep_file["sep_sols"]
@@ -165,16 +169,19 @@ function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false
     (our_sols, sep_sols, dcol_sols, kkt_sols)
 end
 
-function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
+function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_ours=true, is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
     #n_maps = length(maps)
     #n_x0s = length(x0s)
-    @info "Computing nonsmooth solutions..."
-    start_t = time()
-    our_sols = multi_solve_nonsmooth(ego_poly, x0s, maps, param)
-    @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
+    our_sols = []
+    if is_running_ours
+        @info "Computing nonsmooth solutions..."
+        start_t = time()
+        our_sols = multi_solve_nonsmooth(ego_poly, x0s, maps, param)
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
 
-    if is_saving
-        jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(date_now).jld2"; our_sols)
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(date_now).jld2"; our_sols)
+        end
     end
 
     sep_sols = []
@@ -281,7 +288,7 @@ function get_mean_std_CI(v)
     end
 end
 
-function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin", sigdigits=3)
 
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
@@ -306,7 +313,7 @@ function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin"
     #end
 end
 
-function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=3)
 
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100

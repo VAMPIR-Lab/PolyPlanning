@@ -5,6 +5,7 @@ using GLMakie
 
 # user options
 #is_saving = true
+#is_running_ours = true 
 #is_running_sep = false
 #is_running_dcol = true
 is_running_kkt = false
@@ -37,8 +38,8 @@ init_y_disturb_max = 1.0
 ego_width = 0.5
 ego_length = 2.0
 gap_min = ego_width + 0.1
-gap_max = 3 * ego_width 
-gap_array = collect(gap_min : (gap_max-gap_min) / (n_maps-1) : gap_max)
+gap_max = 3 * ego_width
+gap_array = collect(gap_min:(gap_max-gap_min)/(n_maps-1):gap_max)
 gap_offset = 2.5
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
@@ -94,14 +95,17 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_ours=is_running_ours, is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date, is_running_ours, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
 
 # process
-our_bins = PolyPlanning.process_into_bins(our_sols)
-@info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+our_bins = []
+if is_running_ours
+    our_bins = PolyPlanning.process_into_bins(our_sols)
+    @info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+end
 
 sep_bins = []
 if is_running_sep
@@ -122,14 +126,16 @@ if is_running_kkt
 end
 
 # tables
-if is_running_sep
-    PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
-end
+if is_running_ours
+    if is_running_sep
+        PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
+    end
 
-if is_running_dcol
-    PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
-end
+    if is_running_dcol
+        PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
+    end
 
-if is_running_kkt
-    PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
+    if is_running_kkt
+        PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
+    end
 end

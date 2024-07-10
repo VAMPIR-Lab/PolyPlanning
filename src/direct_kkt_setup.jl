@@ -31,7 +31,7 @@ function get_direct_kkt_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
                 R = [cos(xt[3]) sin(xt[3])
                     -sin(xt[3]) cos(xt[3])]
                 centroidex = xt[1:2] + R * centroide
-                AA, bb, qq = gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido)
+                AA, bb, qq = gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
                 #AA, bb, qq = gen_LP_data(Aex, bex, Ao, bo)
 
                 push!(cons_kkt, λt' * (AA * xxt + bb)) # = 0 (1)

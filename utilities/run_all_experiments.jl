@@ -3,13 +3,13 @@ using PolyPlanning
 
 # these turned out to be common settings in between experiments
 is_saving = true
+is_running_ours = true
 is_running_sep = true
 is_running_dcol = true
-is_loading_exp = false # skip experiment generation and load from file
-is_loading_res = false  # skip compute and load from file
-exp_file_date = "2024-06-21_1348"
-res_file_date = "2024-06-17_1454"
-exp_name = "simple_packing"
+is_loading_exp = true # skip experiment generation and load from file
+is_loading_res = true  # skip compute and load from file
+exp_file_date = "2024-07-04_0428"
+res_file_date = "2024-07-04_0428"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 n_xu = 9
@@ -24,11 +24,11 @@ u3_max = π
 
 @info date_now
 
+#@info "Running Simple packing experiment..."
+#include("run_simple_packing_exp.jl")
+
 @info "Running simple gap experiment..."
 include("run_simple_gap_exp.jl")
-
-@info "Running Simple packing experiment..."
-include("run_simple_packing_exp.jl")
 
 @info "Running Piano experiment..."
 include("run_piano_exp.jl")
