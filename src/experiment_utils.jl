@@ -260,7 +260,7 @@ function merge_results(exp_name, exp_file_date_1, res_file_date_1, exp_file_date
     (x0s_merged, maps_merged, our_sols_merged, sep_sols_merged, dcol_sols_merged, kkt_sols_merged)
 end
 
-function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_ours=false,is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
+function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_ours=false, is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
     #n_maps = length(maps)
     #n_x0s = length(x0s)
     our_sols = []
@@ -379,8 +379,23 @@ function get_mean_std_CI(v)
     end
 end
 
-function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=3)
+function print_stats(bin, n_samples; name="bin", sigdigits=5)
+    bin_success_percent = length(bin.success.idx) / n_samples * 100
+    bin_fail_percent = length(bin.fail.idx) / n_samples * 100
 
+    println("---")
+    println("$name  success     ct")
+    println("       $(round(bin_success_percent; sigdigits=3))%    $(length(bin.success.idx))")
+    #println("fail       $(round(bin_fail_percent; sigdigits=3))%    $(length(bin.fail.idx))")
+
+    time_stats = get_mean_std_CI(bin.success.time)
+    cost_stats = get_mean_std_CI(bin.success.cost)
+    println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits=2))")
+    println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits=2))")
+end
+
+
+function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=5)
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
 
@@ -391,18 +406,17 @@ function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", si
     ref_fail_percent = length(ref_bin.fail.idx) / n_samples * 100
     both_fail_percent = length(common_fail.idx) / n_samples * 100
 
-
     println("           $name     $ref_name     both    both(ct)")
-    println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
+    println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits=3))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
     println("fail       $(round(bin_fail_percent; sigdigits))%    $(round(ref_fail_percent; sigdigits))%    $(round(both_fail_percent; sigdigits))%    $(length(common_fail.idx))")
 
-    time_stats = get_mean_std_CI(bin.success.time)
-    cost_stats = get_mean_std_CI(bin.success.cost)
-    ref_time_stats = get_mean_std_CI(ref_bin.success.time)
-    ref_cost_stats = get_mean_std_CI(ref_bin.success.cost)
-    println("       $name successes     $ref_name successes")
-    println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits))     $(round.(ref_time_stats.mean; sigdigits)) ± $(round.(ref_time_stats.CI; sigdigits))")
-    println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits))     $(round.(ref_cost_stats.mean; sigdigits)) ± $(round.(ref_cost_stats.CI; sigdigits))")
+    #time_stats = get_mean_std_CI(bin.success.time)
+    #cost_stats = get_mean_std_CI(bin.success.cost)
+    #ref_time_stats = get_mean_std_CI(ref_bin.success.time)
+    #ref_cost_stats = get_mean_std_CI(ref_bin.success.cost)
+    #println("       $name successes     $ref_name successes")
+    #println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits))     $(round.(ref_time_stats.mean; sigdigits)) ± $(round.(ref_time_stats.CI; sigdigits))")
+    #println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits))     $(round.(ref_cost_stats.mean; sigdigits)) ± $(round.(ref_cost_stats.CI; sigdigits))")
 
     if length(common_success.idx) > 0
         print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
@@ -413,7 +427,7 @@ function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", si
     #end
 end
 
-function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=3)
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=2)
 
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100

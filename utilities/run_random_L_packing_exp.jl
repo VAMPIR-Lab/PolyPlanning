@@ -121,6 +121,22 @@ end
 
 # tables
 if is_running_ours
+    PolyPlanning.print_stats(our_bins, length(our_sols); name="ours")
+end
+
+if is_running_sep
+    PolyPlanning.print_stats(sep_bins, length(sep_sols); name="sep")
+end
+
+if is_running_dcol
+    PolyPlanning.print_stats(dcol_bins, length(dcol_sols); name="dcol")
+end
+
+if is_running_kkt
+    PolyPlanning.print_stats(kkt_bins, length(kkt_sols); name="kkt")
+end
+
+if is_running_ours
     if is_running_sep
         PolyPlanning.print_stats(our_bins, sep_bins, length(our_sols); name="ours", ref_name="sep")
     end
