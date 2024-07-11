@@ -60,7 +60,7 @@ function get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido)
     R = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     centroidex = xt[1:2] + R * centroide
-    AA, bb, qq = PolyPlanning.gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido)
+    AA, bb, qq = PolyPlanning.gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
     #@infiltrate
     m1 = length(bex)
     m2 = length(bo)
@@ -114,7 +114,7 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido)
     R = [cos(xt[3]) sin(xt[3])
         -sin(xt[3]) cos(xt[3])]
     centroidex = xt[1:2] + R * centroide
-    AA, bb, qq = PolyPlanning.gen_LP_data(xt, Aex, bex, centroidex, Ao, bo, centroido)
+    AA, bb, qq = PolyPlanning.gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
     m1 = length(bex)
     m2 = length(bo)
 
@@ -245,7 +245,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             #@infiltrate
             sds_etc = @lift(g_col_single($x, Ae, be, centroide, Ao, bo, centroido))
 
-            AAbb = @lift(PolyPlanning.gen_LP_data($x, $Ae_shifted, $be_shifted, $centroidex, Ao, bo, centroido))
+            AAbb = @lift(PolyPlanning.gen_LP_data($Ae_shifted, $be_shifted, $centroidex, Ao, bo, centroido))
             AA = GLMakie.lift(x -> x[1], AAbb)
             bb = GLMakie.lift(x -> x[2], AAbb)
             #@infiltrate

@@ -395,7 +395,7 @@ function print_stats(bin, n_samples; name="bin", sigdigits=5)
 end
 
 
-function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=5)
+function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=3)
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
 
@@ -407,7 +407,7 @@ function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", si
     both_fail_percent = length(common_fail.idx) / n_samples * 100
 
     println("           $name     $ref_name     both    both(ct)")
-    println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits=3))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
+    println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
     println("fail       $(round(bin_fail_percent; sigdigits))%    $(round(ref_fail_percent; sigdigits))%    $(round(both_fail_percent; sigdigits))%    $(length(common_fail.idx))")
 
     #time_stats = get_mean_std_CI(bin.success.time)
@@ -427,7 +427,7 @@ function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", si
     #end
 end
 
-function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_bin", sigdigits=5)
 
     abs_Δ_time = get_mean_std_CI(time - ref_time)
     rel_Δ_time = abs_Δ_time.mean ./ mean(ref_time) * 100
@@ -438,10 +438,10 @@ function print_table(time, ref_time, cost, ref_cost; name="bin", ref_name="ref_b
     rel_Δ_cost_CI = abs_Δ_cost.CI ./ mean(ref_cost) * 100
 
     println("              mean    CI ")
-    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits)) ± $(round.(abs_Δ_time.CI; sigdigits))")
-    println("time rel Δ    $(round.(rel_Δ_time; sigdigits))% ± $(round.(rel_Δ_time_CI; sigdigits))%  ")
-    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits)) ± $(round.(abs_Δ_cost.CI; sigdigits))")
-    println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits))% ± $(round.(rel_Δ_cost_CI; sigdigits))%  ")
+    println("time abs Δ    $(round.(abs_Δ_time.mean; sigdigits)) ± $(round.(abs_Δ_time.CI; sigdigits=2))")
+    println("time rel Δ    $(round.(rel_Δ_time; sigdigits))% ± $(round.(rel_Δ_time_CI; sigdigits=2))%  ")
+    println("cost abs Δ    $(round.(abs_Δ_cost.mean; sigdigits)) ± $(round.(abs_Δ_cost.CI; sigdigits=2))")
+    println("cost rel Δ    $(round.(rel_Δ_cost; sigdigits))% ± $(round.(rel_Δ_cost_CI; sigdigits=2))%  ")
 
     time_stats = get_mean_std_CI(time)
     ref_time_stats = get_mean_std_CI(ref_time)
