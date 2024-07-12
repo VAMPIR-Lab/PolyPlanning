@@ -108,56 +108,56 @@ function if_ass_feasible(ass, m1, m2)
 end
 
 
-function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido)
-    sds = Dict()
-    Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
-    R = [cos(xt[3]) sin(xt[3])
-        -sin(xt[3]) cos(xt[3])]
-    centroidex = xt[1:2] + R * centroide
-    AA, bb, qq = PolyPlanning.gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
-    m1 = length(bex)
-    m2 = length(bo)
+#function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido)
+#    sds = Dict()
+#    Aex, bex = PolyPlanning.shift_to(Ae, be, xt)
+#    R = [cos(xt[3]) sin(xt[3])
+#        -sin(xt[3]) cos(xt[3])]
+#    centroidex = xt[1:2] + R * centroide
+#    AA, bb, qq = PolyPlanning.gen_LP_data(Aex, bex, centroidex, Ao, bo, centroido)
+#    m1 = length(bex)
+#    m2 = length(bo)
 
-    # get 32 assignments for 2 quadrilaterals
-    Itr = get_possible_assignments(Ae, be, Ao, bo)
+#    # get 32 assignments for 2 quadrilaterals
+#    Itr = get_possible_assignments(Ae, be, Ao, bo)
     
-    # get 48 assignments for 2 quadrilaterals
-    # all_active_inds = collect(1:m1+m2)
-    # Itr = powerset(all_active_inds) |> collect
-    # Itr_reduced = []
-    # for ass in Itr
-    #     if if_ass_feasible(ass, m1, m2)
-    #         push!(Itr_reduced, ass)
-    #     end
-    # end
-    # Itr = copy(Itr_reduced)
-    for active_inds in Itr
-        #length(active_inds) > 3 && continue
-        #assignment = [i ∈ active_inds for i in 1:m1+m2]
-        try
-            AA_active = collect(AA[active_inds, :])
-            bb_active = collect(bb[active_inds])
-            # TODO what if not unique primal? Need to resolve
-            if length(active_inds) == 3
-                zz = -AA_active \ bb_active
-                #zz = -(AA_active'*AA_active)\AA_active'*bb_active
-            else
-                #if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
-                #Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
-                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
-            end
-            sd = zz#[3]
-            sds[active_inds] = sd
-        catch err
-            if err isa LinearAlgebra.SingularException
-                continue
-            else
-                @warn(err)
-            end
-        end
-    end
-    sds
-end
+#    # get 48 assignments for 2 quadrilaterals
+#    # all_active_inds = collect(1:m1+m2)
+#    # Itr = powerset(all_active_inds) |> collect
+#    # Itr_reduced = []
+#    # for ass in Itr
+#    #     if if_ass_feasible(ass, m1, m2)
+#    #         push!(Itr_reduced, ass)
+#    #     end
+#    # end
+#    # Itr = copy(Itr_reduced)
+#    for active_inds in Itr
+#        #length(active_inds) > 3 && continue
+#        #assignment = [i ∈ active_inds for i in 1:m1+m2]
+#        try
+#            AA_active = collect(AA[active_inds, :])
+#            bb_active = collect(bb[active_inds])
+#            # TODO what if not unique primal? Need to resolve
+#            if length(active_inds) == 3
+#                zz = -AA_active \ bb_active
+#                #zz = -(AA_active'*AA_active)\AA_active'*bb_active
+#            else
+#                #if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
+#                #Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
+#                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
+#            end
+#            sd = zz#[3]
+#            sds[active_inds] = sd
+#        catch err
+#            if err isa LinearAlgebra.SingularException
+#                continue
+#            else
+#                @warn(err)
+#            end
+#        end
+#    end
+#    sds
+#end
 
 
 function ConvexPolygon2DPointShrunk(P; c=0, s=0)
@@ -172,7 +172,6 @@ function ConvexPolygon2DPointShrunk(P; c=0, s=0)
 end
 
 function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is_displaying=true)
-
     range_max = 10
     step_size = 0.1
     dim = size(ego_polys[1].A)[2]
@@ -243,7 +242,12 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
 
             # draw sds
             #@infiltrate
-            sds_etc = @lift(g_col_single($x, Ae, be, centroide, Ao, bo, centroido))
+            sds_etc = GLMakie.lift(x) do x
+                sds, intercepts, AA, bb, sds_etc = PolyPlanning.g_col_single(x, Ae, be, centroide, Ao, bo, centroido)
+                sds_etc
+            end
+            #@infiltrate
+            #sds, intercepts, AA, bb = @lift(g_col_single($x, Ae, be, centroide, Ao, bo, centroido))
 
             AAbb = @lift(PolyPlanning.gen_LP_data($Ae_shifted, $be_shifted, $centroidex, Ao, bo, centroido))
             AA = GLMakie.lift(x -> x[1], AAbb)
