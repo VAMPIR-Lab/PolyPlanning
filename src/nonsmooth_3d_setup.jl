@@ -1,8 +1,8 @@
-function gen_LP_data(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
+function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
     A = [A_ego A_ego*centr_ego+b_ego
         A_obs A_obs*centr_obs+b_obs]
     b = [b_ego; b_obs]
-    q = [0, 0, 1.0]
+    q = [0, 0, 0, 1.0]
     (A, b, q)
 end
 
@@ -21,17 +21,17 @@ end
 # end
 
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_ass_single(A, b; tol = 1e-4)
+function get_possible_ass_single_3d(A, b; tol=1e-4)
     AA = Matrix(A)
     bb = b
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
-    itr = [i for i in inds if length(i)==2]
-    feasible_inds=[]
+    itr = [i for i in inds if length(i) == 2]
+    feasible_inds = []
     for i in itr
         try
-            xx = - AA[i,:] \ bb[i]
-            if all(AA*xx +bb .> -tol)
+            xx = -AA[i, :] \ bb[i]
+            if all(AA * xx + bb .> -tol)
                 push!(feasible_inds, i)
             end
         catch err
@@ -46,15 +46,15 @@ function get_possible_ass_single(A, b; tol = 1e-4)
 end
 
 # enumerate possible assignments (at least one index from one poly, and at least one index from the other)
-function get_possible_ass_pair(Ae, be, Ao, bo)
+function get_possible_ass_pair_3d(Ae, be, Ao, bo)
     m1 = length(be)
     m2 = length(bo)
-    inds_e = get_possible_ass_single(Ae, be)
-    inds_o = get_possible_ass_single(Ao, bo)
+    inds_e = get_possible_ass_single_3d(Ae, be)
+    inds_o = get_possible_ass_single_3d(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 ,m1]
+        inds_o[i] += [m1, m1]
     end
-    Itr=[]
+    Itr = []
     for i in 1:m1
         for ind in inds_o
             push!(Itr, sort(vcat(ind, i)))
@@ -68,21 +68,25 @@ function get_possible_ass_pair(Ae, be, Ao, bo)
     Itr
 end
 
-function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
+function g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
     sds = Dict()
     intercepts = Dict()
-    sds_etc = Dict() # needed for assignment playground...
 
+    Aex, bex = PolyPlanning.shift_to_3D(A_ego, b_ego, xt)
     Aex, bex = shift_to(A_ego, b_ego, xt)
-    R = [cos(xt[3]) sin(xt[3])
-        -sin(xt[3]) cos(xt[3])]
-    centroidex = xt[1:2] + R * centr_ego
-    AA, bb, qq = gen_LP_data(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
+    #R = [cos(xt[3]) sin(xt[3])
+    #-sin(xt[3]) cos(xt[3])]=
+    R = PolyPlanning.R_from_mrp(xt[4:6])
+    centroidex = xt[1:3] + R * centr_ego
+    #@infiltrate
+    # just using mean of vertices for now
+    #ego_poly = ConvexPolygon3D(Aex, bex)
+    AA, bb, qq = gen_LP_data_3d(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
     # m1 = length(bex)
     # m2 = length(b_obs)
     # all_active_inds = collect(1:m1+m2)
     # Itr = powerset(all_active_inds) |> collect
-    Itr = get_possible_ass_pair(A_ego, b_ego, A_obs, b_obs)
+    Itr = get_possible_ass_pair_3d(A_ego, b_ego, A_obs, b_obs)
     for active_inds in Itr
         # if !is_ass_feasible(active_inds, m1, m2)
         #     continue
@@ -102,7 +106,6 @@ function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
             sd = zz[3]
             intercepts[active_inds] = zz[1:2]
             sds[active_inds] = sd
-            sds_etc[active_inds] = zz
         catch err
             if err isa LinearAlgebra.SingularException
                 continue
@@ -111,10 +114,10 @@ function g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
             end
         end
     end
-    sds, intercepts, AA, bb, sds_etc
+    sds, intercepts, AA, bb
 end
 
-function setup_nonsmooth(
+function setup_nonsmooth_3d(
     ego_polys,
     obs_polys;
     T=2,
@@ -130,16 +133,16 @@ function setup_nonsmooth(
 )
 
     # problem dimensions
-    n_x = 6
-    n_u = 3
+    n_x = 12
+    n_u = 6
     n_xu = n_x + n_u
     n_z = T * n_xu
     n_ego = length(ego_polys)
     n_obs = length(obs_polys)
     # n_side_ego = length(ego_polys[1].b)
     # n_side_obs = length(obs_polys[1].b)
-    n_side_ego = maximum([length(i.b) for i in ego_polys])
-    n_side_obs = maximum([length(i.b) for i in obs_polys])
+    n_side_ego = maximum([length(i.b) for i in ego_polys]) # just for the buffer
+    n_side_obs = maximum([length(i.b) for i in obs_polys]) # just for the buffer
     n_dyn_cons = T * n_x
     n_env_cons = T * n_xu
     # combin_2_from_n = n::Int -> n * (n - 1) ÷ 2
@@ -195,7 +198,7 @@ function setup_nonsmooth(
             centr_ego = sum(V_ego) / length(V_ego)
             centr_obs = sum(V_obs) / length(V_obs)
 
-            sds, intercepts, AA, bb = g_col_single(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
+            sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
 
             sds_dict[i, j] = sds
             sds_keys[i, j] = collect(keys(sds))
@@ -290,7 +293,7 @@ function setup_nonsmooth(
         get_intercepts[i, j](intercept_buffer_full, xt)
         get_AA[i, j](AA_buffer_full, xt)
         get_bb[i, j](bb_buffer_full, xt)
-        
+
         # if the size of buffer is larger than what the function returns, it is filled by column, so here AA and intercept is transposed
         n_ass = length(assignments)
         sds_buffer = sds_buffer_full[1:n_ass]
@@ -311,10 +314,10 @@ function setup_nonsmooth(
         sorted_sds_inds = sds_buffer[valid_mask] |> sortperm
         sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
         sorted_ass = assignments[valid_mask][sorted_sds_inds]
-        
+
         # need to consider smarter way to filter out distant sds
         # local_factor = 1.5 # regard sds which are less than sd*local_factor as potential true sds
-        local_sd_mask = (sorted_sds.+1) .<= (sorted_sds[1]+1) * local_factor
+        local_sd_mask = (sorted_sds .+ 1) .<= (sorted_sds[1] + 1) * local_factor
         sorted_sds = sorted_sds[local_sd_mask]
         sorted_ass = sorted_ass[local_sd_mask]
         (sorted_sds, sorted_ass)
@@ -373,7 +376,7 @@ function setup_nonsmooth(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    (sorted_sds, sorted_ass) = get_sorted_sds(i, length(Pe.b), j, length(Po.b), xt)
+                    (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
@@ -440,7 +443,7 @@ function setup_nonsmooth(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    (sorted_sds, sorted_ass) = get_sorted_sds(i, length(Pe.b), j, length(Po.b), xt)
+                    (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
@@ -541,39 +544,45 @@ function setup_nonsmooth(
     )
 end
 
-
-function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_newsd=false)
+# this needs to be updated for 3d
+function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true, is_newsd=false)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()
+    
 
     for i in 1:n_ego
-        xx = x0[1:3]
-        Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
-        self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
-        plot!(ax, self_poly; color=:blue)
+        xx = x0[1:6]
+        Aeb = shift_to_3d(ego_polys[i].A, ego_polys[i].b, xx)
+        self_poly = ConvexPolygon3D(Aeb[1], Aeb[2])
+        #plot!(ax, self_poly; color=:blue)
+        plot_3D!(ax3, self_poly; color=:blue)
+
         for t in 1:T-1#5:1:T-1
-            xxts[i, t] = Observable(x0[1:3])
+            xxts[i, t] = Observable(x0[1:6])
             Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
-            self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
-            plot!(ax, self_poly; color=:blue, linestyle=:dash)
+            self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
+            #plot!(ax, self_poly; color=:blue, linestyle=:dash)
+            plot_3D!(ax3, self_poly; color=:blue, linestyle=:dash)
         end
         t = T
-        xxts[i, t] = Observable(x0[1:3])
+        xxts[i, t] = Observable(x0[1:6])
         Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
-        self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
-        plot!(ax, self_poly; color=:blue, linewidth=3)
+        self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
+        #plot!(ax, self_poly; color=:blue, linewidth=3)
+        plot_3D!(ax3, self_poly; color=:blue, linewidth=3)
     end
 
     colors = [:red for _ in 1:n_obs]
     for (P, c) in zip(obs_polys, colors)
-        plot!(ax, P; color=c)
+        plot_3D!(ax3, P; color=c)
+        #plot!(ax, P; color=c)
     end
 
     function update_fig(θ)
         for i in 1:n_ego
             for t in 1:T #5:5:T
-                xxts[i, t][] = copy(θ[(t-1)*9+1:(t-1)*9+6])
+                xxts[i, t][] = copy(θ[(t-1)*18+1:(t-1)*18+6])
             end
         end
     end
@@ -589,16 +598,16 @@ function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(
     (fig, update_fig, ax)
 end
 
-function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
+function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
     param = prob.param
 
-    n_x = 6
-    n_u = 3
+    n_x = 12
+    n_u = 6
     n_xu = n_x + n_u
     n = length(prob.l)
 
     if is_displaying
-        (fig, update_fig) = visualize_nonsmooth(x0, param.T, param.ego_polys, param.obs_polys)
+        (fig, update_fig) = visualize_nonsmooth_3d(x0, param.T, param.ego_polys, param.obs_polys)
     end
 
     # initialize

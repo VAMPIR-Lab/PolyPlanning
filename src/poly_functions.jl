@@ -469,9 +469,15 @@ function get_polyhedra_from_Ab(A, b)
     polyhedron(hr)
 end
 
-function plot_3D(ax3, P::ConvexPolygon3D; kwargs...)
+function plot_3D!(ax3, P::ConvexPolygon3D; kwargs...)
     poly = get_polyhedra_from_V(P.V)
     mesh_P = Polyhedra.Mesh(poly)
+    GLMakie.wireframe!(ax3.scene, mesh_P; kwargs...)
+end
+
+function plot_3D!(ax3, P::Observable{ConvexPolygon2D}; kwargs...)
+    poly = @lift(get_polyhedra_from_V($P.V))
+    mesh_P = @lift(Polyhedra.Mesh($poly))
     GLMakie.wireframe!(ax3.scene, mesh_P; kwargs...)
 end
 
@@ -499,7 +505,7 @@ function plot_with_indices(ax3, P::ConvexPolygon3D; kwargs...)
     A = P.A
     b = P.b
     m1, kwargs = delete_first_if_m1(; kwargs...)
-    plot_3D(ax3, P; kwargs...)
+    plot_3D!(ax3, P; kwargs...)
 
     for i = 1:N
         vi = V[i]
