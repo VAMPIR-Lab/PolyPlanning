@@ -32,42 +32,33 @@ function get_3_possible_constraint_ids(A, b; tol=1e-4)
     feasible_inds
 end
 
-# # get possible pair of indices, which means edges
-# function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
-#     AA = Matrix(A)
-#     bb = b
-#     ind = collect(1:length(bb))
-#     inds = powerset(ind) |> collect
-#     itr = [i for i in inds if length(i)==2]
-#     feasible_inds=[]
-#     for i in itr
-#         if norm(AA[i[1],:]-AA[i[2]]) > tol
-#         try
-#             xx = - AA[i,:] \ bb[i]
-#             if all(AA*xx +bb .> -tol)
-#                 push!(feasible_inds, i)
-#             end
-#         catch err
-#             if err isa LinearAlgebra.SingularException
-#                 continue
-#             else
-#                 # @warn(err)
-#             end
-#         end
-#     end
-#     feasible_inds
-# end
+# get possible pair of indices, which means edges
+function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
+    matrix_v_face = map(V) do v
+        A * v + b .< tol
+    end
+    feasible_inds = []
+    for i in 1:length(matrix_v_face)
+        for j in i+1:length(matrix_v_face)
+            common_faces = matrix_v_face[i] + matrix_v_face[j] .== 2
+            if sum(common_faces) == 2
+                push!(feasible_inds, findall(common_faces))
+            end
+        end
+    end
+    feasible_inds
+end
 
+# get_possible_assignments_3d(Pe.A, Pe.b, Pe.V, Po.A, Po.b, Po.V)
 # enumerate possible assignments (2 indices from one poly, and 2 indices from the other; or 3 + 1; or 1 + 3)
-function get_possible_assignments_3d(Ae, be, Ao, bo)
+function get_possible_assignments_3d(Ae, be, Ve, Ao, bo, Vo)
     m1 = length(be)
     m2 = length(bo)
     inds_e = get_3_possible_constraint_ids(Ae, be)
     inds_o = get_3_possible_constraint_ids(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 , m1, m1]
+        inds_o[i] += [m1, m1, m1]
     end
-    @infiltrate
     Itr=[]
     for i in 1:m1
         for ind in inds_o
@@ -77,6 +68,17 @@ function get_possible_assignments_3d(Ae, be, Ao, bo)
     for i in m1+1:m1+m2
         for ind in inds_e
             push!(Itr, sort(vcat(ind, i)))
+        end
+    end
+
+    inds_e = get_2_possible_constraint_ids(Ae, be, Ve)
+    inds_o = get_2_possible_constraint_ids(Ao, bo, Vo)
+    for i in eachindex(inds_o)
+        inds_o[i] += [m1, m1]
+    end
+    for e in inds_e
+        for o in inds_o
+            push!(Itr, [e; o])
         end
     end
 
@@ -436,17 +438,11 @@ Pet = PolyPlanning.ConvexPolygon3D(Aet, bet)
 
 fig = Figure()
 ax3 = LScene(fig[1, 1], scenekw = (camera = cam3d!, show_axis = true))
-PolyPlanning.plot_with_indices(ax3, Pe; color=:blue)
 PolyPlanning.plot_with_indices(ax3, Pet; color=:blue)
 PolyPlanning.plot_with_indices(ax3, Po; m1=length(Pet.b), color=:red)
 fig
 
-# get_possible_assignments_3d(Pe.A, Pe.b, Po.A, Po.b)
-# tol = 1e-4
-# for i in eachindex(Pe.V)
-#     Pe.A * Pe.V[i] + Pe.b .< tol
-# end
-
+get_possible_assignments_3d(Pe.A, Pe.b, Po.A, Po.b)
 
 # fig = create_ass_playground(x0, ego_polys, obs_polys)
 # GLMakie.save("./plots/playground.png", fig)
