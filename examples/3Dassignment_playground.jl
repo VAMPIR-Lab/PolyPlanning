@@ -7,13 +7,13 @@ using LinearAlgebra
 using Polyhedra
 
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_constraint_ids(A, b)
+function get_3_possible_constraint_ids(A, b; tol=1e-4)
     AA = Matrix(A)
+    dim = size(AA)[2]
     bb = b
-    tol = 1e-3
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
-    itr = [i for i in inds if length(i)==2]
+    itr = [i for i in inds if length(i)==dim]
     feasible_inds=[]
     for i in itr
         try
@@ -32,15 +32,42 @@ function get_possible_constraint_ids(A, b)
     feasible_inds
 end
 
-# enumerate possible assignments (2 indices from one poly, and 1 index from the other)
-function get_possible_assignments(Ae, be, Ao, bo)
+# # get possible pair of indices, which means edges
+# function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
+#     AA = Matrix(A)
+#     bb = b
+#     ind = collect(1:length(bb))
+#     inds = powerset(ind) |> collect
+#     itr = [i for i in inds if length(i)==2]
+#     feasible_inds=[]
+#     for i in itr
+#         if norm(AA[i[1],:]-AA[i[2]]) > tol
+#         try
+#             xx = - AA[i,:] \ bb[i]
+#             if all(AA*xx +bb .> -tol)
+#                 push!(feasible_inds, i)
+#             end
+#         catch err
+#             if err isa LinearAlgebra.SingularException
+#                 continue
+#             else
+#                 # @warn(err)
+#             end
+#         end
+#     end
+#     feasible_inds
+# end
+
+# enumerate possible assignments (2 indices from one poly, and 2 indices from the other; or 3 + 1; or 1 + 3)
+function get_possible_assignments_3d(Ae, be, Ao, bo)
     m1 = length(be)
     m2 = length(bo)
-    inds_e = get_possible_constraint_ids(Ae, be)
-    inds_o = get_possible_constraint_ids(Ao, bo)
+    inds_e = get_3_possible_constraint_ids(Ae, be)
+    inds_o = get_3_possible_constraint_ids(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 , m1]
+        inds_o[i] += [m1 , m1, m1]
     end
+    @infiltrate
     Itr=[]
     for i in 1:m1
         for ind in inds_o
@@ -52,6 +79,7 @@ function get_possible_assignments(Ae, be, Ao, bo)
             push!(Itr, sort(vcat(ind, i)))
         end
     end
+
     Itr
 end
 
@@ -160,7 +188,7 @@ function g_col_single(xt, Ae, be, centroide, Ao, bo, centroido)
 end
 
 
-function ConvexPolygon2DPointShrunk(P; c=0, s=0)
+function ConvexPolygon3DPointShrunk(P; c=0, s=0)
     A = P.A
     b = P.b
     V = P.V
@@ -168,7 +196,7 @@ function ConvexPolygon2DPointShrunk(P; c=0, s=0)
         c = sum(V) / length(V)
     end
     b = b + s * (A * c + b)
-    PolyPlanning.ConvexPolygon2D(A, b)
+    PolyPlanning.ConvexPolygon3D(A, b)
 end
 
 function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is_displaying=true)
@@ -177,8 +205,6 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     step_size = 0.1
     dim = size(ego_polys[1].A)[2]
 
-    ax = Axis(fig[1, 2], aspect=DataAspect())
-    # ax3 = Axis3(fig[2, 1])
     ax3 = LScene(fig[1, 1], scenekw = (camera = cam3d!, show_axis = true))
     sg = SliderGrid(
         fig[2, 1:2],
@@ -195,7 +221,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             Aeb = @lift(PolyPlanning.shift_to(Pe.A, Pe.b, $x))
             Ae_shifted = GLMakie.lift(x -> x[1], Aeb)
             be_shifted = GLMakie.lift(x -> x[2], Aeb)
-            Pe_shifted = @lift(PolyPlanning.ConvexPolygon2D($Ae_shifted, $be_shifted))
+            Pe_shifted = @lift(PolyPlanning.ConvexPolygon3D($Ae_shifted, $be_shifted))
 
             # draw ego and obstacle
             PolyPlanning.plot!(ax, Pe_shifted; color=:blue, linewidth=3)
@@ -215,8 +241,8 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             p_intercept_y = GLMakie.lift(x -> x[1][2], primals_etc)
             sd = GLMakie.lift(x -> x[1][3], primals_etc)
 
-            ego_inflated = @lift(ConvexPolygon2DPointShrunk($Pe_shifted; c=0, s=$sd))
-            obs_inflated = @lift(ConvexPolygon2DPointShrunk(Po; c=0, s=$sd))
+            ego_inflated = @lift(ConvexPolygon3DPointShrunk($Pe_shifted; c=0, s=$sd))
+            obs_inflated = @lift(ConvexPolygon3DPointShrunk(Po; c=0, s=$sd))
 
             PolyPlanning.plot_with_indices(ax, ego_inflated; color=:lightblue, linewidth=2)
             PolyPlanning.plot_with_indices(ax, obs_inflated; m1=length(be), color=:pink, linewidth=2)
@@ -224,8 +250,8 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             # draw arbitrary inflation
             sd_arbitrary = GLMakie.lift(x -> x, sg.sliders[4].value)
 
-            ego_arb_inflated = @lift(ConvexPolygon2DPointShrunk($Pe_shifted; c=0, s=$sd_arbitrary))
-            obs_arb_inflated = @lift(ConvexPolygon2DPointShrunk(Po; c=0, s=$sd_arbitrary))
+            ego_arb_inflated = @lift(ConvexPolygon3DPointShrunk($Pe_shifted; c=0, s=$sd_arbitrary))
+            obs_arb_inflated = @lift(ConvexPolygon3DPointShrunk(Po; c=0, s=$sd_arbitrary))
 
             PolyPlanning.plot!(ax, ego_arb_inflated; color=:lightblue, linewidth=2, linestyle=:dash)
             PolyPlanning.plot!(ax, obs_arb_inflated; color=:pink, linewidth=2, linestyle=:dash)
@@ -384,36 +410,43 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     fig
 end
 
-Ve = [[.25, -1], [.25, 1], [-.25, 1], [-.25, -1]]
-ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
-Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
-obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
-x0 = [0.0, 0.0, 0, 0, 0, 0]
+Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
+Pe = PolyPlanning.ConvexPolygon3D(Ve)
+ego_polys = [Pe]
+Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
+Po = PolyPlanning.ConvexPolygon3D(Vo)
+obs_polys = [Po]
 
-# Ve = [[.5, -.5], [.5, .5], [-.5, .5], [-.5, -.5]]
-# ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
-# Vo = [[.5, -.5], [.5, .5], [-.5, .5], [-.5, -.5]]
-# obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
-# x0 = [2.0, .0, 0.1*π/4, 0, 0, 0]
+mrp = [1,2,3]
+e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
+err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
+if norm(err)>1e-4
+    @warn err
+end
+println(e)
+println(rad2deg(θ))
+trans =zeros(3)+ [1,2,3]
+x0 = [trans;mrp;zeros(6)]
+
+Ae = Pe.A
+be = Pe.b
+Aet, bet = PolyPlanning.shift_to_3D(Ae, be, x0)
+Pet = PolyPlanning.ConvexPolygon3D(Aet, bet)
 
 
-fig = create_ass_playground(x0, ego_polys, obs_polys)
+fig = Figure()
+ax3 = LScene(fig[1, 1], scenekw = (camera = cam3d!, show_axis = true))
+PolyPlanning.plot_with_indices(ax3, Pe; color=:blue)
+PolyPlanning.plot_with_indices(ax3, Pet; color=:blue)
+PolyPlanning.plot_with_indices(ax3, Po; m1=length(Pet.b), color=:red)
+fig
+
+# get_possible_assignments_3d(Pe.A, Pe.b, Po.A, Po.b)
+# tol = 1e-4
+# for i in eachindex(Pe.V)
+#     Pe.A * Pe.V[i] + Pe.b .< tol
+# end
+
+
+# fig = create_ass_playground(x0, ego_polys, obs_polys)
 # GLMakie.save("./plots/playground.png", fig)
-
-#obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
-#ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
-#
-#Aes = [deepcopy(P.A) for P in ego_polys]
-#bes = [deepcopy(P.b) for P in ego_polys]
-#centroides = [sum(deepcopy(P.V)) / length(deepcopy(P.V)) for P in ego_polys]
-
-#Ae = ego_polys[1].A
-#be = ego_polys[1].b
-#centroide = sum(ego_polys[1].V) / length(ego_polys[1].V)
-
-#Ao = obs_polys[1].A
-#bo = obs_polys[1].b
-#centroido = sum(Po.V) / length(Po.V)
-
-#assignments = get_single_sd_ids(xt, Ae, be, centroide, Ao, bo, centroido, derivs_per_sd, 0; is_newsd=is_newsd)
-
