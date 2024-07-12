@@ -6,32 +6,19 @@ function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs,
     (A, b, q)
 end
 
-# function is_ass_feasible(ass, m1, m2)
-#     if_ego = false
-#     if_obs = false
-#     for i in ass
-#         if i ∈ [i for i in 1:m1]
-#             if_ego = true
-#         end
-#         if i ∈ [i for i in m1+1:m1+m2]
-#             if_obs = true
-#         end
-#     end
-#     return length(ass) == 3 && if_ego && if_obs
-# end
-
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_ass_single_3d(A, b; tol=1e-4)
+function get_3_possible_constraint_ids(A, b; tol=1e-4)
     AA = Matrix(A)
+    dim = size(AA)[2]
     bb = b
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
-    itr = [i for i in inds if length(i) == 2]
-    feasible_inds = []
+    itr = [i for i in inds if length(i)==dim]
+    feasible_inds=[]
     for i in itr
         try
-            xx = -AA[i, :] \ bb[i]
-            if all(AA * xx + bb .> -tol)
+            xx = - AA[i,:] \ bb[i]
+            if all(AA*xx +bb .> -tol)
                 push!(feasible_inds, i)
             end
         catch err
@@ -45,16 +32,34 @@ function get_possible_ass_single_3d(A, b; tol=1e-4)
     feasible_inds
 end
 
-# enumerate possible assignments (at least one index from one poly, and at least one index from the other)
-function get_possible_ass_pair_3d(Ae, be, Ao, bo)
+# get possible pair of indices, which means edges
+function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
+    matrix_v_face = map(V) do v
+        A * v + b .< tol
+    end
+    feasible_inds = []
+    for i in 1:length(matrix_v_face)
+        for j in i+1:length(matrix_v_face)
+            common_faces = matrix_v_face[i] + matrix_v_face[j] .== 2
+            if sum(common_faces) == 2
+                push!(feasible_inds, findall(common_faces))
+            end
+        end
+    end
+    feasible_inds
+end
+
+# get_possible_assignments_3d(Pe.A, Pe.b, Pe.V, Po.A, Po.b, Po.V)
+# enumerate possible assignments (2 indices from one poly, and 2 indices from the other; or 3 + 1; or 1 + 3)
+function get_possible_assignments_3d(Ae, be, Ve, Ao, bo, Vo)
     m1 = length(be)
     m2 = length(bo)
-    inds_e = get_possible_ass_single_3d(Ae, be)
-    inds_o = get_possible_ass_single_3d(Ao, bo)
+    inds_e = get_3_possible_constraint_ids(Ae, be)
+    inds_o = get_3_possible_constraint_ids(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1, m1]
+        inds_o[i] += [m1, m1, m1]
     end
-    Itr = []
+    Itr=[]
     for i in 1:m1
         for ind in inds_o
             push!(Itr, sort(vcat(ind, i)))
@@ -65,18 +70,30 @@ function get_possible_ass_pair_3d(Ae, be, Ao, bo)
             push!(Itr, sort(vcat(ind, i)))
         end
     end
+
+    inds_e = get_2_possible_constraint_ids(Ae, be, Ve)
+    inds_o = get_2_possible_constraint_ids(Ao, bo, Vo)
+    for i in eachindex(inds_o)
+        inds_o[i] += [m1, m1]
+    end
+    for e in inds_e
+        for o in inds_o
+            push!(Itr, [e; o])
+        end
+    end
+
     Itr
 end
 
-function g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
+function g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
     sds = Dict()
     intercepts = Dict()
 
-    Aex, bex = PolyPlanning.shift_to_3D(A_ego, b_ego, xt)
-    Aex, bex = shift_to(A_ego, b_ego, xt)
+    Aex, bex = shift_to_3D(A_ego, b_ego, xt)
+    # Aex, bex = shift_to(A_ego, b_ego, xt)
     #R = [cos(xt[3]) sin(xt[3])
     #-sin(xt[3]) cos(xt[3])]=
-    R = PolyPlanning.R_from_mrp(xt[4:6])
+    R = R_from_mrp(xt[4:6])
     centroidex = xt[1:3] + R * centr_ego
     #@infiltrate
     # just using mean of vertices for now
@@ -86,7 +103,7 @@ function g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
     # m2 = length(b_obs)
     # all_active_inds = collect(1:m1+m2)
     # Itr = powerset(all_active_inds) |> collect
-    Itr = get_possible_ass_pair_3d(A_ego, b_ego, A_obs, b_obs)
+    Itr = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
     for active_inds in Itr
         # if !is_ass_feasible(active_inds, m1, m2)
         #     continue
@@ -96,15 +113,15 @@ function g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
             AA_active = collect(AA[active_inds, :])
             bb_active = collect(bb[active_inds])
             # TODO what if not unique primal? Need to resolve
-            if length(active_inds) == 3
+            if length(active_inds) == 4
                 zz = -AA_active \ bb_active
             else
                 # if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
                 # Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
                 zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
             end
-            sd = zz[3]
-            intercepts[active_inds] = zz[1:2]
+            sd = zz[4]
+            intercepts[active_inds] = zz[1:3]
             sds[active_inds] = sd
         catch err
             if err isa LinearAlgebra.SingularException
@@ -198,7 +215,7 @@ function setup_nonsmooth_3d(
             centr_ego = sum(V_ego) / length(V_ego)
             centr_obs = sum(V_obs) / length(V_obs)
 
-            sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, centr_ego, A_obs, b_obs, centr_obs)
+            sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
 
             sds_dict[i, j] = sds
             sds_keys[i, j] = collect(keys(sds))
