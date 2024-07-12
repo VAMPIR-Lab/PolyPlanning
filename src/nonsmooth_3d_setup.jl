@@ -38,7 +38,7 @@ function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
         A * v + b .< tol
     end
     feasible_inds = []
-    for i in 1:length(matrix_v_face)
+    for i in eachindex(matrix_v_face)
         for j in i+1:length(matrix_v_face)
             common_faces = matrix_v_face[i] + matrix_v_face[j] .== 2
             if sum(common_faces) == 2
@@ -139,13 +139,17 @@ function setup_nonsmooth_3d(
     obs_polys;
     T=2,
     dt=0.2,
-    R_cost=1e-3 * I(3),
-    Q_cost=1e-3 * I(2),
+    R_cost=1e-3 * I(6), # penality for control variables
+    Q_cost=1e-3 * I(3), # penality for distance
     p1_max=500.0,
-    p2_min=-500.0,
+    p2_max=500.0,
+    p3_max=500.0,
     u1_max=1.0,
     u2_max=1.0,
-    u3_max=π / 4,
+    u3_max=1.0,
+    u4_max=π / 4,
+    u5_max=π / 4,
+    u6_max=π / 4,
     n_sd_slots=2
 )
 
@@ -177,9 +181,9 @@ function setup_nonsmooth_3d(
     x0 = Symbolics.@variables(x0[1:n_x])[1] |> Symbolics.scalarize
     xt = Symbolics.@variables(xt[1:n_x])[1] |> Symbolics.scalarize
 
-    cost = f(z, T, R_cost, Q_cost)
-    dyn_cons = g_dyn(z, x0, T, dt)
-    env_cons = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
+    cost = f_3d(z, T, R_cost, Q_cost)
+    dyn_cons = g_dyn_3d(z, x0, T, dt)
+    env_cons = g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, u5_max, u6_max)
 
     # check indexing consistency
     @assert length(z_s2i) == n_z
@@ -206,6 +210,7 @@ function setup_nonsmooth_3d(
     #p = Progress(n_sds * n_ego * n_obs, dt=1.0)
     for (i, Pe) in enumerate(ego_polys)
         for (j, Po) in enumerate(obs_polys)
+            println("enumerate ", i, j)
             A_ego = collect(Pe.A)
             A_obs = collect(Po.A)
             b_ego = Pe.b
@@ -215,6 +220,7 @@ function setup_nonsmooth_3d(
             centr_ego = sum(V_ego) / length(V_ego)
             centr_obs = sum(V_obs) / length(V_obs)
 
+            println("getting col single")
             sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
 
             sds_dict[i, j] = sds
@@ -222,9 +228,13 @@ function setup_nonsmooth_3d(
             sds_vals = collect(values(sds)) |> Symbolics.scalarize
             intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
 
+            println("getting sds")
             get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
+            println("getting intercept")
             get_intercepts[i, j] = Symbolics.build_function(intercepts_vals', xt; expression=Val(false))[2]
+            println("getting AA")
             get_AA[i, j] = Symbolics.build_function(AA', xt; expression=Val(false))[2]
+            println("getting bb")
             get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
 
             # for each assignment
@@ -234,7 +244,9 @@ function setup_nonsmooth_3d(
                 J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
 
 
+                println("getting Jsd")
                 get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
+                println("getting sd lag")
                 get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
 
 
@@ -244,6 +256,7 @@ function setup_nonsmooth_3d(
                     Jsdlag_cols = [1]
                     Jsdlag_vals = Num[0.0]
                 end
+                println("getting Jsd lag")
                 get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
                 #next!(p)
             end
@@ -299,12 +312,12 @@ function setup_nonsmooth_3d(
 
     # sort sds and intercepts for given xt
     sds_buffer_full = zeros(n_sds)
-    intercept_buffer_full = zeros(2, n_sds)
-    AA_buffer_full = zeros(3, n_side_ego + n_side_obs)
+    intercept_buffer_full = zeros(3, n_sds)
+    AA_buffer_full = zeros(4, n_side_ego + n_side_obs)
     bb_buffer_full = zeros(n_side_ego + n_side_obs)
     sd_lag_buf = zeros(n_x)
 
-    function get_sorted_sds(i, m1, j, m2, xt; tol=1e-4, local_factor=1.5)
+    function get_sorted_sds_3d(i, m1, j, m2, xt; tol=1e-4, local_factor=1.5)
         assignments = sds_keys[i, j]
         get_sds[i, j](sds_buffer_full, xt)
         get_intercepts[i, j](intercept_buffer_full, xt)
@@ -393,6 +406,7 @@ function setup_nonsmooth_3d(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
+                    println("fill F ", t, i, j)
                     (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
@@ -460,6 +474,7 @@ function setup_nonsmooth_3d(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
+                    println("fill J ", t, i, j)
                     (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
@@ -540,10 +555,14 @@ function setup_nonsmooth_3d(
         R_cost,
         Q_cost,
         p1_max,
-        p2_min,
+        p2_max,
+        p3_max,
         u1_max,
         u2_max,
         u3_max,
+        u4_max,
+        u5_max,
+        u6_max,
         n_sd_slots,
         z_s2i,
         dyn_cons_s2i,

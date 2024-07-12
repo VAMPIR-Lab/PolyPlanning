@@ -284,11 +284,15 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     fig
 end
 
-Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
+# Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
+# Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
+
+Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+
 Pe = PolyPlanning.ConvexPolygon3D(Ve)
-ego_polys = [Pe]
-Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
 Po = PolyPlanning.ConvexPolygon3D(Vo)
+ego_polys = [Pe]
 obs_polys = [Po]
 
 mrp = [1,2,3]
@@ -314,7 +318,7 @@ PolyPlanning.plot_with_indices(ax3, Pet; color=:blue)
 PolyPlanning.plot_with_indices(ax3, Po; m1=length(Pet.b), color=:red)
 fig
 
-get_possible_assignments_3d(Pe.A, Pe.b, Po.A, Po.b)
+PolyPlanning.get_possible_assignments_3d(Pe.A, Pe.b, Pe.V, Po.A, Po.b, Po.V)
 
 # fig = create_ass_playground(x0, ego_polys, obs_polys)
 # GLMakie.save("./plots/playground.png", fig)

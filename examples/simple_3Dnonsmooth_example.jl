@@ -6,11 +6,13 @@ using GLMakie
 using Symbolics
 
 
-Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
+# Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
+# Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
+Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
 Pe = PolyPlanning.ConvexPolygon3D(Ve)
-ego_polys = [Pe]
-Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
 Po = PolyPlanning.ConvexPolygon3D(Vo)
+ego_polys = [Pe]
 obs_polys = [Po]
 
 mrp = [1,2,3]
@@ -31,20 +33,22 @@ x0 = [trans; mrp; zeros(6)]
 # Vo2 = [[0, 0.0], [1, -1], [1, 1]]
 # obs_polys = [PolyPlanning.ConvexPolygon2D(Vo), PolyPlanning.ConvexPolygon2D(Vo2)]
 
-R_cost = 1e-3 * PolyPlanning.I(3);
-R_cost[3, 3] = R_cost[3, 3] / 100.0;
-
-nonsmooth_prob = PolyPlanning.setup_nonsmooth(
+R_cost = 1e-3 * PolyPlanning.I(6)
+R_cost[4:6, 4:6] = R_cost[4:6, 4:6] / 100.0
+nonsmooth_prob = PolyPlanning.setup_nonsmooth_3d(
     ego_polys,
     obs_polys;
     T=20,
     dt=.2,
     R_cost,
-    Q_cost=2e-3 * PolyPlanning.I(2),
+    Q_cost=2e-3 * PolyPlanning.I(3),
     u1_max=10.0,
     u2_max=10.0,
-    u3_max=π,
+    u3_max=10.0,
+    u4_max=π,
+    u5_max=π,
+    u6_max=π,
 	n_sd_slots=4
 )
 
-PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0; is_displaying=true, sleep_duration=0.25)
+PolyPlanning.solve_nonsmooth_3d(nonsmooth_prob, x0; is_displaying=true)#, sleep_duration=0.25)

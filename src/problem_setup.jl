@@ -51,6 +51,20 @@ function f(z, T, R_cost, Q_cost)
     cost
 end
 
+function f_3d(z, T, R_cost, Q_cost)
+    n_x = 12
+    n_u = 6
+    n_xu = n_x + n_u
+
+    cost = 0.0
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
+        cost += ut' * R_cost * ut + xt[1:3]' * Q_cost * xt[1:3]
+    end
+    cost
+end
+
 function pointmass_dyn(x, u, dt)
     p1, p2, v1, v2 = x
     a1, a2 = u
@@ -72,6 +86,29 @@ function identity_dyn(x, u, dt)
     #x + dt*u
 end
 
+# m is mass, Ic is inertia matrix
+function identity_dyn_3d(x, u, dt; m=1, Ic=I(3)*0.1)
+    p = x[1:3] # position
+    mrp = x[4:6] # orientation using modified Rodrigues parameters
+    v = x[7:9] # velocity
+    ω = x[10:12] # angular velocity
+
+    F = u[1:3] # force
+    M = u[4:6] # moment
+
+    nm = norm(mrp)
+    cp = skew(mrp) # cross product matrix
+    
+    changing_rate = 
+    [
+        v
+        (1+nm^2)/4 * ( I + 2 * (cp^2+cp) / (1+nm^2) ) * ω
+        F / m
+        Ic \ (M - cross(ω, Ic*ω))
+    ]
+    x + dt * changing_rate
+end
+
 function g_dyn(z, x0, T, dt)
     n_x = 6
     n_u = 3
@@ -88,6 +125,22 @@ function g_dyn(z, x0, T, dt)
     g
 end
 
+function g_dyn_3d(z, x0, T, dt)
+    n_x = 12
+    n_u = 6
+    n_xu = n_x + n_u
+
+    g = Num[]
+    x_prev = x0
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
+        append!(g, xt - identity_dyn_3d(x_prev, ut, dt))
+        x_prev = xt
+    end
+    g
+end
+
 function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
     n_x = 6
     n_u = 3
@@ -98,6 +151,22 @@ function g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
         xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
         ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
         append!(g, [p1_max + xt[1], p1_max - xt[1], xt[2] - p2_min, u1_max - ut[1], ut[1] + u1_max, u2_max - ut[2], ut[2] + u2_max, u3_max - ut[3], ut[3] + u3_max,])
+    end
+    g
+end
+
+function g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, u5_max, u6_max)
+    n_x = 12
+    n_u = 6
+    n_xu = n_x + n_u
+
+    g = Num[]
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
+        append!(g, [p1_max + xt[1], p1_max - xt[1], p2_max + xt[2], p2_max - xt[2], p3_max + xt[3], p3_max - xt[3],
+        u1_max + ut[1], u1_max - ut[1], u2_max + ut[2], u2_max - ut[2], u3_max + ut[3], u3_max - ut[3],
+        u4_max + ut[4], u4_max - ut[4], u5_max + ut[5], u5_max - ut[5], u6_max + ut[6], u6_max - ut[6],])
     end
     g
 end
