@@ -88,21 +88,19 @@ end
 function g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
     sds = Dict()
     intercepts = Dict()
-
-    Aex, bex = shift_to_3D(A_ego, b_ego, xt)
-    # Aex, bex = shift_to(A_ego, b_ego, xt)
-    #R = [cos(xt[3]) sin(xt[3])
-    #-sin(xt[3]) cos(xt[3])]=
     R = R_from_mrp(xt[4:6])
-    centroidex = xt[1:3] + R * centr_ego
-    #@infiltrate
-    # just using mean of vertices for now
-    #ego_poly = ConvexPolygon3D(Aex, bex)
-    AA, bb, qq = gen_LP_data_3d(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
-    # m1 = length(bex)
-    # m2 = length(b_obs)
-    # all_active_inds = collect(1:m1+m2)
-    # Itr = powerset(all_active_inds) |> collect
+    l = xt[1:3]
+
+    # some terms are not eliminated when calculating symbolics
+    # Aex, bex = shift_to_3D(A_ego, b_ego, xt)
+    # centroidex = l + R * centr_ego
+    # AA, bb, qq = gen_LP_data_3d(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
+
+    # better way to get AA and bb than above
+    AA = [A_ego*R' A_ego*centr_ego+b_ego
+          A_obs    A_obs*centr_obs+b_obs]
+    bb = [b_ego-A_ego*R'*l
+          b_obs]
     Itr = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
     for active_inds in Itr
         # if !is_ass_feasible(active_inds, m1, m2)
@@ -119,6 +117,8 @@ function g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs
                 # if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
                 # Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
                 zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
+                @warn "wrong"
+                @infiltrate
             end
             sd = zz[4]
             intercepts[active_inds] = zz[1:3]
@@ -210,18 +210,30 @@ function setup_nonsmooth_3d(
     #p = Progress(n_sds * n_ego * n_obs, dt=1.0)
     for (i, Pe) in enumerate(ego_polys)
         for (j, Po) in enumerate(obs_polys)
-            println("enumerate ", i, j)
+            println("enumerate, i = ", i, " j = ", j)
             A_ego = collect(Pe.A)
             A_obs = collect(Po.A)
             b_ego = Pe.b
             b_obs = Po.b
             V_ego = Pe.V
             V_obs = Po.V
-            centr_ego = sum(V_ego) / length(V_ego)
-            centr_obs = sum(V_obs) / length(V_obs)
+            centr_ego = Pe.c
+            centr_obs = Po.c
 
+            
+            R = R_from_mrp(xt[4:6])
+            l = xt[1:3]
+            AA = [A_ego*R' A_ego*centr_ego+b_ego
+                A_obs    A_obs*centr_obs+b_obs]
+            bb = [b_ego-A_ego*R'*l
+                b_obs]
+            Itr = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
+            
             println("getting col single")
             sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
+
+
+        
 
             sds_dict[i, j] = sds
             sds_keys[i, j] = collect(keys(sds))
@@ -236,28 +248,44 @@ function setup_nonsmooth_3d(
             get_AA[i, j] = Symbolics.build_function(AA', xt; expression=Val(false))[2]
             println("getting bb")
             get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
-
+            counter = 0
+            numb = length(sds)
             # for each assignment
             for (ass, sd) in sds
+                @infiltrate
+                ass = [2,3,4,6]
+                sd = sds[ass]
+                counter += 1
+                println("\nass = ", ass, ", ", counter, "/", numb)
+                t_total = time()
+                t = time()
                 sd_lag = Symbolics.gradient(-λsd[1] * sd, xt; simplify=false)
                 J_sd = Symbolics.gradient(sd, xt; simplify=false)
+                println("sd_lag, J_sd = gradient() ", time()-t)
+                t = time()
                 J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
+                println("J_sd_lag = sparsejacobian() ", time()-t)
 
 
-                println("getting Jsd")
+                t = time()
                 get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
-                println("getting sd lag")
+                println("getting Jsd ", time()-t)
+                t = time()
                 get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
+                println("getting sd lag ", time()-t)
 
-
+                t = time()
                 Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
                 if length(Jsdlag_vals) == 0
                     Jsdlag_rows = [1]
                     Jsdlag_cols = [1]
                     Jsdlag_vals = Num[0.0]
                 end
-                println("getting Jsd lag")
+                println("find nz ", time()-t)
+                t = time()
                 get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
+                println("getting Jsd lag ", time()-t)
+                println("time for this assignment = ", time()-t_total)
                 #next!(p)
             end
         end
@@ -406,7 +434,7 @@ function setup_nonsmooth_3d(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    println("fill F ", t, i, j)
+                    println("fill F ", "time=", t)
                     (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
@@ -474,7 +502,7 @@ function setup_nonsmooth_3d(
 
             for (i, Pe) in enumerate(ego_polys)
                 for (j, Po) in enumerate(obs_polys)
-                    println("fill J ", t, i, j)
+                    println("fill J ", "time=", t)
                     (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
@@ -589,21 +617,21 @@ function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=L
 
     for i in 1:n_ego
         xx = x0[1:6]
-        Aeb = shift_to_3d(ego_polys[i].A, ego_polys[i].b, xx)
+        Aeb = shift_to_3D(ego_polys[i].A, ego_polys[i].b, xx)
         self_poly = ConvexPolygon3D(Aeb[1], Aeb[2])
         #plot!(ax, self_poly; color=:blue)
         plot_3D!(ax3, self_poly; color=:blue)
 
         for t in 1:T-1#5:1:T-1
             xxts[i, t] = Observable(x0[1:6])
-            Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+            Aeb = @lift(shift_to_3D(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
             self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
             #plot!(ax, self_poly; color=:blue, linestyle=:dash)
             plot_3D!(ax3, self_poly; color=:blue, linestyle=:dash)
         end
         t = T
         xxts[i, t] = Observable(x0[1:6])
-        Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+        Aeb = @lift(shift_to_3D(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
         self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
         #plot!(ax, self_poly; color=:blue, linewidth=3)
         plot_3D!(ax3, self_poly; color=:blue, linewidth=3)
@@ -631,7 +659,7 @@ function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=L
         display(fig)
     end
 
-    (fig, update_fig, ax)
+    (fig, update_fig, ax3)
 end
 
 function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
