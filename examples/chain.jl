@@ -36,6 +36,7 @@ n_env_cons = T * n_xu
 
 z = Symbolics.@variables(z[1:n_z])[1] |> Symbolics.scalarize
 xt = Symbolics.@variables(xt[1:n_x])[1] |> Symbolics.scalarize
+λsd = Symbolics.@variables(λsd)[1]
 
 R = PolyPlanning.R_from_mrp(xt[4:6])
 l = xt[1:3]
@@ -65,8 +66,8 @@ j=1
 k=1
 get_A = Dict()
 get_b = Dict()
+ass = [1,4,5,8]
 ass = [2,3,4,6]
-
 
 
 
@@ -131,12 +132,6 @@ function get_aibi_wrt_xt(R, l, xt)
 
     return [a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun]
 end
-# xt[7:12] don't show up
-aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
-
-
-
-
 
 function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun = aibi_wrt_xt_functions
@@ -166,28 +161,94 @@ function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun
 end
 
-get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
 
-
-# update A_wrt_xt_buffer and b_wrt_xt_buffer
-function get_Ab_wrt_xt_buffer!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
+# update A_wrt_xt and b_wrt_xt
+function get_Ab_wrt_xt!(A_wrt_xt, b_wrt_xt, ass, A_ego_wrt_xt, b_ego_wrt_xt)
     for (k, ind) in enumerate(ass)
         if ind <= m1
-            A_wrt_xt_buffer[k, 1:3] = @view A_ego_wrt_xt_buffer[ind, :]
-            b_wrt_xt_buffer[k] = @view b_ego_wrt_xt_buffer[ind][1:end] # it returns a 0-dim view without [1:end]
+            A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
+            b_wrt_xt[k] .= b_ego_wrt_xt[ind]
         end
     end
 end
 
-# update J_A_wrt_xt_buffer and J_b_wrt_xt_buffer
-function get_J_Ab_wrt_xt_buffer!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
+# update J_A_wrt_xt and J_b_wrt_xt
+function get_J_Ab_wrt_xt!(J_A_wrt_xt, J_b_wrt_xt, ass, J_A_ego_wrt_xt, J_b_ego_wrt_xt)
     for (k, ind) in enumerate(ass)
         if ind <= m1
-            J_A_wrt_xt_buffer[k, 1:3] = @view J_A_ego_wrt_xt_buffer[ind, :]
-            J_b_wrt_xt_buffer[k] = @view J_b_ego_wrt_xt_buffer[ind][1:end, 1:end] # it returns a 0-dim view without [1:end]
+            J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
+            J_b_wrt_xt[k] .= J_b_ego_wrt_xt[ind]
         end
     end
 end
+
+function get_sd_wrt_Ab_fun()
+    # Symbolics of a 4d linear system
+    A = Symbolics.@variables(A[1:4, 1:4])[1] |> Symbolics.scalarize
+    b = Symbolics.@variables(b[1:4])[1] |> Symbolics.scalarize
+    sd = (-A \ b)[4]
+
+    # derivative of signed distance w.r.t. A and b
+    sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
+    sd_wrt_b = [Num(0) for _ in 1:4]
+    J_sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
+    J_sd_wrt_b = [Num(0) for _ in 1:4]
+    # the last row is always from obs, the last column is also stable
+    for i in 1:3
+        sd_wrt_b[i] = Symbolics.derivative(sd, b[i]; simplify=false)
+        J_sd_wrt_b[i] = Symbolics.derivative(sd_wrt_b[i], b[i]; simplify=false)
+        for j in 1:3
+            sd_wrt_A[i, j] = Symbolics.derivative(sd, A[i, j]; simplify=false)
+            J_sd_wrt_A[i, j] = Symbolics.derivative(sd_wrt_A[i, j], A[i, j]; simplify=false)
+        end
+    end
+
+    get_sd_wrt_A_fun = Symbolics.build_function(sd_wrt_A, A, b; expression=Val(false))[2]
+    get_sd_wrt_b_fun = Symbolics.build_function(sd_wrt_b, A, b; expression=Val(false))[2]
+    get_J_sd_wrt_A_fun = Symbolics.build_function(J_sd_wrt_A, A, b; expression=Val(false))[2]
+    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2]
+    return get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun
+end
+
+function get_sd_wrt_xt!(sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt)
+    # sd_wrt_xt .= 0
+    # sd_wrt_xt .+= sum(sd_wrt_A .* A_wrt_xt) + sum(sd_wrt_b .* b_wrt_xt)
+    sd_wrt_xt .= sum(sd_wrt_A .* A_wrt_xt) + sum(sd_wrt_b .* b_wrt_xt)
+end
+
+function get_J_sd_wrt_xt!(J_sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt, J_sd_wrt_A, J_A_wrt_xt, J_sd_wrt_b, J_b_wrt_xt)
+    # J_sd_wrt_xt .= 0
+    # J_sd_wrt_xt .+= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
+    J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
+end
+
+
+
+
+
+
+
+
+
+
+get_A_ego_wrt_xt_fun = Dict()
+get_b_ego_wrt_xt_fun = Dict()
+get_J_A_ego_wrt_xt_fun = Dict()
+get_J_b_ego_wrt_xt_fun = Dict()
+
+
+# xt[7:12] don't show up
+aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
+get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun = get_sd_wrt_Ab_fun()
+get_A_ego_wrt_xt_fun[i], get_b_ego_wrt_xt_fun[i], get_J_A_ego_wrt_xt_fun[i], get_J_b_ego_wrt_xt_fun[i] = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
+
+
+
+
+
+
+
+
 
 
 
@@ -203,59 +264,123 @@ b_wrt_xt_buffer = [zeros(6) for _ in 1:4]
 J_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
 J_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
 
-
-get_A_ego_wrt_xt_fun(A_ego_wrt_xt_buffer, x0[1:6])
-get_b_ego_wrt_xt_fun(b_ego_wrt_xt_buffer, x0[1:6])
-get_J_A_ego_wrt_xt_fun(J_A_ego_wrt_xt_buffer, x0[1:6])
-get_J_b_ego_wrt_xt_fun(J_b_ego_wrt_xt_buffer, x0[1:6])
-
-
-get_Ab_wrt_xt_buffer!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
-get_J_Ab_wrt_xt_buffer!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
-
-
-
-function get_sd_wrt_Ab_fun()
-    # Symbolics of a 4d linear system
-    A = Symbolics.@variables(A[1:4, 1:4])[1] |> Symbolics.scalarize
-    b = Symbolics.@variables(b[1:4])[1] |> Symbolics.scalarize
-    sd = (-A \ b)[4]
-
-    # derivative of signed distance w.r.t. A and b
-    sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
-    sd_wrt_b = [Num(0) for _ in 1:4]
-    J_sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
-    J_sd_wrt_b = [Num(0) for _ in 1:4]
-    for i in 1:4
-        sd_wrt_b[i] = Symbolics.derivative(sd, b[i]; simplify=false)
-        J_sd_wrt_b[i] = Symbolics.derivative(sd_wrt_b[i], b[i]; simplify=false)
-        for j in 1:4
-            sd_wrt_A[i, j] = Symbolics.derivative(sd, A[i, j]; simplify=false)
-            J_sd_wrt_A[i, j] = Symbolics.derivative(sd_wrt_A[i, j], A[i, j]; simplify=false)
-        end
-    end
-
-    get_sd_wrt_A_fun = Symbolics.build_function(sd_wrt_A, A, b; expression=Val(false))[2]
-    get_sd_wrt_b_fun = Symbolics.build_function(sd_wrt_b, A, b; expression=Val(false))[2]
-    get_J_sd_wrt_A_fun = Symbolics.build_function(J_sd_wrt_A, A, b; expression=Val(false))[2]
-    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2]
-    return get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun
-end
-get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun = get_sd_wrt_Ab_fun()
-
 sd_wrt_A_buffer = zeros(4,4)
 sd_wrt_b_buffer = zeros(4)
 J_sd_wrt_A_buffer = zeros(4,4)
 J_sd_wrt_b_buffer = zeros(4)
 
-get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+sd_wrt_xt_buffer = zeros(6)
+J_sd_wrt_xt_buffer = zeros(6, 6)
 
-# chain rule
-sd_wrt_xt = sum(sd_wrt_A_buffer .* A_wrt_xt_buffer) + sum(sd_wrt_b_buffer .* b_wrt_xt_buffer)
-J_sd_wrt_xt = sum(J_sd_wrt_A_buffer .* (A_wrt_xt_buffer * A_wrt_xt_buffer')) + sum(sd_wrt_A_buffer .* J_A_wrt_xt_buffer) + sum(J_sd_wrt_b_buffer .* (b_wrt_xt_buffer * b_wrt_xt_buffer')) + sum(sd_wrt_b_buffer .* J_b_wrt_xt_buffer)
+
+sd_lag_buf = zeros(n_x)
+Jsdlag_buf = zeros(n_x, n_x+1)
+Jsd_buf = zeros(n_x)
+
+
+
+
+
+# get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, x0[1:6])
+# get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, x0[1:6])
+# get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, x0[1:6])
+# get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, x0[1:6])
+
+
+# get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
+# get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
+
+
+# get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+# get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+# get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+# get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+
+# # chain rule
+# sd_wrt_xt = sum(sd_wrt_A_buffer .* A_wrt_xt_buffer) + sum(sd_wrt_b_buffer .* b_wrt_xt_buffer)
+# J_sd_wrt_xt = sum(J_sd_wrt_A_buffer .* (A_wrt_xt_buffer * A_wrt_xt_buffer')) + sum(sd_wrt_A_buffer .* J_A_wrt_xt_buffer) + sum(J_sd_wrt_b_buffer .* (b_wrt_xt_buffer * b_wrt_xt_buffer')) + sum(sd_wrt_b_buffer .* J_b_wrt_xt_buffer)
+
+# get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+# get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+
+
+
+
+
+
+
+# Jsd = ∇sd, 12d vector
+function get_Jsd!(J_sd, xt, i, ass, AA, bb)
+    get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+    get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+    # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+    # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+    get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
+    # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
+
+    get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+    get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+    # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+    
+    J_sd .= [sd_wrt_xt_buffer; zeros(6)]
+end
+
+get_Jsd!(Jsd_buf, x0, i, ass, AA, bb)
+
+# sd_lag = -λsd*∇sd, 12d vector
+function get_sd_lag!(sd_lag, xt, λsd, i, ass, AA, bb)
+    get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+    get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+    # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+    # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+    get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
+    # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
+
+    get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+    get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+    # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+    
+    sd_lag .= [-λsd * sd_wrt_xt_buffer; zeros(6)]
+end
+
+# get_sd_lag!(sd_lag_buf, x0, λsd, i, ass, AA, bb)
+get_sd_lag!(sd_lag_buf, x0, 1.1, i, ass, AA, bb)
+
+# sd_lag = -λsd*∇sd, Jsdlag = [-λsd * Jsd -∇sd] ∈ R12 × R13
+function get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb)
+    get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+    get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+    get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+    get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+    get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
+    get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer)
+
+    get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+    get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+    get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+
+    Jsdlag .= [
+                [-λsd*J_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-sd_wrt_xt_buffer; zeros(6)]
+                ]
+end
+# get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb)
+get_Jsdlag!(Jsdlag_buf, x0, 1.1, i, ass, AA, bb)
 
 
 
