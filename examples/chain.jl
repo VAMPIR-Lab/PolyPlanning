@@ -131,7 +131,8 @@ function get_aibi_wrt_xt(R, l, xt)
 
     return [a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun]
 end
-aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt)
+# xt[7:12] don't show up
+aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
 
 
 
@@ -140,11 +141,11 @@ aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt)
 function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun = aibi_wrt_xt_functions
     
-    A_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for _ in 1:m1, _ in 1:3]
-    b_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for _ in 1:m1]
+    A_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1, _ in 1:3]
+    b_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1]
 
-    J_A_ego_wrt_xt = [get_Num_0_matrix(12, 12) for _ in 1:m1, _ in 1:3]
-    J_b_ego_wrt_xt = [get_Num_0_matrix(12, 12) for _ in 1:m1]
+    J_A_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1, _ in 1:3]
+    J_b_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1]
     # replace symbolics Ai and bi with values of A_ego and b_ego, get expressions only including xt
     for k in 1:m1
         a1_wrt_xt_fun(A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
@@ -165,7 +166,7 @@ function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun
 end
 
-get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun = get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
+get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
 
 
 # update A_wrt_xt_buffer and b_wrt_xt_buffer
@@ -191,22 +192,22 @@ end
 
 
 
-# do not use fill(), because every element points to the same vector zeros(12)
-A_ego_wrt_xt_buffer = [zeros(12) for _ in 1:m1, _ in 1:3]
-b_ego_wrt_xt_buffer = [zeros(12) for _ in 1:m1]
-J_A_ego_wrt_xt_buffer = [zeros(12, 12) for _ in 1:m1, _ in 1:3]
-J_b_ego_wrt_xt_buffer = [zeros(12, 12) for _ in 1:m1]
+# do not use fill(), because every element points to the same vector zeros(6)
+A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:m1, _ in 1:3]
+b_ego_wrt_xt_buffer = [zeros(6) for _ in 1:m1]
+J_A_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:m1, _ in 1:3]
+J_b_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:m1]
 
-A_wrt_xt_buffer = [zeros(12) for _ in 1:4, _ in 1:4]
-b_wrt_xt_buffer = [zeros(12) for _ in 1:4]
-J_A_wrt_xt_buffer = [zeros(12, 12) for _ in 1:4, _ in 1:4]
-J_b_wrt_xt_buffer = [zeros(12, 12) for _ in 1:4]
+A_wrt_xt_buffer = [zeros(6) for _ in 1:4, _ in 1:4]
+b_wrt_xt_buffer = [zeros(6) for _ in 1:4]
+J_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
+J_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
 
 
-get_A_ego_wrt_xt_fun(A_ego_wrt_xt_buffer, x0)
-get_b_ego_wrt_xt_fun(b_ego_wrt_xt_buffer, x0)
-get_J_A_ego_wrt_xt_fun(J_A_ego_wrt_xt_buffer, x0)
-get_J_b_ego_wrt_xt_fun(J_b_ego_wrt_xt_buffer, x0)
+get_A_ego_wrt_xt_fun(A_ego_wrt_xt_buffer, x0[1:6])
+get_b_ego_wrt_xt_fun(b_ego_wrt_xt_buffer, x0[1:6])
+get_J_A_ego_wrt_xt_fun(J_A_ego_wrt_xt_buffer, x0[1:6])
+get_J_b_ego_wrt_xt_fun(J_b_ego_wrt_xt_buffer, x0[1:6])
 
 
 get_Ab_wrt_xt_buffer!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer)
