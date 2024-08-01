@@ -5,20 +5,20 @@ using Statistics
 
 # user options
 is_saving = true
-is_running_sep = true
+is_running_sep = false
 is_running_dcol = false
 is_running_kkt = false
-is_loading_exp = false # skip experiment generation and load from file
+is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = false # skip compute and load from file
-exp_file_date = "2024-06-24_1608"
-res_file_date = "2024-06-03_0140"
+exp_file_date = "2024-07-19_1435"
+res_file_date = "2024-07-19_1700"
 exp_name = "piano"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 3
-n_x0s = 30
+n_maps = 5
+n_x0s = 200
 n_sides = 4
 n_obs = 3
 n_xu = 9
@@ -32,7 +32,7 @@ u2_max = 10.0
 u3_max = π
 ego_width = 0.5
 ego_length = 2.0
-corridor_w_min = sqrt((ego_length / 2)^2 + ego_width^2) + 0.2
+corridor_w_min = round(sqrt((ego_length / 2)^2 + ego_width^2); sigdigits=2) + 0.1
 corridor_w_max = ego_length
 # corridor_w_array = [corridor_w_min, (corridor_w_min + corridor_w_max) / 2, corridor_w_max]
 corridor_w_array = collect(corridor_w_min : (corridor_w_max-corridor_w_min) / (n_maps-1) : corridor_w_max)
@@ -110,6 +110,9 @@ end
 # process
 our_bins = PolyPlanning.process_into_bins(our_sols)
 @info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+@info mean(our_bins.success.time)
+# visualize all samples
+# PolyPlanning.visualize_multi(x0s, maps, our_sols, T, ego_poly; n_rows=4, n_cols=5)
 
 sep_bins = []
 if is_running_sep

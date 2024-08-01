@@ -184,8 +184,8 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
         (label="x", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[1]),
         (label="y", range=-range_max:step_size:range_max, format="{:.1f}", startvalue=x0[2]),
         (label="θ", range=-2π:π/100:2π, format="{:.2f}", startvalue=x0[3]),
-        (label="sd", range=-1.0:step_size:100.0, format="{:.1f}", startvalue=0),
-        (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=10.0)
+        (label="sd", range=-1.0:step_size:100.0, format="{:.1f}", startvalue=1.2),
+        (label="z lim", range=0.1:step_size:100.0, format="{:.1f}", startvalue=1.2)
     )
 
     for Pe in ego_polys
@@ -314,7 +314,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
                     "$(i), $(round(f[3]; sigdigits)), $(round.(f[1:2]; sigdigits) )\n"
                 end
             end
-            text!(ax, -5, -3; align=(:left, :top), text=point_text_obs, color=:black, fontsize=10)
+            text!(ax, -2, -1; align=(:left, :top), text=point_text_obs, color=:black, fontsize=10)
 
             # manually add a bound to poly
             z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
@@ -334,7 +334,7 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
             mesh_poly = @lift(Polyhedra.Mesh($poly))
             # GLMakie.mesh!(ax3, mesh_poly, color=:blue, alpha=0.1)
             # GLMakie.wireframe!(ax3.scene, mesh_poly)
-            GLMakie.mesh!(ax3.scene, mesh_poly, color=:green)
+            GLMakie.mesh!(ax3.scene, mesh_poly, color="#ccffcc")
 
             # # plot 3d ego and obs
             hss_ego = GLMakie.lift(AA, bb) do AA, bb
@@ -382,17 +382,26 @@ function create_ass_playground(x0, ego_polys, obs_polys; fig=Figure(), θ=[], is
     #scatter!(point, color=:red, markersize=20)
 
     # z_lim = GLMakie.lift(x -> x, sg.sliders[5].value)
-    limits!(ax, -range_max, range_max, -range_max, range_max)
+    limits!(ax, -3, 5.5, -5, 5)
+    # limits!(ax, -range_max, range_max, -range_max, range_max)
     # @lift(limits!(ax3, -range_max, range_max, -range_max, range_max, -1.0, $z_lim))
 
     fig
 end
 
-Ve = [[.25, -1], [.25, 1], [-.25, 1], [-.25, -1]]
+# for fig:geometry
+Ve = [[1.0, -1], [1, 1], [-1, 1], [-1, -1]]
 ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
-Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
+Vo = [[1.0, -1], [1, 1], [-1, 1]]
 obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
-x0 = [0.0, 0.0, 0, 0, 0, 0]
+x0 = [2.9+.4/3, -0.4, -0.0, 0, 0, 0]
+
+# for fig:local_info.pdf
+# Ve = [[-1, .25], [1, .25], [1, -.25], [-1, -.25]]
+# ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
+# Vo = [[-2, .25,], [2, .25], [2, -.25], [-2, -.25]]
+# obs_polys = [PolyPlanning.ConvexPolygon2D(Vo)]
+# x0 = [0.0, 1.0, -0.1, 0, 0, 0]
 
 # Ve = [[.5, -.5], [.5, .5], [-.5, .5], [-.5, -.5]]
 # ego_polys = [PolyPlanning.ConvexPolygon2D(Ve)]
@@ -402,7 +411,11 @@ x0 = [0.0, 0.0, 0, 0, 0, 0]
 
 
 fig = create_ass_playground(x0, ego_polys, obs_polys)
-# GLMakie.save("./plots/playground.png", fig)
+
+# using CairoMakie
+# # save("./plots/assignment.svg", fig) # Save the figure as an SVG file
+# save("./plots/assignment.pdf", fig) # Save the figure as an pdf file
+display(GLMakie.Screen(), fig) 
 
 #obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
 #ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);

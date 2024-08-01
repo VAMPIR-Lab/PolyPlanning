@@ -145,6 +145,7 @@ function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false
     our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
     our_sols = our_file["our_sols"]
     sep_sols = []
+    dcol_sols = []
     kkt_sols = []
     if is_loading_sep
         sep_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(res_file_date).jld2", "r")

@@ -326,8 +326,9 @@ struct ConvexPolygon3D
     A::SparseMatrixCSC{Float64, Int64}
     b::Vector{Float64}
     V::Vector{Vector{Float64}}
-    function ConvexPolygon3D(A,b,V)
-        new(A,b,V)
+    c::Vector{Float64}
+    function ConvexPolygon3D(A,b,V,c)
+        new(A,b,V,c)
     end
     function ConvexPolygon3D(A,b; tol=1e-5)
         # Convert from Hrep to Vrep
@@ -366,7 +367,7 @@ struct ConvexPolygon3D
         I = sortperm(θs) |> reverse
         V = V[I]
 
-        new(A,b,V)
+        new(A,b,V,c)
     end
     function ConvexPolygon3D(V; tol=1e-5)
         # Convert from Vrep to Hrep
@@ -429,7 +430,7 @@ struct ConvexPolygon3D
         end
         I = sortperm(θs) |> reverse
         V = V[I]
-        new(sparse(A),b,V)
+        new(sparse(A),b,V,c)
     end
 end
 
@@ -475,7 +476,7 @@ function plot_3D!(ax3, P::ConvexPolygon3D; kwargs...)
     GLMakie.wireframe!(ax3.scene, mesh_P; kwargs...)
 end
 
-function plot_3D!(ax3, P::Observable{ConvexPolygon2D}; kwargs...)
+function plot_3D!(ax3, P::Observable{ConvexPolygon3D}; kwargs...)
     poly = @lift(get_polyhedra_from_V($P.V))
     mesh_P = @lift(Polyhedra.Mesh($poly))
     GLMakie.wireframe!(ax3.scene, mesh_P; kwargs...)

@@ -65,7 +65,6 @@ function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun
 end
 
-
 # update A_wrt_xt and b_wrt_xt
 function get_Ab_wrt_xt!(A_wrt_xt, b_wrt_xt, ass, A_ego_wrt_xt, b_ego_wrt_xt, m1)
     for (k, ind) in enumerate(ass)
@@ -142,8 +141,6 @@ end
 function get_J_sd_wrt_xt!(J_sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt, J_sd_wrt_A, J_A_wrt_xt, J_sd_wrt_b, J_b_wrt_xt)
     J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
 end
-
-
 
 function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
     A = [A_ego A_ego*centr_ego+b_ego
@@ -281,47 +278,6 @@ function g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs
     sds, intercepts, AA, bb
 end
 
-# function get_aibi_wrt_xt(R, l, xt)
-#     # Symbolics of one row of original ego constraints
-#     Ai = Symbolics.@variables(Ai[1:3])[1] |> Symbolics.scalarize
-#     bi = Symbolics.@variables(bi)[1]
-
-#     # parameterized Ai and bi w.r.t. xt
-#     a1, a2, a3 = Ai' * R'
-#     b1 = bi - [a1, a2, a3]' *l
-
-#     # expression of gradient
-#     a1_wrt_xt = Symbolics.gradient(a1, xt; simplify=false)
-#     a2_wrt_xt = Symbolics.gradient(a2, xt; simplify=false)
-#     a3_wrt_xt = Symbolics.gradient(a3, xt; simplify=false)
-#     b1_wrt_xt = Symbolics.gradient(b1, xt; simplify=false)
-
-#     # function of gradient
-#     a1_wrt_xt_fun = Symbolics.build_function(a1_wrt_xt, xt, Ai, bi; expression=Val(false))[1]
-#     a2_wrt_xt_fun = Symbolics.build_function(a2_wrt_xt, xt, Ai, bi; expression=Val(false))[1]
-#     a3_wrt_xt_fun = Symbolics.build_function(a3_wrt_xt, xt, Ai, bi; expression=Val(false))[1]
-#     b1_wrt_xt_fun = Symbolics.build_function(b1_wrt_xt, xt, Ai, bi; expression=Val(false))[1]
-
-#     return a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun
-# end
-
-# function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun)
-#     m1 = length(b_ego)
-#     A_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for _ in 1:m1, _ in 1:3]
-#     b_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for _ in 1:m1]
-#     # replace symbolics Ai and bi with values of A_ego and b_ego, get expressions only including xt
-#     for k in 1:m1
-#         A_ego_wrt_xt[k, 1] = a1_wrt_xt_fun(xt, A_ego[k,:], b_ego[k])
-#         A_ego_wrt_xt[k, 2] = a2_wrt_xt_fun(xt, A_ego[k,:], b_ego[k])
-#         A_ego_wrt_xt[k, 3] = a3_wrt_xt_fun(xt, A_ego[k,:], b_ego[k])
-#         b_ego_wrt_xt[k] = b1_wrt_xt_fun(xt, A_ego[k,:], b_ego[k])
-#     end
-
-#     get_A_ego_wrt_xt_fun = Symbolics.build_function(A_ego_wrt_xt, xt; expression=Val(false))[2]
-#     get_b_ego_wrt_xt_fun = Symbolics.build_function(b_ego_wrt_xt, xt; expression=Val(false))[2]
-#     return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun
-# end
-
 function setup_nonsmooth_3d(
     ego_polys,
     obs_polys;
@@ -380,27 +336,23 @@ function setup_nonsmooth_3d(
     @assert length(sd_cons_s2i) == n_sd_cons
 
     # sds, intercepts, AAs, bbs, etc to fill F and J
-    sds_dict = Dict()
-    sds_keys = Dict()
-    get_sds = Dict()
-    get_intercepts = Dict()
     get_AA = Dict()
     get_bb = Dict()
-    get_sd_lag = Dict()
-    get_Jsd = Dict()
-    get_Jsdlag = Dict()
+    Itr_dict = Dict()
 
+    # functions vary according to different egos
     get_A_ego_wrt_xt_fun = Dict()
     get_b_ego_wrt_xt_fun = Dict()
     get_J_A_ego_wrt_xt_fun = Dict()
     get_J_b_ego_wrt_xt_fun = Dict()
-    Itr_dict = Dict()
     # we solve sds symbolically for given ego and obs at problem creation, 
     # TODO could be done in a more flexible by abstracting problem parameters (obs_polys) and filling them in fill_F, fill_J instead as we did before
     λsd = Symbolics.@variables(λsd)[1]
 
+    # rotation matrix and translation 
     R = R_from_mrp(xt[4:6])
     l = xt[1:3]
+
     # helper functions to calculate Jacobian
     aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
     get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun = get_sd_wrt_Ab_fun()
@@ -412,11 +364,9 @@ function setup_nonsmooth_3d(
         b_ego = Pe.b
         V_ego = Pe.V
         centr_ego = Pe.c
-        m1 = length(b_ego)
         get_A_ego_wrt_xt_fun[i], get_b_ego_wrt_xt_fun[i], get_J_A_ego_wrt_xt_fun[i], get_J_b_ego_wrt_xt_fun[i] = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
 
         for (j, Po) in enumerate(obs_polys)
-            println("enumerate, i = ", i, " j = ", j)
             A_obs = collect(Po.A)
             b_obs = Po.b
             V_obs = Po.V
@@ -426,70 +376,17 @@ function setup_nonsmooth_3d(
                 A_obs    A_obs*centr_obs+b_obs]
             bb = [b_ego-A_ego*R'*l
                 b_obs]
+
             Itr_dict[i, j] = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
-            # println("getting col single")
-            # sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
-
-            # sds_dict[i, j] = sds
-            # sds_keys[i, j] = collect(keys(sds))
-            # sds_vals = collect(values(sds)) |> Symbolics.scalarize
-            # intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
-
-            # println("getting sds")
-            # get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
-            # println("getting intercept")
-            # get_intercepts[i, j] = Symbolics.build_function(intercepts_vals', xt; expression=Val(false))[2]
-            println("getting AA")
             get_AA[i, j] = Symbolics.build_function(AA', xt; expression=Val(false))[2]
-            println("getting bb")
             get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
-            counter = 0
-            # numb = length(sds)
-            # for each assignment
-            # continue
-            # for (ass, sd) in sds
-            #     # ass = [2,3,4,6]
-            #     sd = sds[ass]
-            #     counter += 1
-            #     println("\nass = ", ass, ", ", counter, "/", numb)
-            #     t_total = time()
-            #     t = time()
-            #     sd_lag = Symbolics.gradient(-λsd * sd, xt; simplify=false)
-            #     J_sd = Symbolics.gradient(sd, xt; simplify=false)
-            #     println("sd_lag, J_sd = gradient() ", time()-t)
-            #     t = time()
-            #     J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
-            #     println("J_sd_lag = sparsejacobian() ", time()-t)
 
-
-            #     t = time()
-            #     get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
-            #     println("getting Jsd ", time()-t)
-            #     t = time()
-            #     get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
-            #     println("getting sd lag ", time()-t)
-
-            #     t = time()
-            #     Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
-            #     if length(Jsdlag_vals) == 0
-            #         Jsdlag_rows = [1]
-            #         Jsdlag_cols = [1]
-            #         Jsdlag_vals = Num[0.0]
-            #     end
-            #     println("find nz ", time()-t)
-            #     t = time()
-            #     get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
-            #     println("getting Jsd lag ", time()-t)
-            #     println("time for this assignment = ", time()-t_total)
-
-            #     #next!(p)
-            # end
         end
     end
     # different ego-obs pair may have different numbers of possible assignments
     n_sds = []
     for (i, dic) in enumerate(Itr_dict)
-        push!(n_sds, length(keys(dic[2])))
+        push!(n_sds, length(dic[2]))
     end
     n_sds = maximum(n_sds)
 
@@ -535,16 +432,13 @@ function setup_nonsmooth_3d(
     get_Jnom_vals! = Symbolics.build_function(Jnom_vals, z, x0, λ_nom; expression=Val(false))[2]
 
     # sort sds and intercepts for given xt
-    sds_buffer_full = zeros(n_sds)
-    intercept_buffer_full = zeros(3, n_sds)
     sol_xt_buffer_full = zeros(4, n_sds)
     AA_buffer_full = zeros(4, n_side_ego + n_side_obs)
     bb_buffer_full = zeros(n_side_ego + n_side_obs)
-    sd_lag_buf = zeros(n_x)
 
     function get_sorted_sds_3d(i, m1, j, m2, xt; tol=1e-4, local_factor=1.5)
 
-        # if the size of buffer is larger than what the function returns, it is filled by column, so here AA and intercept is transposed
+        # if the size of buffer is larger than what the function returns, it is filled by column, so here AA is transposed
         get_AA[i, j](AA_buffer_full, xt)
         get_bb[i, j](bb_buffer_full, xt)
         AA_buffer = AA_buffer_full'[1:m1+m2, :]
@@ -553,8 +447,8 @@ function setup_nonsmooth_3d(
         assignments = Itr_dict[i, j]
         n_ass = length(assignments)
         get_sol_xt!(sol_xt_buffer_full, AA_buffer, bb_buffer, get_sol_Ab_fun, assignments)
-        sol_xt_buffer = sol_xt_buffer_full[:, 1:n_ass]'
-
+        sol_xt_buffer = @view sol_xt_buffer_full'[1:n_ass, :]
+        
         sds_buffer = @view sol_xt_buffer[:, end]
         intercept_buffer = @view sol_xt_buffer[:, 1:end-1]
 
@@ -731,7 +625,6 @@ function setup_nonsmooth_3d(
                     (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
-
 
                     for slot_i in 1:n_sd_slots
                         if slot_i < n_ass
