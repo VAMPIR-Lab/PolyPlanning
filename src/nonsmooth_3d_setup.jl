@@ -1,3 +1,150 @@
+
+function get_Num_0_matrix(n_row, n_col)
+    return [Num(0) for _ in 1:n_row, _ in 1:n_col]
+end
+
+function get_aibi_wrt_xt(R, l, xt)
+    # Symbolics of one row of original ego constraints
+    Ai = Symbolics.@variables(Ai[1:3])[1] |> Symbolics.scalarize
+    bi = Symbolics.@variables(bi)[1]
+
+    # parameterized Ai and bi w.r.t. xt
+    a1, a2, a3 = Ai' * R'
+    b1 = bi - [a1, a2, a3]' *l
+
+    # expression of gradient
+    a1_wrt_xt = Symbolics.gradient(a1, xt; simplify=false)
+    a2_wrt_xt = Symbolics.gradient(a2, xt; simplify=false)
+    a3_wrt_xt = Symbolics.gradient(a3, xt; simplify=false)
+    b1_wrt_xt = Symbolics.gradient(b1, xt; simplify=false)
+
+    J_a1_wrt_xt = Symbolics.jacobian(a1_wrt_xt, xt; simplify=false)
+    J_a2_wrt_xt = Symbolics.jacobian(a2_wrt_xt, xt; simplify=false)
+    J_a3_wrt_xt = Symbolics.jacobian(a3_wrt_xt, xt; simplify=false)
+    J_b1_wrt_xt = Symbolics.jacobian(b1_wrt_xt, xt; simplify=false)
+
+    # function of gradient
+    a1_wrt_xt_fun = Symbolics.build_function(a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    a2_wrt_xt_fun = Symbolics.build_function(a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    a3_wrt_xt_fun = Symbolics.build_function(a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    b1_wrt_xt_fun = Symbolics.build_function(b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    
+    J_a1_wrt_xt_fun = Symbolics.build_function(J_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    J_a2_wrt_xt_fun = Symbolics.build_function(J_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    J_a3_wrt_xt_fun = Symbolics.build_function(J_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    J_b1_wrt_xt_fun = Symbolics.build_function(J_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+
+    return [a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun]
+end
+
+function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
+    a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun = aibi_wrt_xt_functions
+    m1 = length(b_ego)
+    A_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1, _ in 1:3]
+    b_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1]
+
+    J_A_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1, _ in 1:3]
+    J_b_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1]
+    # replace symbolics Ai and bi with values of A_ego and b_ego, get expressions only including xt
+    for k in 1:m1
+        a1_wrt_xt_fun(A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
+        a2_wrt_xt_fun(A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
+        a3_wrt_xt_fun(A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
+        b1_wrt_xt_fun(b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
+
+        J_a1_wrt_xt_fun(J_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
+        J_a2_wrt_xt_fun(J_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
+        J_a3_wrt_xt_fun(J_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
+        J_b1_wrt_xt_fun(J_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
+    end
+
+    get_A_ego_wrt_xt_fun = Symbolics.build_function(A_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_b_ego_wrt_xt_fun = Symbolics.build_function(b_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_J_A_ego_wrt_xt_fun = Symbolics.build_function(J_A_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_J_b_ego_wrt_xt_fun = Symbolics.build_function(J_b_ego_wrt_xt, xt; expression=Val(false))[2]
+    return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun
+end
+
+
+# update A_wrt_xt and b_wrt_xt
+function get_Ab_wrt_xt!(A_wrt_xt, b_wrt_xt, ass, A_ego_wrt_xt, b_ego_wrt_xt, m1)
+    for (k, ind) in enumerate(ass)
+        if ind <= m1
+            A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
+            b_wrt_xt[k] .= b_ego_wrt_xt[ind]
+        end
+    end
+end
+
+# update J_A_wrt_xt and J_b_wrt_xt
+function get_J_Ab_wrt_xt!(J_A_wrt_xt, J_b_wrt_xt, ass, J_A_ego_wrt_xt, J_b_ego_wrt_xt, m1)
+    for (k, ind) in enumerate(ass)
+        if ind <= m1
+            J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
+            J_b_wrt_xt[k] .= J_b_ego_wrt_xt[ind]
+        end
+    end
+end
+
+function get_sd_wrt_Ab_fun()
+    # Symbolics of a 4d linear system
+    A = Symbolics.@variables(A[1:4, 1:4])[1] |> Symbolics.scalarize
+    b = Symbolics.@variables(b[1:4])[1] |> Symbolics.scalarize
+
+    # sol = -A \ b
+    # for k in eachindex(sol)
+    #     sol[k] = Symbolics.simplify(sol[k]) # need to be simplified, otherwise it returns NaN for some values of A and b
+    # end
+
+    # results of code above
+    sol = [(A[1, 2]*A[2, 3]*A[3, 4]*b[4] - A[1, 2]*A[2, 3]*A[4, 4]*b[3] - A[1, 2]*A[2, 4]*A[3, 3]*b[4] + A[1, 2]*A[2, 4]*A[4, 3]*b[3] + A[1, 2]*A[3, 3]*A[4, 4]*b[2] - A[1, 2]*A[3, 4]*A[4, 3]*b[2] - A[1, 3]*A[2, 2]*A[3, 4]*b[4] + A[1, 3]*A[2, 2]*A[4, 4]*b[3] + A[1, 3]*A[2, 4]*A[3, 2]*b[4] - A[1, 3]*A[2, 4]*A[4, 2]*b[3] - A[1, 3]*A[3, 2]*A[4, 4]*b[2] + A[1, 3]*A[3, 4]*A[4, 2]*b[2] + A[1, 4]*A[2, 2]*A[3, 3]*b[4] - A[1, 4]*A[2, 2]*A[4, 3]*b[3] - A[1, 4]*A[2, 3]*A[3, 2]*b[4] + A[1, 4]*A[2, 3]*A[4, 2]*b[3] + A[1, 4]*A[3, 2]*A[4, 3]*b[2] - A[1, 4]*A[3, 3]*A[4, 2]*b[2] - A[2, 2]*A[3, 3]*A[4, 4]*b[1] + A[2, 2]*A[3, 4]*A[4, 3]*b[1] + A[2, 3]*A[3, 2]*A[4, 4]*b[1] - A[2, 3]*A[3, 4]*A[4, 2]*b[1] - A[2, 4]*A[3, 2]*A[4, 3]*b[1] + A[2, 4]*A[3, 3]*A[4, 2]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
+            (-A[1, 1]*A[2, 3]*A[3, 4]*b[4] + A[1, 1]*A[2, 3]*A[4, 4]*b[3] + A[1, 1]*A[2, 4]*A[3, 3]*b[4] - A[1, 1]*A[2, 4]*A[4, 3]*b[3] - A[1, 1]*A[3, 3]*A[4, 4]*b[2] + A[1, 1]*A[3, 4]*A[4, 3]*b[2] + A[1, 3]*A[2, 1]*A[3, 4]*b[4] - A[1, 3]*A[2, 1]*A[4, 4]*b[3] - A[1, 3]*A[2, 4]*A[3, 1]*b[4] + A[1, 3]*A[2, 4]*A[4, 1]*b[3] + A[1, 3]*A[3, 1]*A[4, 4]*b[2] - A[1, 3]*A[3, 4]*A[4, 1]*b[2] - A[1, 4]*A[2, 1]*A[3, 3]*b[4] + A[1, 4]*A[2, 1]*A[4, 3]*b[3] + A[1, 4]*A[2, 3]*A[3, 1]*b[4] - A[1, 4]*A[2, 3]*A[4, 1]*b[3] - A[1, 4]*A[3, 1]*A[4, 3]*b[2] + A[1, 4]*A[3, 3]*A[4, 1]*b[2] + A[2, 1]*A[3, 3]*A[4, 4]*b[1] - A[2, 1]*A[3, 4]*A[4, 3]*b[1] - A[2, 3]*A[3, 1]*A[4, 4]*b[1] + A[2, 3]*A[3, 4]*A[4, 1]*b[1] + A[2, 4]*A[3, 1]*A[4, 3]*b[1] - A[2, 4]*A[3, 3]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
+            (A[1, 1]*A[2, 2]*A[3, 4]*b[4] - A[1, 1]*A[2, 2]*A[4, 4]*b[3] - A[1, 1]*A[2, 4]*A[3, 2]*b[4] + A[1, 1]*A[2, 4]*A[4, 2]*b[3] + A[1, 1]*A[3, 2]*A[4, 4]*b[2] - A[1, 1]*A[3, 4]*A[4, 2]*b[2] - A[1, 2]*A[2, 1]*A[3, 4]*b[4] + A[1, 2]*A[2, 1]*A[4, 4]*b[3] + A[1, 2]*A[2, 4]*A[3, 1]*b[4] - A[1, 2]*A[2, 4]*A[4, 1]*b[3] - A[1, 2]*A[3, 1]*A[4, 4]*b[2] + A[1, 2]*A[3, 4]*A[4, 1]*b[2] + A[1, 4]*A[2, 1]*A[3, 2]*b[4] - A[1, 4]*A[2, 1]*A[4, 2]*b[3] - A[1, 4]*A[2, 2]*A[3, 1]*b[4] + A[1, 4]*A[2, 2]*A[4, 1]*b[3] + A[1, 4]*A[3, 1]*A[4, 2]*b[2] - A[1, 4]*A[3, 2]*A[4, 1]*b[2] - A[2, 1]*A[3, 2]*A[4, 4]*b[1] + A[2, 1]*A[3, 4]*A[4, 2]*b[1] + A[2, 2]*A[3, 1]*A[4, 4]*b[1] - A[2, 2]*A[3, 4]*A[4, 1]*b[1] - A[2, 4]*A[3, 1]*A[4, 2]*b[1] + A[2, 4]*A[3, 2]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
+            (-A[1, 1]*A[2, 2]*A[3, 3]*b[4] + A[1, 1]*A[2, 2]*A[4, 3]*b[3] + A[1, 1]*A[2, 3]*A[3, 2]*b[4] - A[1, 1]*A[2, 3]*A[4, 2]*b[3] - A[1, 1]*A[3, 2]*A[4, 3]*b[2] + A[1, 1]*A[3, 3]*A[4, 2]*b[2] + A[1, 2]*A[2, 1]*A[3, 3]*b[4] - A[1, 2]*A[2, 1]*A[4, 3]*b[3] - A[1, 2]*A[2, 3]*A[3, 1]*b[4] + A[1, 2]*A[2, 3]*A[4, 1]*b[3] + A[1, 2]*A[3, 1]*A[4, 3]*b[2] - A[1, 2]*A[3, 3]*A[4, 1]*b[2] - A[1, 3]*A[2, 1]*A[3, 2]*b[4] + A[1, 3]*A[2, 1]*A[4, 2]*b[3] + A[1, 3]*A[2, 2]*A[3, 1]*b[4] - A[1, 3]*A[2, 2]*A[4, 1]*b[3] - A[1, 3]*A[3, 1]*A[4, 2]*b[2] + A[1, 3]*A[3, 2]*A[4, 1]*b[2] + A[2, 1]*A[3, 2]*A[4, 3]*b[1] - A[2, 1]*A[3, 3]*A[4, 2]*b[1] - A[2, 2]*A[3, 1]*A[4, 3]*b[1] + A[2, 2]*A[3, 3]*A[4, 1]*b[1] + A[2, 3]*A[3, 1]*A[4, 2]*b[1] - A[2, 3]*A[3, 2]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])]
+    sd = sol[4]
+    # symbolic solution to a 4d linear system
+    get_sol_Ab_fun = Symbolics.build_function(sol, A, b; expression=Val(false))[2]
+
+    # derivative of signed distance w.r.t. A and b
+    sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
+    sd_wrt_b = [Num(0) for _ in 1:4]
+    J_sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
+    J_sd_wrt_b = [Num(0) for _ in 1:4]
+    # the last row is always from obs, the last column is also stable
+    for i in 1:3
+        sd_wrt_b[i] = Symbolics.derivative(sd, b[i]; simplify=false)
+        J_sd_wrt_b[i] = Symbolics.derivative(sd_wrt_b[i], b[i]; simplify=false)
+        for j in 1:3
+            sd_wrt_A[i, j] = Symbolics.derivative(sd, A[i, j]; simplify=false)
+            J_sd_wrt_A[i, j] = Symbolics.derivative(sd_wrt_A[i, j], A[i, j]; simplify=false)
+        end
+    end
+
+    get_sd_wrt_A_fun = Symbolics.build_function(sd_wrt_A, A, b; expression=Val(false))[2]
+    get_sd_wrt_b_fun = Symbolics.build_function(sd_wrt_b, A, b; expression=Val(false))[2]
+    get_J_sd_wrt_A_fun = Symbolics.build_function(J_sd_wrt_A, A, b; expression=Val(false))[2]
+    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2]
+    return get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun
+end
+
+function get_sol_xt!(sol_xt, AA, bb, get_sol_Ab_fun, assignments)
+    sol = zeros(4)
+    for (k, ass) in enumerate(assignments)
+        get_sol_Ab_fun(sol, AA[ass, :], bb[ass])
+        sol_xt[:, k] .= sol
+    end
+end
+
+function get_sd_wrt_xt!(sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt)
+    sd_wrt_xt .= sum(sd_wrt_A .* A_wrt_xt) + sum(sd_wrt_b .* b_wrt_xt)
+end
+
+function get_J_sd_wrt_xt!(J_sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt, J_sd_wrt_A, J_A_wrt_xt, J_sd_wrt_b, J_b_wrt_xt)
+    J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
+end
+
+
+
 function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
     A = [A_ego A_ego*centr_ego+b_ego
         A_obs A_obs*centr_obs+b_obs]
@@ -243,6 +390,11 @@ function setup_nonsmooth_3d(
     get_Jsd = Dict()
     get_Jsdlag = Dict()
 
+    get_A_ego_wrt_xt_fun = Dict()
+    get_b_ego_wrt_xt_fun = Dict()
+    get_J_A_ego_wrt_xt_fun = Dict()
+    get_J_b_ego_wrt_xt_fun = Dict()
+    Itr_dict = Dict()
     # we solve sds symbolically for given ego and obs at problem creation, 
     # TODO could be done in a more flexible by abstracting problem parameters (obs_polys) and filling them in fill_F, fill_J instead as we did before
     λsd = Symbolics.@variables(λsd)[1]
@@ -250,7 +402,8 @@ function setup_nonsmooth_3d(
     R = R_from_mrp(xt[4:6])
     l = xt[1:3]
     # helper functions to calculate Jacobian
-    # a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun = get_aibi_wrt_xt(R, l, xt)
+    aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
+    get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun = get_sd_wrt_Ab_fun()
 
     #@info "Generating symbolic sds, intercepts, AAs, bbs"
     #p = Progress(n_sds * n_ego * n_obs, dt=1.0)
@@ -260,8 +413,7 @@ function setup_nonsmooth_3d(
         V_ego = Pe.V
         centr_ego = Pe.c
         m1 = length(b_ego)
-
-        # get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun = get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun)
+        get_A_ego_wrt_xt_fun[i], get_b_ego_wrt_xt_fun[i], get_J_A_ego_wrt_xt_fun[i], get_J_b_ego_wrt_xt_fun[i] = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
 
         for (j, Po) in enumerate(obs_polys)
             println("enumerate, i = ", i, " j = ", j)
@@ -274,74 +426,69 @@ function setup_nonsmooth_3d(
                 A_obs    A_obs*centr_obs+b_obs]
             bb = [b_ego-A_ego*R'*l
                 b_obs]
-            Itr = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
-            
-            println("getting col single")
-            sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
+            Itr_dict[i, j] = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
+            # println("getting col single")
+            # sds, intercepts, AA, bb = g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
 
+            # sds_dict[i, j] = sds
+            # sds_keys[i, j] = collect(keys(sds))
+            # sds_vals = collect(values(sds)) |> Symbolics.scalarize
+            # intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
 
-        
-
-            sds_dict[i, j] = sds
-            sds_keys[i, j] = collect(keys(sds))
-            sds_vals = collect(values(sds)) |> Symbolics.scalarize
-            intercepts_vals = vcat(collect(values(intercepts))'...) |> Symbolics.scalarize
-
-            println("getting sds")
-            get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
-            println("getting intercept")
-            get_intercepts[i, j] = Symbolics.build_function(intercepts_vals', xt; expression=Val(false))[2]
+            # println("getting sds")
+            # get_sds[i, j] = Symbolics.build_function(sds_vals, xt; expression=Val(false))[2]
+            # println("getting intercept")
+            # get_intercepts[i, j] = Symbolics.build_function(intercepts_vals', xt; expression=Val(false))[2]
             println("getting AA")
             get_AA[i, j] = Symbolics.build_function(AA', xt; expression=Val(false))[2]
             println("getting bb")
             get_bb[i, j] = Symbolics.build_function(bb, xt; expression=Val(false))[2]
             counter = 0
-            numb = length(sds)
+            # numb = length(sds)
             # for each assignment
-            for (ass, sd) in sds
-                @infiltrate
-                # ass = [2,3,4,6]
-                sd = sds[ass]
-                counter += 1
-                println("\nass = ", ass, ", ", counter, "/", numb)
-                t_total = time()
-                t = time()
-                sd_lag = Symbolics.gradient(-λsd * sd, xt; simplify=false)
-                J_sd = Symbolics.gradient(sd, xt; simplify=false)
-                println("sd_lag, J_sd = gradient() ", time()-t)
-                t = time()
-                J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
-                println("J_sd_lag = sparsejacobian() ", time()-t)
+            # continue
+            # for (ass, sd) in sds
+            #     # ass = [2,3,4,6]
+            #     sd = sds[ass]
+            #     counter += 1
+            #     println("\nass = ", ass, ", ", counter, "/", numb)
+            #     t_total = time()
+            #     t = time()
+            #     sd_lag = Symbolics.gradient(-λsd * sd, xt; simplify=false)
+            #     J_sd = Symbolics.gradient(sd, xt; simplify=false)
+            #     println("sd_lag, J_sd = gradient() ", time()-t)
+            #     t = time()
+            #     J_sd_lag = Symbolics.sparsejacobian(sd_lag, [xt; λsd]; simplify=false)
+            #     println("J_sd_lag = sparsejacobian() ", time()-t)
 
 
-                t = time()
-                get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
-                println("getting Jsd ", time()-t)
-                t = time()
-                get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
-                println("getting sd lag ", time()-t)
+            #     t = time()
+            #     get_Jsd[i, j, ass] = Symbolics.build_function(J_sd, xt, λsd; expression=Val(false))[2]
+            #     println("getting Jsd ", time()-t)
+            #     t = time()
+            #     get_sd_lag[i, j, ass] = Symbolics.build_function(sd_lag, xt, λsd; expression=Val(false))[2]
+            #     println("getting sd lag ", time()-t)
 
-                t = time()
-                Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
-                if length(Jsdlag_vals) == 0
-                    Jsdlag_rows = [1]
-                    Jsdlag_cols = [1]
-                    Jsdlag_vals = Num[0.0]
-                end
-                println("find nz ", time()-t)
-                t = time()
-                get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
-                println("getting Jsd lag ", time()-t)
-                println("time for this assignment = ", time()-t_total)
-                @infiltrate
+            #     t = time()
+            #     Jsdlag_rows, Jsdlag_cols, Jsdlag_vals = findnz(J_sd_lag)
+            #     if length(Jsdlag_vals) == 0
+            #         Jsdlag_rows = [1]
+            #         Jsdlag_cols = [1]
+            #         Jsdlag_vals = Num[0.0]
+            #     end
+            #     println("find nz ", time()-t)
+            #     t = time()
+            #     get_Jsdlag[i, j, ass] = (Jsdlag_rows, Jsdlag_cols, Symbolics.build_function(Jsdlag_vals, xt, λsd; expression=Val(false))[2], zeros(length(Jsdlag_rows)))
+            #     println("getting Jsd lag ", time()-t)
+            #     println("time for this assignment = ", time()-t_total)
 
-                #next!(p)
-            end
+            #     #next!(p)
+            # end
         end
     end
     # different ego-obs pair may have different numbers of possible assignments
     n_sds = []
-    for (i, dic) in enumerate(sds_dict)
+    for (i, dic) in enumerate(Itr_dict)
         push!(n_sds, length(keys(dic[2])))
     end
     n_sds = maximum(n_sds)
@@ -390,23 +537,27 @@ function setup_nonsmooth_3d(
     # sort sds and intercepts for given xt
     sds_buffer_full = zeros(n_sds)
     intercept_buffer_full = zeros(3, n_sds)
+    sol_xt_buffer_full = zeros(4, n_sds)
     AA_buffer_full = zeros(4, n_side_ego + n_side_obs)
     bb_buffer_full = zeros(n_side_ego + n_side_obs)
     sd_lag_buf = zeros(n_x)
 
     function get_sorted_sds_3d(i, m1, j, m2, xt; tol=1e-4, local_factor=1.5)
-        assignments = sds_keys[i, j]
-        get_sds[i, j](sds_buffer_full, xt)
-        get_intercepts[i, j](intercept_buffer_full, xt)
-        get_AA[i, j](AA_buffer_full, xt)
-        get_bb[i, j](bb_buffer_full, xt)
 
         # if the size of buffer is larger than what the function returns, it is filled by column, so here AA and intercept is transposed
-        n_ass = length(assignments)
-        sds_buffer = sds_buffer_full[1:n_ass]
-        intercept_buffer = intercept_buffer_full'[1:n_ass, :]
+        get_AA[i, j](AA_buffer_full, xt)
+        get_bb[i, j](bb_buffer_full, xt)
         AA_buffer = AA_buffer_full'[1:m1+m2, :]
         bb_buffer = bb_buffer_full[1:m1+m2]
+
+        assignments = Itr_dict[i, j]
+        n_ass = length(assignments)
+        get_sol_xt!(sol_xt_buffer_full, AA_buffer, bb_buffer, get_sol_Ab_fun, assignments)
+        sol_xt_buffer = sol_xt_buffer_full[:, 1:n_ass]'
+
+        sds_buffer = @view sol_xt_buffer[:, end]
+        intercept_buffer = @view sol_xt_buffer[:, 1:end-1]
+
         # tol = 1e-4
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .>= -1.0 - tol
@@ -427,7 +578,7 @@ function setup_nonsmooth_3d(
         local_sd_mask = (sorted_sds .+ 1) .<= (sorted_sds[1] + 1) * local_factor
         sorted_sds = sorted_sds[local_sd_mask]
         sorted_ass = sorted_ass[local_sd_mask]
-        (sorted_sds, sorted_ass)
+        (sorted_sds, sorted_ass, AA_buffer, bb_buffer)
     end
 
     # compute the most consistent mapping between sd slot memory and current assignments
@@ -470,6 +621,99 @@ function setup_nonsmooth_3d(
     # fill_F!
     λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
 
+        
+
+    # do not use fill(), because every element points to the same vector zeros(6)
+    A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego, _ in 1:3]
+    b_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego]
+    J_A_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego, _ in 1:3]
+    J_b_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego]
+
+    A_wrt_xt_buffer = [zeros(6) for _ in 1:4, _ in 1:4]
+    b_wrt_xt_buffer = [zeros(6) for _ in 1:4]
+    J_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
+    J_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
+
+    sd_wrt_A_buffer = zeros(4,4)
+    sd_wrt_b_buffer = zeros(4)
+    J_sd_wrt_A_buffer = zeros(4,4)
+    J_sd_wrt_b_buffer = zeros(4)
+
+    sd_wrt_xt_buffer = zeros(6)
+    J_sd_wrt_xt_buffer = zeros(6, 6)
+
+    sd_lag_buf = zeros(n_x)
+    Jsdlag_buf = zeros(n_x, n_x+1)
+    Jsd_buf = zeros(n_x)
+
+
+    # Jsd = ∇sd, 12d vector
+    function get_Jsd!(J_sd, xt, i, ass, AA, bb, m1)
+        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+        # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+        # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
+        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+
+        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+        
+        J_sd .= [sd_wrt_xt_buffer; zeros(6)]
+    end
+
+
+    # sd_lag = -λsd*∇sd, 12d vector
+    function get_sd_lag!(sd_lag, xt, λsd, i, ass, AA, bb, m1)
+        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+        # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+        # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
+        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+
+        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+        
+        sd_lag .= [-λsd * sd_wrt_xt_buffer; zeros(6)]
+    end
+
+
+    # sd_lag = -λsd*∇sd, Jsdlag = [-λsd * Jsd -∇sd] ∈ R12 × R13
+    function get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb, m1)
+        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+        get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+        get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+
+        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
+        get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+
+        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+        get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+        get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+
+        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+        get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+
+        Jsdlag .= [
+                    [-λsd*J_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-sd_wrt_xt_buffer; zeros(6)]
+                    ]
+    end
+
     function fill_F!(F, θ, x0)
         # TODO obs_polys as parameters
         F .= 0.0 # clear
@@ -482,10 +726,9 @@ function setup_nonsmooth_3d(
             @inbounds xt = z[xt_ind]
 
             for (i, Pe) in enumerate(ego_polys)
+                m1 = length(Pe.b)
                 for (j, Po) in enumerate(obs_polys)
-                    println("fill F ", "time=", t)
-                    (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
-
+                    (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
 
@@ -505,7 +748,8 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_sd_lag[i, j, ass](sd_lag_buf, xt, λsd)
+                        get_sd_lag!(sd_lag_buf, xt, λsd, i, ass, AA, bb, m1)
+
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
                     end
@@ -520,7 +764,6 @@ function setup_nonsmooth_3d(
 
     # fill_J!
     Jnom_buf = zeros(length(Jnom_vals))
-    Jsd_buf = zeros(n_x)
 
     function fill_J_vals!(J_vals, θ, x0)
         ### check Jacobian numerically
@@ -550,9 +793,9 @@ function setup_nonsmooth_3d(
             @inbounds xt = z[xt_ind]
 
             for (i, Pe) in enumerate(ego_polys)
+                m1 = length(Pe.b)
                 for (j, Po) in enumerate(obs_polys)
-                    println("fill J ", "time=", t)
-                    (sorted_sds, sorted_ass) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
+                    (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
@@ -572,15 +815,11 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_sd_lag[i, j, ass](sd_lag_buf, xt, λsd)
-                        get_Jsd[i, j, ass](Jsd_buf, xt, λsd)
+                        get_Jsdlag!(Jsdlag_buf, xt, λsd, i, ass, AA, bb, m1)
+                        get_Jsd!(Jsd_buf, xt, i, ass, AA, bb, m1)
 
-                        Jsdlag_rows, Jsdlag_cols, Jsdlag_vals, Jsdlag_buf = get_Jsdlag[i, j, ass]
-                        Jsdlag_vals(Jsdlag_buf, xt, λsd)
-                        J_sdlag = sparse(Jsdlag_rows, Jsdlag_cols, Jsdlag_buf, n_x, n_x + 1)
-
-                        @inbounds J_vals[xt_ind, xt_ind] += J_sdlag[1:n_x, 1:n_x]
-                        @inbounds J_vals[xt_ind, sd_ind] += J_sdlag[1:n_x, n_x+1]
+                        @inbounds J_vals[xt_ind, xt_ind] += Jsdlag_buf[1:n_x, 1:n_x]
+                        @inbounds J_vals[xt_ind, sd_ind] += Jsdlag_buf[1:n_x, n_x+1]
                         @inbounds J_vals[sd_ind, xt_ind] += Jsd_buf
                         # if maximum(J_vals) > 1e8
                         #     @infiltrate
