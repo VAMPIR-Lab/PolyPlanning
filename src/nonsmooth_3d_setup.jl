@@ -67,9 +67,20 @@ end
 
 # update A_wrt_xt and b_wrt_xt
 function get_Ab_wrt_xt!(A_wrt_xt, b_wrt_xt, ass, A_ego_wrt_xt, b_ego_wrt_xt, m1)
+    for k in eachindex(A_wrt_xt)
+        A_wrt_xt[k] .= .0
+    end
+    for k in eachindex(b_wrt_xt)
+        b_wrt_xt[k] .= .0
+    end
+
     for (k, ind) in enumerate(ass)
         if ind <= m1
-            A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
+            # must update element by element, otherwise they will point to the same memory, like the following line
+            # A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
+            A_wrt_xt[k, 1] .= A_ego_wrt_xt[ind, 1]
+            A_wrt_xt[k, 2] .= A_ego_wrt_xt[ind, 2]
+            A_wrt_xt[k, 3] .= A_ego_wrt_xt[ind, 3]
             b_wrt_xt[k] .= b_ego_wrt_xt[ind]
         end
     end
@@ -77,9 +88,20 @@ end
 
 # update J_A_wrt_xt and J_b_wrt_xt
 function get_J_Ab_wrt_xt!(J_A_wrt_xt, J_b_wrt_xt, ass, J_A_ego_wrt_xt, J_b_ego_wrt_xt, m1)
+    for k in eachindex(J_A_wrt_xt)
+        J_A_wrt_xt[k] .= .0
+    end
+    for k in eachindex(J_b_wrt_xt)
+        J_b_wrt_xt[k] .= .0
+    end
+
     for (k, ind) in enumerate(ass)
         if ind <= m1
-            J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
+            # must update element by element, otherwise they will point to the same memory, like the following line
+            # J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
+            J_A_wrt_xt[k, 1] .= J_A_ego_wrt_xt[ind, 1]
+            J_A_wrt_xt[k, 2] .= J_A_ego_wrt_xt[ind, 2]
+            J_A_wrt_xt[k, 3] .= J_A_ego_wrt_xt[ind, 3]
             J_b_wrt_xt[k] .= J_b_ego_wrt_xt[ind]
         end
     end
@@ -122,7 +144,7 @@ function get_sd_wrt_Ab_fun()
     get_sd_wrt_A_fun = Symbolics.build_function(sd_wrt_A, A, b; expression=Val(false))[2]
     get_sd_wrt_b_fun = Symbolics.build_function(sd_wrt_b, A, b; expression=Val(false))[2]
     get_J_sd_wrt_A_fun = Symbolics.build_function(J_sd_wrt_A, A, b; expression=Val(false))[2]
-    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2]
+    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2] # always 0
     return get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun
 end
 
@@ -139,7 +161,10 @@ function get_sd_wrt_xt!(sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt)
 end
 
 function get_J_sd_wrt_xt!(J_sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt, J_sd_wrt_A, J_A_wrt_xt, J_sd_wrt_b, J_b_wrt_xt)
-    J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
+    # J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
+    # [A_wrt_xt[i, j]*A_wrt_xt[i, j]' for i in 1:4, j in 1:4]
+    # [b_wrt_xt[i]*b_wrt_xt[i]' for i in 1:4]
+    J_sd_wrt_xt .= sum(J_sd_wrt_A .* [A_wrt_xt[i, j]*A_wrt_xt[i, j]' for i in 1:4, j in 1:4]) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* [b_wrt_xt[i]*b_wrt_xt[i]' for i in 1:4]) + sum(sd_wrt_b .* J_b_wrt_xt)
 end
 
 function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
@@ -397,14 +422,14 @@ function setup_nonsmooth_3d(
     # F = [F_nom; F_sd (to be filled later)]
     # J = dJ/dθ
     # we also need sds/dx
-
+# @infiltrate
     # F and J nominal (before filling)
     θ = [z; λ_nom; λ_sd]
     lag = cost - nom_cons' * λ_nom #- λ_sd' * nom_sd (to be filled later)
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; nom_cons; zeros(Num, n_sd_cons)]
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
-
+# @infiltrate
     n = length(F_nom)
     l = zeros(n)
     u = zeros(n)
@@ -427,7 +452,7 @@ function setup_nonsmooth_3d(
 
     # get nominal F and J (later to be filled by fill_F! and fill_J!)
     get_Fnom! = Symbolics.build_function(F_nom, z, x0, λ_nom; expression=Val(false))[2]
-
+# @infiltrate
     (Jnom_rows, Jnom_cols, Jnom_vals) = findnz(J_nom)
     get_Jnom_vals! = Symbolics.build_function(Jnom_vals, z, x0, λ_nom; expression=Val(false))[2]
 
@@ -451,7 +476,7 @@ function setup_nonsmooth_3d(
         
         sds_buffer = @view sol_xt_buffer[:, end]
         intercept_buffer = @view sol_xt_buffer[:, 1:end-1]
-
+# @infiltrate
         # tol = 1e-4
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .>= -1.0 - tol
@@ -618,13 +643,19 @@ function setup_nonsmooth_3d(
         for t in 1:T
             xt_ind = z_s2i[1:n_x, t]
             @inbounds xt = z[xt_ind]
-
+            # println("F ", t)
             for (i, Pe) in enumerate(ego_polys)
                 m1 = length(Pe.b)
+
+                get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+                get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+                # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+                # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
                     n_ass = min(length(sorted_ass), n_sd_slots)
                     k_map = compute_ass_ind_map(sorted_ass, n_ass)
+
 
                     for slot_i in 1:n_sd_slots
                         if slot_i < n_ass
@@ -640,8 +671,20 @@ function setup_nonsmooth_3d(
 
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
+                        
+                        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
+                        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+                        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+                        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+                        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+                        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+                        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+                        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+                        sd_lag_buf .= [-λsd * sd_wrt_xt_buffer; zeros(6)]
 
-                        get_sd_lag!(sd_lag_buf, xt, λsd, i, ass, AA, bb, m1)
+                        # the same as code block above
+                        # get_sd_lag!(sd_lag_buf, xt, λsd, i, ass, AA, bb, m1)
+
 
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
@@ -684,9 +727,15 @@ function setup_nonsmooth_3d(
         for t in 1:T
             xt_ind = z_s2i[1:n_x, t]
             @inbounds xt = z[xt_ind]
-
+            # println("J ", t)
             for (i, Pe) in enumerate(ego_polys)
                 m1 = length(Pe.b)
+# @infiltrate
+                get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
+                get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+                get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+                get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+# @infiltrate
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
 
@@ -708,8 +757,28 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_Jsdlag!(Jsdlag_buf, xt, λsd, i, ass, AA, bb, m1)
-                        get_Jsd!(Jsd_buf, xt, i, ass, AA, bb, m1)
+# @infiltrate
+                        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
+                        get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+# @infiltrate
+                        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
+                        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
+                        get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+                        get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+# @infiltrate
+                        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
+                        get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+# @infiltrate
+                        Jsd_buf .= [sd_wrt_xt_buffer; zeros(6)]
+                        Jsdlag_buf .= [
+                                    [-λsd*J_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-sd_wrt_xt_buffer; zeros(6)]
+                                    ]
+@infiltrate
+
+
+                        # the same as code block above
+                        # get_Jsdlag!(Jsdlag_buf, xt, λsd, i, ass, AA, bb, m1)
+                        # get_Jsd!(Jsd_buf, xt, i, ass, AA, bb, m1)
 
                         @inbounds J_vals[xt_ind, xt_ind] += Jsdlag_buf[1:n_x, 1:n_x]
                         @inbounds J_vals[xt_ind, sd_ind] += Jsdlag_buf[1:n_x, n_x+1]
@@ -904,19 +973,22 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
     # check Jacobian
-    #buf2 = zeros(n)
-    #Jrows, Jcols, _ = findnz(prob.J_example)
-    #Jnum = sparse(Jrows, Jcols, Jbuf)
-    #Jnum2 = spzeros(n, n)
-    #@info "Testing Jacobian accuracy numerically"
-    #@showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-5
-    #    F(n, wi, buf2)
-    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
-    #end
-    #@info "Jacobian error is $(norm(Jnum2-Jnum))"
-
+    buf2 = zeros(n)
+    Jrows, Jcols, _ = findnz(prob.J_example)
+    Jnum = sparse(Jrows, Jcols, Jbuf)
+    Jnum2 = spzeros(n, n)
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+       wi = copy(w)
+       wi[ni] += 1e-5
+       F(n, wi, buf2)
+       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+       if norm(buf2 - buf)>1e-3
+        @infiltrate
+       end
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+@infiltrate
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
