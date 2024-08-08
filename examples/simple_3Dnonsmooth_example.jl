@@ -17,17 +17,15 @@ using Symbolics
 
 # Ve = [[.25, -2, -1], [.25, 2, -1], [-.25, 2, -1], [-.25, -2, -1], [-.5, -.5, 1], [.5, -.5, 1], [-.5, .5, 1], [.5, .5, 1]]
 # Vo = [[-1.0, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1], [0, 0, 5]]
-
-Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
-Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
-Pe = PolyPlanning.ConvexPolygon3D(Ve)
 # Ve2 = -1*Ve
 # Pe2 = PolyPlanning.ConvexPolygon3D(Ve2)
 # Vo2 = -1*Vo
 # Po2 = PolyPlanning.ConvexPolygon3D(Vo2)
 
+Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+Pe = PolyPlanning.ConvexPolygon3D(Ve)
 Po = PolyPlanning.ConvexPolygon3D(Vo)
-
 ego_polys = [Pe]
 obs_polys = [Po]
 
@@ -64,7 +62,7 @@ nonsmooth_prob = PolyPlanning.setup_nonsmooth_3d(
     u4_max=π,
     u5_max=π,
     u6_max=π,
-	n_sd_slots=4
+	n_sd_slots=15
 )
 
-our_sol = PolyPlanning.solve_nonsmooth_3d(nonsmooth_prob, x0; is_displaying=true)#, sleep_duration=0.25)
+our_sol = PolyPlanning.solve_nonsmooth_3d(nonsmooth_prob, x0; is_displaying=true)#, sleep_duration=0.01)

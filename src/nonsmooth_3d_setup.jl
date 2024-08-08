@@ -1,9 +1,13 @@
 
-function get_Num_0_matrix(n_row, n_col)
+function get_Num0s(n_row, n_col)
     return [Num(0) for _ in 1:n_row, _ in 1:n_col]
 end
 
-function get_aibi_wrt_xt(R, l, xt)
+function get_Num0s(n)
+    return [Num(0) for _ in 1:n]
+end
+
+function get_aibi_wrt_xt_fun(R, l, xt)
     # Symbolics of one row of original ego constraints
     Ai = Symbolics.@variables(Ai[1:3])[1] |> Symbolics.scalarize
     bi = Symbolics.@variables(bi)[1]
@@ -13,98 +17,112 @@ function get_aibi_wrt_xt(R, l, xt)
     b1 = bi - [a1, a2, a3]' *l
 
     # expression of gradient
-    a1_wrt_xt = Symbolics.gradient(a1, xt; simplify=false)
-    a2_wrt_xt = Symbolics.gradient(a2, xt; simplify=false)
-    a3_wrt_xt = Symbolics.gradient(a3, xt; simplify=false)
-    b1_wrt_xt = Symbolics.gradient(b1, xt; simplify=false)
+    grad_a1_wrt_xt = Symbolics.gradient(a1, xt; simplify=false)
+    grad_a2_wrt_xt = Symbolics.gradient(a2, xt; simplify=false)
+    grad_a3_wrt_xt = Symbolics.gradient(a3, xt; simplify=false)
+    grad_b1_wrt_xt = Symbolics.gradient(b1, xt; simplify=false)
 
-    J_a1_wrt_xt = Symbolics.jacobian(a1_wrt_xt, xt; simplify=false)
-    J_a2_wrt_xt = Symbolics.jacobian(a2_wrt_xt, xt; simplify=false)
-    J_a3_wrt_xt = Symbolics.jacobian(a3_wrt_xt, xt; simplify=false)
-    J_b1_wrt_xt = Symbolics.jacobian(b1_wrt_xt, xt; simplify=false)
+    Hessian_a1_wrt_xt = Symbolics.jacobian(grad_a1_wrt_xt, xt; simplify=false)
+    Hessian_a2_wrt_xt = Symbolics.jacobian(grad_a2_wrt_xt, xt; simplify=false)
+    Hessian_a3_wrt_xt = Symbolics.jacobian(grad_a3_wrt_xt, xt; simplify=false)
+    Hessian_b1_wrt_xt = Symbolics.jacobian(grad_b1_wrt_xt, xt; simplify=false)
 
     # function of gradient
-    a1_wrt_xt_fun = Symbolics.build_function(a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    a2_wrt_xt_fun = Symbolics.build_function(a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    a3_wrt_xt_fun = Symbolics.build_function(a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    b1_wrt_xt_fun = Symbolics.build_function(b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_grad_a1_wrt_xt = Symbolics.build_function(grad_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_grad_a2_wrt_xt = Symbolics.build_function(grad_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_grad_a3_wrt_xt = Symbolics.build_function(grad_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_grad_b1_wrt_xt = Symbolics.build_function(grad_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
     
-    J_a1_wrt_xt_fun = Symbolics.build_function(J_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    J_a2_wrt_xt_fun = Symbolics.build_function(J_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    J_a3_wrt_xt_fun = Symbolics.build_function(J_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    J_b1_wrt_xt_fun = Symbolics.build_function(J_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    # function of Hessian matrix
+    get_Hessian_a1_wrt_xt = Symbolics.build_function(Hessian_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_Hessian_a2_wrt_xt = Symbolics.build_function(Hessian_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_Hessian_a3_wrt_xt = Symbolics.build_function(Hessian_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
+    get_Hessian_b1_wrt_xt = Symbolics.build_function(Hessian_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
 
-    return [a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun]
+    return [get_grad_a1_wrt_xt, get_grad_a2_wrt_xt, get_grad_a3_wrt_xt, get_grad_b1_wrt_xt, get_Hessian_a1_wrt_xt, get_Hessian_a2_wrt_xt, get_Hessian_a3_wrt_xt, get_Hessian_b1_wrt_xt]
 end
 
 function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
-    a1_wrt_xt_fun, a2_wrt_xt_fun, a3_wrt_xt_fun, b1_wrt_xt_fun, J_a1_wrt_xt_fun, J_a2_wrt_xt_fun, J_a3_wrt_xt_fun, J_b1_wrt_xt_fun = aibi_wrt_xt_functions
+    get_grad_a1_wrt_xt, get_grad_a2_wrt_xt, get_grad_a3_wrt_xt, get_grad_b1_wrt_xt, get_Hessian_a1_wrt_xt, get_Hessian_a2_wrt_xt, get_Hessian_a3_wrt_xt, get_Hessian_b1_wrt_xt = aibi_wrt_xt_functions
     m1 = length(b_ego)
-    A_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1, _ in 1:3]
-    b_ego_wrt_xt = [Num[0, 0, 0, 0, 0, 0] for _ in 1:m1]
 
-    J_A_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1, _ in 1:3]
-    J_b_ego_wrt_xt = [get_Num_0_matrix(6, 6) for _ in 1:m1]
-    # replace symbolics Ai and bi with values of A_ego and b_ego, get expressions only including xt
+    grad_A_ego_wrt_xt = [get_Num0s(6) for _ in 1:m1, _ in 1:3] # the same shape as A_ego, where every element is a gradient
+    grad_b_ego_wrt_xt = [get_Num0s(6) for _ in 1:m1] # the same shape as b_ego, where every element is a gradient 
+    Hessian_A_ego_wrt_xt = [get_Num0s(6, 6) for _ in 1:m1, _ in 1:3] # the same shape as A_ego, where every element is a Hessian matrix
+    Hessian_b_ego_wrt_xt = [get_Num0s(6, 6) for _ in 1:m1] # the same shape as b_ego, where every element is a Hessian matrix
+
+    # replace symbolic Ai and bi with values of A_ego and b_ego, get expressions only including xt
     for k in 1:m1
-        a1_wrt_xt_fun(A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
-        a2_wrt_xt_fun(A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
-        a3_wrt_xt_fun(A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
-        b1_wrt_xt_fun(b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
+        get_grad_a1_wrt_xt(grad_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
+        get_grad_a2_wrt_xt(grad_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
+        get_grad_a3_wrt_xt(grad_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
+        get_grad_b1_wrt_xt(grad_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
 
-        J_a1_wrt_xt_fun(J_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
-        J_a2_wrt_xt_fun(J_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
-        J_a3_wrt_xt_fun(J_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
-        J_b1_wrt_xt_fun(J_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
+        get_Hessian_a1_wrt_xt(Hessian_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
+        get_Hessian_a2_wrt_xt(Hessian_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
+        get_Hessian_a3_wrt_xt(Hessian_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
+        get_Hessian_b1_wrt_xt(Hessian_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
     end
 
-    get_A_ego_wrt_xt_fun = Symbolics.build_function(A_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_b_ego_wrt_xt_fun = Symbolics.build_function(b_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_J_A_ego_wrt_xt_fun = Symbolics.build_function(J_A_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_J_b_ego_wrt_xt_fun = Symbolics.build_function(J_b_ego_wrt_xt, xt; expression=Val(false))[2]
-    return get_A_ego_wrt_xt_fun, get_b_ego_wrt_xt_fun, get_J_A_ego_wrt_xt_fun, get_J_b_ego_wrt_xt_fun
+    get_grad_A_ego_wrt_xt = Symbolics.build_function(grad_A_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_grad_b_ego_wrt_xt = Symbolics.build_function(grad_b_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_Hessian_A_ego_wrt_xt = Symbolics.build_function(Hessian_A_ego_wrt_xt, xt; expression=Val(false))[2]
+    get_Hessian_b_ego_wrt_xt = Symbolics.build_function(Hessian_b_ego_wrt_xt, xt; expression=Val(false))[2]
+    return get_grad_A_ego_wrt_xt, get_grad_b_ego_wrt_xt, get_Hessian_A_ego_wrt_xt, get_Hessian_b_ego_wrt_xt
 end
 
-# update A_wrt_xt and b_wrt_xt
-function get_Ab_wrt_xt!(A_wrt_xt, b_wrt_xt, ass, A_ego_wrt_xt, b_ego_wrt_xt, m1)
-    for k in eachindex(A_wrt_xt)
-        A_wrt_xt[k] .= .0
+# update grad_A_wrt_xt and grad_b_wrt_xt according to assignment
+function get_grad_Ab_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_xt, grad_b_ego_wrt_xt, m1)
+    for k in eachindex(grad_A_wrt_xt)
+        grad_A_wrt_xt[k] .= .0
     end
-    for k in eachindex(b_wrt_xt)
-        b_wrt_xt[k] .= .0
+    for k in eachindex(grad_b_wrt_xt)
+        grad_b_wrt_xt[k] .= .0
     end
 
     for (k, ind) in enumerate(ass)
         if ind <= m1
             # must update element by element, otherwise they will point to the same memory, like the following line
             # A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
-            A_wrt_xt[k, 1] .= A_ego_wrt_xt[ind, 1]
-            A_wrt_xt[k, 2] .= A_ego_wrt_xt[ind, 2]
-            A_wrt_xt[k, 3] .= A_ego_wrt_xt[ind, 3]
-            b_wrt_xt[k] .= b_ego_wrt_xt[ind]
+            grad_A_wrt_xt[k, 1] .= grad_A_ego_wrt_xt[ind, 1]
+            grad_A_wrt_xt[k, 2] .= grad_A_ego_wrt_xt[ind, 2]
+            grad_A_wrt_xt[k, 3] .= grad_A_ego_wrt_xt[ind, 3]
+            grad_b_wrt_xt[k] .= grad_b_ego_wrt_xt[ind]
         end
     end
 end
 
-# update J_A_wrt_xt and J_b_wrt_xt
-function get_J_Ab_wrt_xt!(J_A_wrt_xt, J_b_wrt_xt, ass, J_A_ego_wrt_xt, J_b_ego_wrt_xt, m1)
-    for k in eachindex(J_A_wrt_xt)
-        J_A_wrt_xt[k] .= .0
+# update Hessian_A_wrt_xt and Hessian_b_wrt_xt according to assignment
+function get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian_A_ego_wrt_xt, Hessian_b_ego_wrt_xt, m1)
+    for k in eachindex(Hessian_A_wrt_xt)
+        Hessian_A_wrt_xt[k] .= .0
     end
-    for k in eachindex(J_b_wrt_xt)
-        J_b_wrt_xt[k] .= .0
+    for k in eachindex(Hessian_b_wrt_xt)
+        Hessian_b_wrt_xt[k] .= .0
     end
 
     for (k, ind) in enumerate(ass)
         if ind <= m1
             # must update element by element, otherwise they will point to the same memory, like the following line
             # J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
-            J_A_wrt_xt[k, 1] .= J_A_ego_wrt_xt[ind, 1]
-            J_A_wrt_xt[k, 2] .= J_A_ego_wrt_xt[ind, 2]
-            J_A_wrt_xt[k, 3] .= J_A_ego_wrt_xt[ind, 3]
-            J_b_wrt_xt[k] .= J_b_ego_wrt_xt[ind]
+            Hessian_A_wrt_xt[k, 1] .= Hessian_A_ego_wrt_xt[ind, 1]
+            Hessian_A_wrt_xt[k, 2] .= Hessian_A_ego_wrt_xt[ind, 2]
+            Hessian_A_wrt_xt[k, 3] .= Hessian_A_ego_wrt_xt[ind, 3]
+            Hessian_b_wrt_xt[k] .= Hessian_b_ego_wrt_xt[ind]
         end
     end
+end
+
+function get_Jacobian_Ab_wrt_xt(grad_A_wrt_xt, grad_b_wrt_xt)
+    Jacobian_Ab_wrt_xt = zeros(20, 6)
+    for k in eachindex(grad_A_wrt_xt)
+        Jacobian_Ab_wrt_xt[k, :] .= grad_A_wrt_xt[k]
+    end
+    for k in eachindex(grad_b_wrt_xt)
+        Jacobian_Ab_wrt_xt[k+16, :] .= grad_b_wrt_xt[k]
+    end
+
+    return Jacobian_Ab_wrt_xt    
 end
 
 function get_sd_wrt_Ab_fun()
@@ -124,47 +142,36 @@ function get_sd_wrt_Ab_fun()
             (-A[1, 1]*A[2, 2]*A[3, 3]*b[4] + A[1, 1]*A[2, 2]*A[4, 3]*b[3] + A[1, 1]*A[2, 3]*A[3, 2]*b[4] - A[1, 1]*A[2, 3]*A[4, 2]*b[3] - A[1, 1]*A[3, 2]*A[4, 3]*b[2] + A[1, 1]*A[3, 3]*A[4, 2]*b[2] + A[1, 2]*A[2, 1]*A[3, 3]*b[4] - A[1, 2]*A[2, 1]*A[4, 3]*b[3] - A[1, 2]*A[2, 3]*A[3, 1]*b[4] + A[1, 2]*A[2, 3]*A[4, 1]*b[3] + A[1, 2]*A[3, 1]*A[4, 3]*b[2] - A[1, 2]*A[3, 3]*A[4, 1]*b[2] - A[1, 3]*A[2, 1]*A[3, 2]*b[4] + A[1, 3]*A[2, 1]*A[4, 2]*b[3] + A[1, 3]*A[2, 2]*A[3, 1]*b[4] - A[1, 3]*A[2, 2]*A[4, 1]*b[3] - A[1, 3]*A[3, 1]*A[4, 2]*b[2] + A[1, 3]*A[3, 2]*A[4, 1]*b[2] + A[2, 1]*A[3, 2]*A[4, 3]*b[1] - A[2, 1]*A[3, 3]*A[4, 2]*b[1] - A[2, 2]*A[3, 1]*A[4, 3]*b[1] + A[2, 2]*A[3, 3]*A[4, 1]*b[1] + A[2, 3]*A[3, 1]*A[4, 2]*b[1] - A[2, 3]*A[3, 2]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])]
     sd = sol[4]
     # symbolic solution to a 4d linear system
-    get_sol_Ab_fun = Symbolics.build_function(sol, A, b; expression=Val(false))[2]
+    get_sol_A_b = Symbolics.build_function(sol, A, b; expression=Val(false))[2]
 
-    # derivative of signed distance w.r.t. A and b
-    sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
-    sd_wrt_b = [Num(0) for _ in 1:4]
-    J_sd_wrt_A = [Num(0) for _ in 1:4, _ in 1:4]
-    J_sd_wrt_b = [Num(0) for _ in 1:4]
-    # the last row is always from obs, the last column is also stable
-    for i in 1:3
-        sd_wrt_b[i] = Symbolics.derivative(sd, b[i]; simplify=false)
-        J_sd_wrt_b[i] = Symbolics.derivative(sd_wrt_b[i], b[i]; simplify=false)
-        for j in 1:3
-            sd_wrt_A[i, j] = Symbolics.derivative(sd, A[i, j]; simplify=false)
-            J_sd_wrt_A[i, j] = Symbolics.derivative(sd_wrt_A[i, j], A[i, j]; simplify=false)
-        end
-    end
+    Ab = vcat(vec(A),b) # vectorize all parameters
+    grad_sd_wrt_Ab = Symbolics.gradient(sd, Ab)
+    Hessian_sd_wrt_Ab = Symbolics.jacobian(grad_sd_wrt_Ab, Ab)
+    get_grad_sd_wrt_Ab = Symbolics.build_function(grad_sd_wrt_Ab, Ab; expression=Val(false))[2]
+    get_Hessian_sd_wrt_Ab = Symbolics.build_function(Hessian_sd_wrt_Ab, Ab; expression=Val(false))[2]
 
-    get_sd_wrt_A_fun = Symbolics.build_function(sd_wrt_A, A, b; expression=Val(false))[2]
-    get_sd_wrt_b_fun = Symbolics.build_function(sd_wrt_b, A, b; expression=Val(false))[2]
-    get_J_sd_wrt_A_fun = Symbolics.build_function(J_sd_wrt_A, A, b; expression=Val(false))[2]
-    get_J_sd_wrt_b_fun = Symbolics.build_function(J_sd_wrt_b, A, b; expression=Val(false))[2] # always 0
-    return get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun
+    return get_grad_sd_wrt_Ab, get_Hessian_sd_wrt_Ab, get_sol_A_b
 end
 
-function get_sol_xt!(sol_xt, AA, bb, get_sol_Ab_fun, assignments)
+function get_sol_xt!(sol_xt, AA, bb, get_sol_A_b, assignments)
     sol = zeros(4)
     for (k, ass) in enumerate(assignments)
-        get_sol_Ab_fun(sol, AA[ass, :], bb[ass])
+        get_sol_A_b(sol, AA[ass, :], bb[ass])
         sol_xt[:, k] .= sol
     end
 end
 
-function get_sd_wrt_xt!(sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt)
-    sd_wrt_xt .= sum(sd_wrt_A .* A_wrt_xt) + sum(sd_wrt_b .* b_wrt_xt)
+function get_grad_sd_wrt_xt!(grad_sd_wrt_xt, grad_sd_wrt_Ab, grad_A_wrt_xt, grad_b_wrt_xt)
+    grad_sd_wrt_xt .= grad_sd_wrt_Ab' * vec([grad_A_wrt_xt grad_b_wrt_xt])
 end
 
-function get_J_sd_wrt_xt!(J_sd_wrt_xt, sd_wrt_A, A_wrt_xt, sd_wrt_b, b_wrt_xt, J_sd_wrt_A, J_A_wrt_xt, J_sd_wrt_b, J_b_wrt_xt)
-    # J_sd_wrt_xt .= sum(J_sd_wrt_A .* (A_wrt_xt * A_wrt_xt')) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* (b_wrt_xt * b_wrt_xt')) + sum(sd_wrt_b .* J_b_wrt_xt)
-    # [A_wrt_xt[i, j]*A_wrt_xt[i, j]' for i in 1:4, j in 1:4]
-    # [b_wrt_xt[i]*b_wrt_xt[i]' for i in 1:4]
-    J_sd_wrt_xt .= sum(J_sd_wrt_A .* [A_wrt_xt[i, j]*A_wrt_xt[i, j]' for i in 1:4, j in 1:4]) + sum(sd_wrt_A .* J_A_wrt_xt) + sum(J_sd_wrt_b .* [b_wrt_xt[i]*b_wrt_xt[i]' for i in 1:4]) + sum(sd_wrt_b .* J_b_wrt_xt)
+function get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt, grad_sd_wrt_Ab, grad_A_wrt_xt, grad_b_wrt_xt, Hessian_sd_wrt_Ab, Hessian_A_wrt_xt, Hessian_b_wrt_xt)
+    Hessian_sd_wrt_xt .= 0.0
+    Jacobian_Ab_wrt_xt = get_Jacobian_Ab_wrt_xt(grad_A_wrt_xt, grad_b_wrt_xt)
+    HJ = Hessian_sd_wrt_Ab * Jacobian_Ab_wrt_xt
+    for k in eachindex(grad_sd_wrt_Ab)
+        Hessian_sd_wrt_xt .+= Jacobian_Ab_wrt_xt[k, :] * HJ[k, :]' + grad_sd_wrt_Ab[k] * vec([Hessian_A_wrt_xt Hessian_b_wrt_xt])[k]
+    end
 end
 
 function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
@@ -366,10 +373,10 @@ function setup_nonsmooth_3d(
     Itr_dict = Dict()
 
     # functions vary according to different egos
-    get_A_ego_wrt_xt_fun = Dict()
-    get_b_ego_wrt_xt_fun = Dict()
-    get_J_A_ego_wrt_xt_fun = Dict()
-    get_J_b_ego_wrt_xt_fun = Dict()
+    get_grad_A_ego_wrt_xt = Dict()
+    get_grad_b_ego_wrt_xt = Dict()
+    get_Hessian_A_ego_wrt_xt = Dict()
+    get_Hessian_b_ego_wrt_xt = Dict()
     # we solve sds symbolically for given ego and obs at problem creation, 
     # TODO could be done in a more flexible by abstracting problem parameters (obs_polys) and filling them in fill_F, fill_J instead as we did before
     λsd = Symbolics.@variables(λsd)[1]
@@ -379,8 +386,8 @@ function setup_nonsmooth_3d(
     l = xt[1:3]
 
     # helper functions to calculate Jacobian
-    aibi_wrt_xt_functions = get_aibi_wrt_xt(R, l, xt[1:6])
-    get_sd_wrt_A_fun, get_sd_wrt_b_fun, get_J_sd_wrt_A_fun, get_J_sd_wrt_b_fun, get_sol_Ab_fun = get_sd_wrt_Ab_fun()
+    aibi_wrt_xt_functions = get_aibi_wrt_xt_fun(R, l, xt[1:6])
+    get_grad_sd_wrt_Ab, get_Hessian_sd_wrt_Ab, get_sol_A_b = get_sd_wrt_Ab_fun()
 
     #@info "Generating symbolic sds, intercepts, AAs, bbs"
     #p = Progress(n_sds * n_ego * n_obs, dt=1.0)
@@ -389,7 +396,7 @@ function setup_nonsmooth_3d(
         b_ego = Pe.b
         V_ego = Pe.V
         centr_ego = Pe.c
-        get_A_ego_wrt_xt_fun[i], get_b_ego_wrt_xt_fun[i], get_J_A_ego_wrt_xt_fun[i], get_J_b_ego_wrt_xt_fun[i] = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
+        get_grad_A_ego_wrt_xt[i], get_grad_b_ego_wrt_xt[i], get_Hessian_A_ego_wrt_xt[i], get_Hessian_b_ego_wrt_xt[i] = get_Ab_ego_wrt_xt_fun(xt[1:6], A_ego, b_ego, aibi_wrt_xt_functions)
 
         for (j, Po) in enumerate(obs_polys)
             A_obs = collect(Po.A)
@@ -471,7 +478,7 @@ function setup_nonsmooth_3d(
 
         assignments = Itr_dict[i, j]
         n_ass = length(assignments)
-        get_sol_xt!(sol_xt_buffer_full, AA_buffer, bb_buffer, get_sol_Ab_fun, assignments)
+        get_sol_xt!(sol_xt_buffer_full, AA_buffer, bb_buffer, get_sol_A_b, assignments)
         sol_xt_buffer = @view sol_xt_buffer_full'[1:n_ass, :]
         
         sds_buffer = @view sol_xt_buffer[:, end]
@@ -543,95 +550,98 @@ function setup_nonsmooth_3d(
         
 
     # do not use fill(), because every element points to the same vector zeros(6)
-    A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego, _ in 1:3]
-    b_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego]
-    J_A_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego, _ in 1:3]
-    J_b_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego]
+    grad_A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego, _ in 1:3]
+    grad_b_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego]
+    Hessian_A_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego, _ in 1:3]
+    Hessian_b_ego_wrt_xt_buffer = [zeros(6, 6) for _ in 1:n_side_ego]
 
-    A_wrt_xt_buffer = [zeros(6) for _ in 1:4, _ in 1:4]
-    b_wrt_xt_buffer = [zeros(6) for _ in 1:4]
-    J_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
-    J_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
+    grad_A_wrt_xt_buffer = [zeros(6) for _ in 1:4, _ in 1:4]
+    grad_b_wrt_xt_buffer = [zeros(6) for _ in 1:4]
+    Hessian_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
+    Hessian_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
 
-    sd_wrt_A_buffer = zeros(4,4)
-    sd_wrt_b_buffer = zeros(4)
-    J_sd_wrt_A_buffer = zeros(4,4)
-    J_sd_wrt_b_buffer = zeros(4)
+    grad_sd_wrt_Ab_buffer = zeros(20)
+    Hessian_sd_wrt_Ab_buffer = zeros(20, 20)
 
-    sd_wrt_xt_buffer = zeros(6)
-    J_sd_wrt_xt_buffer = zeros(6, 6)
+    # grad_sd_wrt_A_buffer = zeros(4,4)
+    # grad_sd_wrt_b_buffer = zeros(4)
+    # Hessian_sd_wrt_A_buffer = zeros(4,4)
+    # Hessian_sd_wrt_b_buffer = zeros(4)
+
+    grad_sd_wrt_xt_buffer = zeros(6)
+    Hessian_sd_wrt_xt_buffer = zeros(6, 6)
 
     sd_lag_buf = zeros(n_x)
     Jsdlag_buf = zeros(n_x, n_x+1)
     Jsd_buf = zeros(n_x)
 
 
-    # Jsd = ∇sd, 12d vector
-    function get_Jsd!(J_sd, xt, i, ass, AA, bb, m1)
-        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
-        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
-        # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-        # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+    # # Jsd = ∇sd, 12d vector
+    # function get_Jsd!(J_sd, xt, i, ass, AA, bb, m1)
+    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
+    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
+    #     # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+    #     # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
 
-        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
-        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+    #     # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
 
-        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
 
-        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
-        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
+    #     # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
         
-        J_sd .= [sd_wrt_xt_buffer; zeros(6)]
-    end
+    #     J_sd .= [grad_sd_wrt_xt_buffer; zeros(6)]
+    # end
 
 
-    # sd_lag = -λsd*∇sd, 12d vector
-    function get_sd_lag!(sd_lag, xt, λsd, i, ass, AA, bb, m1)
-        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
-        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
-        # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-        # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+    # # sd_lag = -λsd*∇sd, 12d vector
+    # function get_sd_lag!(sd_lag, xt, λsd, i, ass, AA, bb, m1)
+    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
+    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
+    #     # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
+    #     # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
 
-        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
-        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+    #     # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
 
-        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
 
-        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
-        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
+    #     # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
         
-        sd_lag .= [-λsd * sd_wrt_xt_buffer; zeros(6)]
-    end
+    #     sd_lag .= [-λsd * grad_sd_wrt_xt_buffer; zeros(6)]
+    # end
 
 
-    # sd_lag = -λsd*∇sd, Jsdlag = [-λsd * Jsd -∇sd] ∈ R12 × R13
-    function get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb, m1)
-        get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
-        get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
-        get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-        get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+    # # sd_lag = -λsd*∇sd, Jsdlag = [-λsd * Jsd -∇sd] ∈ R12 × R13
+    # function get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb, m1)
+    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
+    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
+    #     get_Hessian_A_ego_wrt_xt[i](Hessian_A_ego_wrt_xt_buffer, xt[1:6])
+    #     get_Hessian_b_ego_wrt_xt[i](Hessian_b_ego_wrt_xt_buffer, xt[1:6])
 
-        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
-        get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
+    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+    #     get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
 
-        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-        get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-        get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
+    #     get_J_sd_wrt_A_fun(Hessian_sd_wrt_A_buffer, AA[ass,:], bb[ass])
+    #     get_J_sd_wrt_b_fun(Hessian_sd_wrt_b_buffer, AA[ass,:], bb[ass])
 
-        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
-        get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
+    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
+    #     get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_A_buffer, Hessian_A_wrt_xt_buffer, Hessian_sd_wrt_b_buffer, Hessian_b_wrt_xt_buffer)
 
-        Jsdlag .= [
-                    [-λsd*J_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-sd_wrt_xt_buffer; zeros(6)]
-                    ]
-    end
+    #     Jsdlag .= [
+    #                 [-λsd*Hessian_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-grad_sd_wrt_xt_buffer; zeros(6)]
+    #                 ]
+    # end
 
     function fill_F!(F, θ, x0)
         # TODO obs_polys as parameters
@@ -647,8 +657,8 @@ function setup_nonsmooth_3d(
             for (i, Pe) in enumerate(ego_polys)
                 m1 = length(Pe.b)
 
-                get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
-                get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
+                get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
+                get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
                 # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
                 # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
                 for (j, Po) in enumerate(obs_polys)
@@ -672,19 +682,18 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
                         
-                        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
-                        # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
-                        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-                        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-                        # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-                        # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-                        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
-                        # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
-                        sd_lag_buf .= [-λsd * sd_wrt_xt_buffer; zeros(6)]
+                        
+                        get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+                        # get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
 
-                        # the same as code block above
-                        # get_sd_lag!(sd_lag_buf, xt, λsd, i, ass, AA, bb, m1)
+                        Ab = vcat(vec(AA[ass,:]), bb[ass])
+                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab)
+                        # get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab)
 
+                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer)
+                        # get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_Ab_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer)
+
+                        sd_lag_buf .= [-λsd * grad_sd_wrt_xt_buffer; zeros(6)]
 
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
@@ -731,10 +740,10 @@ function setup_nonsmooth_3d(
             for (i, Pe) in enumerate(ego_polys)
                 m1 = length(Pe.b)
 # @infiltrate
-                get_A_ego_wrt_xt_fun[i](A_ego_wrt_xt_buffer, xt[1:6])
-                get_b_ego_wrt_xt_fun[i](b_ego_wrt_xt_buffer, xt[1:6])
-                get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-                get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
+                get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
+                get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
+                get_Hessian_A_ego_wrt_xt[i](Hessian_A_ego_wrt_xt_buffer, xt[1:6])
+                get_Hessian_b_ego_wrt_xt[i](Hessian_b_ego_wrt_xt_buffer, xt[1:6])
 # @infiltrate
                 for (j, Po) in enumerate(obs_polys)
                     (sorted_sds, sorted_ass, AA, bb) = get_sorted_sds_3d(i, length(Pe.b), j, length(Po.b), xt)
@@ -757,23 +766,21 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-# @infiltrate
-                        get_Ab_wrt_xt!(A_wrt_xt_buffer, b_wrt_xt_buffer, ass, A_ego_wrt_xt_buffer, b_ego_wrt_xt_buffer, m1)
-                        get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
-# @infiltrate
-                        get_sd_wrt_A_fun(sd_wrt_A_buffer, AA[ass,:], bb[ass])
-                        get_sd_wrt_b_fun(sd_wrt_b_buffer, AA[ass,:], bb[ass])
-                        get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-                        get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-# @infiltrate
-                        get_sd_wrt_xt!(sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer)
-                        get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
-# @infiltrate
-                        Jsd_buf .= [sd_wrt_xt_buffer; zeros(6)]
+                        get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+                        get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
+
+                        Ab = vcat(vec(AA[ass,:]), bb[ass])
+                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab)
+                        get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab)
+
+                        
+                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer)
+                        get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_Ab_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer)
+
+                        Jsd_buf .= [grad_sd_wrt_xt_buffer; zeros(6)]
                         Jsdlag_buf .= [
-                                    [-λsd*J_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-sd_wrt_xt_buffer; zeros(6)]
+                                    [-λsd*Hessian_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-grad_sd_wrt_xt_buffer; zeros(6)]
                                     ]
-@infiltrate
 
 
                         # the same as code block above
@@ -980,15 +987,14 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     @info "Testing Jacobian accuracy numerically"
     @showprogress for ni in 1:n
        wi = copy(w)
-       wi[ni] += 1e-5
+       wi[ni] += 1e-8
        F(n, wi, buf2)
-       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-5)
+       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
        if norm(buf2 - buf)>1e-3
         @infiltrate
        end
     end
     @info "Jacobian error is $(norm(Jnum2-Jnum))"
-@infiltrate
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
