@@ -113,6 +113,7 @@ function get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian
     end
 end
 
+# need to be optimized
 function get_Jacobian_Ab_wrt_xt(grad_A_wrt_xt, grad_b_wrt_xt)
     Jacobian_Ab_wrt_xt = zeros(20, 6)
     for k in eachindex(grad_A_wrt_xt)
@@ -429,14 +430,14 @@ function setup_nonsmooth_3d(
     # F = [F_nom; F_sd (to be filled later)]
     # J = dJ/dθ
     # we also need sds/dx
-# @infiltrate
+
     # F and J nominal (before filling)
     θ = [z; λ_nom; λ_sd]
     lag = cost - nom_cons' * λ_nom #- λ_sd' * nom_sd (to be filled later)
     grad_lag = Symbolics.gradient(lag, z)
     F_nom = [grad_lag; nom_cons; zeros(Num, n_sd_cons)]
     J_nom = Symbolics.sparsejacobian(F_nom, θ)
-# @infiltrate
+
     n = length(F_nom)
     l = zeros(n)
     u = zeros(n)
@@ -483,7 +484,7 @@ function setup_nonsmooth_3d(
         
         sds_buffer = @view sol_xt_buffer[:, end]
         intercept_buffer = @view sol_xt_buffer[:, 1:end-1]
-# @infiltrate
+
         # tol = 1e-4
         # sd must be greater than -1 to be valid
         valid_mask = sds_buffer .>= -1.0 - tol
@@ -547,8 +548,6 @@ function setup_nonsmooth_3d(
     # fill_F!
     λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
 
-        
-
     # do not use fill(), because every element points to the same vector zeros(6)
     grad_A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego, _ in 1:3]
     grad_b_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego]
@@ -562,11 +561,6 @@ function setup_nonsmooth_3d(
 
     grad_sd_wrt_Ab_buffer = zeros(20)
     Hessian_sd_wrt_Ab_buffer = zeros(20, 20)
-
-    # grad_sd_wrt_A_buffer = zeros(4,4)
-    # grad_sd_wrt_b_buffer = zeros(4)
-    # Hessian_sd_wrt_A_buffer = zeros(4,4)
-    # Hessian_sd_wrt_b_buffer = zeros(4)
 
     grad_sd_wrt_xt_buffer = zeros(6)
     Hessian_sd_wrt_xt_buffer = zeros(6, 6)
@@ -979,22 +973,22 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    # check Jacobian
-    buf2 = zeros(n)
-    Jrows, Jcols, _ = findnz(prob.J_example)
-    Jnum = sparse(Jrows, Jcols, Jbuf)
-    Jnum2 = spzeros(n, n)
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-       wi = copy(w)
-       wi[ni] += 1e-8
-       F(n, wi, buf2)
-       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
-       if norm(buf2 - buf)>1e-3
-        @infiltrate
-       end
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    # # check Jacobian
+    # buf2 = zeros(n)
+    # Jrows, Jcols, _ = findnz(prob.J_example)
+    # Jnum = sparse(Jrows, Jcols, Jbuf)
+    # Jnum2 = spzeros(n, n)
+    # @info "Testing Jacobian accuracy numerically"
+    # @showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-8
+    #    F(n, wi, buf2)
+    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
+    #    if norm(buf2 - buf)>1e-3
+    #     @infiltrate
+    #    end
+    # end
+    # @info "Jacobian error is $(norm(Jnum2-Jnum))"
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
