@@ -72,7 +72,7 @@ function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
 end
 
 # update grad_A_wrt_xt and grad_b_wrt_xt according to assignment
-function get_grad_Ab_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_xt, grad_b_ego_wrt_xt, m1)
+function get_grad_A_b_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_xt, grad_b_ego_wrt_xt, m1)
     for k in eachindex(grad_A_wrt_xt)
         grad_A_wrt_xt[k] .= .0
     end
@@ -93,7 +93,7 @@ function get_grad_Ab_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_x
 end
 
 # update Hessian_A_wrt_xt and Hessian_b_wrt_xt according to assignment
-function get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian_A_ego_wrt_xt, Hessian_b_ego_wrt_xt, m1)
+function get_Hessian_A_b_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian_A_ego_wrt_xt, Hessian_b_ego_wrt_xt, m1)
     for k in eachindex(Hessian_A_wrt_xt)
         Hessian_A_wrt_xt[k] .= .0
     end
@@ -113,17 +113,40 @@ function get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian
     end
 end
 
-# need to be optimized
-function get_Jacobian_Ab_wrt_xt(grad_A_wrt_xt, grad_b_wrt_xt)
-    Jacobian_Ab_wrt_xt = zeros(20, 6)
+# update Hessian_Ab_wrt_xt according to Hessian_A_wrt_xt and Hessian_b_wrt_xt (rearrange them), a vector of matrices
+function get_Hessian_Ab_wrt_xt(Hessian_Ab_wrt_xt, Hessian_A_wrt_xt, Hessian_b_wrt_xt)
+    for k in eachindex(Hessian_A_wrt_xt)
+        Hessian_Ab_wrt_xt[k] .= Hessian_A_wrt_xt[k]
+    end
+    for k in eachindex(Hessian_b_wrt_xt)
+        Hessian_Ab_wrt_xt[k+16] .= Hessian_b_wrt_xt[k]
+    end  
+end
+
+# update grad_Ab_wrt_xt according to grad_A_wrt_xt and grad_b_wrt_xt (rearrange them), a vector of vectors
+function get_grad_Ab_wrt_xt(grad_Ab_wrt_xt, grad_A_wrt_xt, grad_b_wrt_xt)
     for k in eachindex(grad_A_wrt_xt)
-        Jacobian_Ab_wrt_xt[k, :] .= grad_A_wrt_xt[k]
+        grad_Ab_wrt_xt[k] .= grad_A_wrt_xt[k]
     end
     for k in eachindex(grad_b_wrt_xt)
-        Jacobian_Ab_wrt_xt[k+16, :] .= grad_b_wrt_xt[k]
-    end
+        grad_Ab_wrt_xt[k+16] .= grad_b_wrt_xt[k]
+    end  
+end
 
-    return Jacobian_Ab_wrt_xt    
+function get_Ab!(Ab, A, b)
+    for k in eachindex(A)
+        Ab[k] = A[k]
+    end
+    for k in eachindex(b)
+        Ab[k+16] = b[k]
+    end
+end
+
+# update Jacobian_Ab_wrt_xt according to grad_Ab_wrt_xt (rearrange it), a matrix
+function get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt, grad_Ab_wrt_xt)
+    for k in eachindex(grad_Ab_wrt_xt)
+        Jacobian_Ab_wrt_xt[k, :] .= grad_Ab_wrt_xt[k]
+    end
 end
 
 function get_sd_wrt_Ab_fun()
@@ -162,16 +185,18 @@ function get_sol_xt!(sol_xt, AA, bb, get_sol_A_b, assignments)
     end
 end
 
-function get_grad_sd_wrt_xt!(grad_sd_wrt_xt, grad_sd_wrt_Ab, grad_A_wrt_xt, grad_b_wrt_xt)
-    grad_sd_wrt_xt .= grad_sd_wrt_Ab' * vec([grad_A_wrt_xt grad_b_wrt_xt])
+function get_grad_sd_wrt_xt!(grad_sd_wrt_xt, grad_sd_wrt_Ab, grad_Ab_wrt_xt)
+    grad_sd_wrt_xt .= grad_sd_wrt_Ab' * grad_Ab_wrt_xt
 end
 
-function get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt, grad_sd_wrt_Ab, grad_A_wrt_xt, grad_b_wrt_xt, Hessian_sd_wrt_Ab, Hessian_A_wrt_xt, Hessian_b_wrt_xt)
+function get_HJ(HJ, Hessian_sd_wrt_Ab, Jacobian_Ab_wrt_xt)
+    HJ .= Hessian_sd_wrt_Ab * Jacobian_Ab_wrt_xt
+end
+
+function get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt, grad_sd_wrt_Ab, Jacobian_Ab_wrt_xt, HJ, Hessian_Ab_wrt_xt)
     Hessian_sd_wrt_xt .= 0.0
-    Jacobian_Ab_wrt_xt = get_Jacobian_Ab_wrt_xt(grad_A_wrt_xt, grad_b_wrt_xt)
-    HJ = Hessian_sd_wrt_Ab * Jacobian_Ab_wrt_xt
     for k in eachindex(grad_sd_wrt_Ab)
-        Hessian_sd_wrt_xt .+= Jacobian_Ab_wrt_xt[k, :] * HJ[k, :]' + grad_sd_wrt_Ab[k] * vec([Hessian_A_wrt_xt Hessian_b_wrt_xt])[k]
+        Hessian_sd_wrt_xt .+= Jacobian_Ab_wrt_xt[k, :] * HJ[k, :]' + grad_sd_wrt_Ab[k] * Hessian_Ab_wrt_xt[k]
     end
 end
 
@@ -559,6 +584,12 @@ function setup_nonsmooth_3d(
     Hessian_A_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4, _ in 1:4]
     Hessian_b_wrt_xt_buffer = [zeros(6, 6) for _ in 1:4]
 
+    Ab_buffer = zeros(20)
+    grad_Ab_wrt_xt_buffer = [zeros(6) for _ in 1:20]
+    Hessian_Ab_wrt_xt_buffer = [zeros(6, 6) for _ in 1:20]
+    Jacobian_Ab_wrt_xt_buffer = zeros(20, 6)
+    HJ_buffer = zeros(20, 6)
+
     grad_sd_wrt_Ab_buffer = zeros(20)
     Hessian_sd_wrt_Ab_buffer = zeros(20, 20)
 
@@ -676,16 +707,21 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
                         
-                        
-                        get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
-                        # get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
+                        get_grad_A_b_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+                        # get_Hessian_A_b_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
 
-                        Ab = vcat(vec(AA[ass,:]), bb[ass])
-                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab)
-                        # get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab)
+                        # Ab = vcat(vec(AA[ass,:]), bb[ass])
+                        get_Ab!(Ab_buffer, AA[ass,:], bb[ass])
+                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab_buffer)
+                        # get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab_buffer)
 
-                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer)
-                        # get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_Ab_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer)
+                        get_grad_Ab_wrt_xt(grad_Ab_wrt_xt_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer) # rearrange, get a vector of gradient vectorss
+                        # get_Hessian_Ab_wrt_xt(Hessian_Ab_wrt_xt_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer) # rearrange, get a vector of Hessian matrices
+                        # get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt_buffer, grad_Ab_wrt_xt_buffer)
+                        # get_HJ(HJ_buffer, Hessian_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer)
+
+                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_Ab_wrt_xt_buffer)
+                        # get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer, HJ_buffer, Hessian_Ab_wrt_xt_buffer)
 
                         sd_lag_buf .= [-λsd * grad_sd_wrt_xt_buffer; zeros(6)]
 
@@ -760,16 +796,21 @@ function setup_nonsmooth_3d(
                         sd_ind = sd_cons_s2i[k, j, i, t]
                         @inbounds λsd = θ[sd_ind]
 
-                        get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
-                        get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
+                        get_grad_A_b_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
+                        get_Hessian_A_b_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
 
-                        Ab = vcat(vec(AA[ass,:]), bb[ass])
-                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab)
-                        get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab)
+                        # Ab = vcat(vec(AA[ass,:]), bb[ass])
+                        get_Ab!(Ab_buffer, AA[ass,:], bb[ass])
+                        get_grad_sd_wrt_Ab(grad_sd_wrt_Ab_buffer, Ab_buffer)
+                        get_Hessian_sd_wrt_Ab(Hessian_sd_wrt_Ab_buffer, Ab_buffer)
 
-                        
-                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer)
-                        get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_Ab_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer)
+                        get_grad_Ab_wrt_xt(grad_Ab_wrt_xt_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer) # rearrange, get a vector of gradient vectorss
+                        get_Hessian_Ab_wrt_xt(Hessian_Ab_wrt_xt_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer) # rearrange, get a vector of Hessian matrices
+                        get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt_buffer, grad_Ab_wrt_xt_buffer) # convert a vector of vectors to a matrix
+                        get_HJ(HJ_buffer, Hessian_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer) # HJ = H * J
+
+                        get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_Ab_wrt_xt_buffer)
+                        get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer, HJ_buffer, Hessian_Ab_wrt_xt_buffer)
 
                         Jsd_buf .= [grad_sd_wrt_xt_buffer; zeros(6)]
                         Jsdlag_buf .= [
@@ -973,22 +1014,22 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    # # check Jacobian
-    # buf2 = zeros(n)
-    # Jrows, Jcols, _ = findnz(prob.J_example)
-    # Jnum = sparse(Jrows, Jcols, Jbuf)
-    # Jnum2 = spzeros(n, n)
-    # @info "Testing Jacobian accuracy numerically"
-    # @showprogress for ni in 1:n
-    #    wi = copy(w)
-    #    wi[ni] += 1e-8
-    #    F(n, wi, buf2)
-    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
-    #    if norm(buf2 - buf)>1e-3
-    #     @infiltrate
-    #    end
-    # end
-    # @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    # check Jacobian
+    buf2 = zeros(n)
+    Jrows, Jcols, _ = findnz(prob.J_example)
+    Jnum = sparse(Jrows, Jcols, Jbuf)
+    Jnum2 = spzeros(n, n)
+    @info "Testing Jacobian accuracy numerically"
+    @showprogress for ni in 1:n
+       wi = copy(w)
+       wi[ni] += 1e-8
+       F(n, wi, buf2)
+       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
+       if norm(buf2 - buf)>1e-3
+        @infiltrate
+       end
+    end
+    @info "Jacobian error is $(norm(Jnum2-Jnum))"
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,
