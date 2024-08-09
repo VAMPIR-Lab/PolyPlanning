@@ -717,8 +717,8 @@ function setup_nonsmooth_3d(
 
                         get_grad_Ab_wrt_xt(grad_Ab_wrt_xt_buffer, grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer) # rearrange, get a vector of gradient vectorss
                         # get_Hessian_Ab_wrt_xt(Hessian_Ab_wrt_xt_buffer, Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer) # rearrange, get a vector of Hessian matrices
-                        # get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt_buffer, grad_Ab_wrt_xt_buffer)
-                        # get_HJ(HJ_buffer, Hessian_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer)
+                        # get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt_buffer, grad_Ab_wrt_xt_buffer) # convert a vector of vectors to a matrix
+                        # get_HJ(HJ_buffer, Hessian_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer) # HJ = H * J
 
                         get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_Ab_wrt_xt_buffer)
                         # get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer, HJ_buffer, Hessian_Ab_wrt_xt_buffer)
@@ -1014,22 +1014,22 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     F(n, w, buf)
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
 
-    # check Jacobian
-    buf2 = zeros(n)
-    Jrows, Jcols, _ = findnz(prob.J_example)
-    Jnum = sparse(Jrows, Jcols, Jbuf)
-    Jnum2 = spzeros(n, n)
-    @info "Testing Jacobian accuracy numerically"
-    @showprogress for ni in 1:n
-       wi = copy(w)
-       wi[ni] += 1e-8
-       F(n, wi, buf2)
-       Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
-       if norm(buf2 - buf)>1e-3
-        @infiltrate
-       end
-    end
-    @info "Jacobian error is $(norm(Jnum2-Jnum))"
+    # # check Jacobian
+    # buf2 = zeros(n)
+    # Jrows, Jcols, _ = findnz(prob.J_example)
+    # Jnum = sparse(Jrows, Jcols, Jbuf)
+    # Jnum2 = spzeros(n, n)
+    # @info "Testing Jacobian accuracy numerically"
+    # @showprogress for ni in 1:n
+    #    wi = copy(w)
+    #    wi[ni] += 1e-8
+    #    F(n, wi, buf2)
+    #    Jnum2[:, ni] = sparse((buf2 - buf) ./ 1e-8)
+    #    if norm(buf2 - buf)>1e-3
+    #     @infiltrate
+    #    end
+    # end
+    # @info "Jacobian error is $(norm(Jnum2-Jnum))"
     PATHSolver.c_api_License_SetString("2830898829&Courtesy&&&USR&45321&5_1_2021&1000&PATH&GEN&31_12_2025&0_0_0&6000&0_0")
     status, θ, info = PATHSolver.solve_mcp(
         F,

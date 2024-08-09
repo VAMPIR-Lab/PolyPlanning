@@ -5,6 +5,7 @@ using SparseArrays
 using GLMakie
 using Symbolics
 
+
 # U shape
 # V1 = [[0.0, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1], [0, 1, 0], [0, 1, 1], [1, 1, 0], [1, 1, 1]]
 # V2 = [[2, 0.0, 0], [2, 0, 1], [3, 0, 0], [3, 0, 1], [2, 1, 0], [2, 1, 1], [3, 1, 0], [3, 1, 1]]
@@ -24,7 +25,7 @@ using Symbolics
 
 r=rand
 Ve = [[-r(), -r(), -r()], [r(), -r(), -r()], [0, r(), -r()], [0, 0, 5r()]]
-Vo = [[-5r(), -5r(), -5r()], [5r(), -5r(), -5r()], [0, 5r(), -5r()], [0, 0, 5r()]]
+Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
 
 # success example
 # Ve = [[0.3557744694359173, 0.7163815945257631, 0.6655002776158867],
@@ -42,8 +43,8 @@ Vo = [[-5r(), -5r(), -5r()], [5r(), -5r(), -5r()], [0, 5r(), -5r()], [0, 0, 5r()
 # Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
 
 # success example
-Ve = [[-1.0, -1, -1.1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
-Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+# Ve = [[-1.0, -1, -1.1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+# Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
 
 # failure example
 # Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
@@ -55,15 +56,15 @@ Po = PolyPlanning.ConvexPolygon3D(Vo)
 ego_polys = [Pe]
 obs_polys = [Po]
 
-mrp = [4,2,1]/4
-e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
-err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
+mrp = ([4,2,1]+r(3))/4
+# e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
+# err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
 # if norm(err)>1e-4
 #     @warn err
 #     println(e)
 #     println(rad2deg(θ))
 # end
-trans =zeros(3)+ [5,2,3]
+trans =zeros(3) + [5,2,3] + r(3)
 x0 = [trans; mrp; zeros(6)]
 
 # Ve = [[1, 1], [2, 1], [2.5, 1.4], [2.5, 2], [1.5, 1.8], [.8, 1.2]]
@@ -72,6 +73,7 @@ x0 = [trans; mrp; zeros(6)]
 # Vo = [[.25, -2], [.25, 2], [-.25, 2], [-.25, -2]]
 # Vo2 = [[0, 0.0], [1, -1], [1, 1]]
 # obs_polys = [PolyPlanning.ConvexPolygon2D(Vo), PolyPlanning.ConvexPolygon2D(Vo2)]
+
 
 R_cost = 1e-3 * PolyPlanning.I(6)
 R_cost[4:6, 4:6] = R_cost[4:6, 4:6] / 100.0
