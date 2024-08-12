@@ -109,18 +109,20 @@ function setup_sep_planes_3d(
     n_xu = xdim + udim
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
-    sides_per_obs = length(obs_polys[1].b)
-    sides_per_ego = length(ego_polys[1].b)
-    n_per_col = 2 # for every collision, we need two parameters, α and b, to represent a hyperplane cos(α)*x + sin(α)*y + b = 0 
+    # n_side_ego = length(ego_polys[1].b)
+    # n_side_obs = length(obs_polys[1].b)
+    n_side_ego = maximum([length(i.b) for i in ego_polys]) # just for the buffer
+    n_side_obs = maximum([length(i.b) for i in obs_polys]) # just for the buffer
+    n_per_col = 4 # for every collision, we need four parameters, a, b, c, and d, to represent a hyperplane ax + by + cz + d = 0 
     n_per_ego = n_per_col * n_obs
     n_per_t = n_per_col * n_obs * n_ego
 
     z = Symbolics.@variables(z[1:n_xu*T+n_per_t*T])[1] |> Symbolics.scalarize
     x0 = Symbolics.@variables(x0[1:xdim])[1] |> Symbolics.scalarize
 
-    cost_nom = f(z, T, Rf, Qf)
-    cons_dyn = g_dyn(z, x0, T, dt)
-    cons_env = g_env(z, T, p1_max, p2_min, u1_max, u2_max, u3_max)
+    cost_nom = f_3d(z, T, R_cost, Q_cost)
+    cons_dyn = g_dyn_3d(z, x0, T, dt)
+    cons_env = g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, u5_max, u6_max)
 
     #Ve = ego_polys[1].V
     #Vos = map(obs_polys) do P
