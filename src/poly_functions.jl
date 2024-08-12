@@ -570,6 +570,27 @@ function R_from_mrp(mrp)
     I + ( 4*(1-nm2)*I + 8*skew(mrp) ) * skew(mrp) / (1+nm2)^2
 end
 
+function shift_to(A, b, x)
+    p = x[1:2]
+    θ = x[3]
+    R = [cos(θ) sin(θ)
+        -sin(θ) cos(θ)]
+    At = A * R'
+    bt = b - At * p
+    At, bt
+end
+
+function shift_to(V, x::AbstractArray{T}) where {T}
+    p = x[1:2]
+    θ = x[3]
+    R = [cos(θ) sin(θ)
+        -sin(θ) cos(θ)]
+    Vx = map(V) do v
+        R * v .+ p
+    end
+    Vx
+end
+
 # x∈R12, x[1:3] is position, x[4:6] is orientation, x[7:9] is velocity, x[10:12] is angular velocity
 function shift_to_3D(A, b, x)
     p = x[1:3]

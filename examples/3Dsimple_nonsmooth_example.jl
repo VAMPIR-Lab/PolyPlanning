@@ -5,6 +5,7 @@ using SparseArrays
 using GLMakie
 using Symbolics
 
+r=rand
 mrp = ([4,2,1]+r(3))/4
 # e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
 # err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
@@ -16,7 +17,6 @@ mrp = ([4,2,1]+r(3))/4
 trans =zeros(3) + [5,2,3] + r(3)
 x0 = [trans; mrp; zeros(6)]
 
-r=rand
 Ve = [[-r(), -r(), -r()], [r(), -r(), -r()], [0, r(), -r()], [0, 0, 5r()]]
 Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
 

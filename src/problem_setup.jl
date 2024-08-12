@@ -171,16 +171,6 @@ function g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, 
     g
 end
 
-function shift_to(A, b, x)
-    p = x[1:2]
-    θ = x[3]
-    R = [cos(θ) sin(θ)
-        -sin(θ) cos(θ)]
-    At = A * R'
-    bt = b - At * p
-    At, bt
-end
-
 function plot_polys(polys)
     fig = Figure()
     ax = Axis(fig[1, 1], aspect=DataAspect())

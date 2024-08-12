@@ -87,21 +87,25 @@ end
 
 
 
-function setup_sep_planes(
+function setup_sep_planes_3d(
     ego_polys,
     obs_polys;
     T=1,
     dt=0.2,
-    Rf=1e-3 * I(3),
-    Qf=1e-3 * I(2),
+    R_cost=1e-3 * I(6), # penality for control variables
+    Q_cost=1e-3 * I(3), # penality for distance
     p1_max=500.0,
-    p2_min=-500.0,
+    p2_max=500.0,
+    p3_max=500.0,
     u1_max=1.0,
     u2_max=1.0,
-    u3_max=π / 4
+    u3_max=1.0,
+    u4_max=π / 4,
+    u5_max=π / 4,
+    u6_max=π / 4,
 )
-    xdim = 6
-    udim = 3
+    xdim = 12
+    udim = 6
     n_xu = xdim + udim
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
