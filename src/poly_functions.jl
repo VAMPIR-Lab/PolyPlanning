@@ -601,6 +601,16 @@ function shift_to_3D(A, b, x)
     At, bt
 end
 
+function shift_to_3D(V, x::AbstractArray{T}) where {T}
+    p = x[1:3]
+    mrp = x[4:6]
+    R = R_from_mrp(mrp)
+    Vx = map(V) do v
+        R * v .+ p
+    end
+    Vx
+end
+
 function signed_distance(P1::ConvexPolygon2D, 
                          P2::ConvexPolygon2D)
     A1 = P1.A

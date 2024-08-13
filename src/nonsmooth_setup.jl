@@ -542,7 +542,7 @@ function setup_nonsmooth(
 end
 
 
-function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_newsd=false)
+function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()

@@ -363,9 +363,9 @@ function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1,
                 end
             elseif type == "sep_planes"
                 if sol.mcp_success
-                    (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    (fig, update_fig, ax) = visualize_sep_planes_3d(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                 else
-                    (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    (fig, update_fig, ax) = visualize_sep_planes_3d(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                     lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                 end
             elseif type == "dcol"
@@ -428,7 +428,7 @@ function visualize_multi(x0s, maps, sols, T, ego_poly; n_rows=1, n_cols=1, is_di
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                             end
                         elseif type == "sep_planes"
-                            (fig, update_fig, ax) = visualize_sep_planes(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                            (fig, update_fig, ax) = visualize_sep_planes_3d(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
 
                             if !sol.mcp_success
                                 lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)

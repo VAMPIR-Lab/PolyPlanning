@@ -1,5 +1,5 @@
 # given a hyperplane a1*x + a2*y + b = 0, return line segment inside the limits
-function get_line_segment(a1, a2, b; lim_x=[-10,10], lim_y=[-10,10])
+function get_line_segment_3d(a1, a2, b; lim_x=[-10,10], lim_y=[-10,10])
     if a1 == 0
         xs = lim_x
         ys = [-b/a2, -b/a2]
@@ -10,37 +10,7 @@ function get_line_segment(a1, a2, b; lim_x=[-10,10], lim_y=[-10,10])
     return xs, ys
 end
 
-# deprecated
-function g_col_sps(z, T, Vos, Ve; n_xu=9, n_sps=12)
-    cons_sps = Num[]
-    l_sps = Float64[]
-    u_sps = Float64[]
-    for t in 1:T
-        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
-        Vex = shift_to(Ve, xt)
-        m = length(Vex)
-        for (e, V) in enumerate(Vos)
-            ate = @view(z[n_xu*T+(t-1)*n_sps+(e-1)*3+1:n_xu*T+(t-1)*n_sps+(e-1)*3+2])
-            bte = z[n_xu*T+(t-1)*n_sps+(e-1)*3+3]
-            for i in 1:m # assuming number of vertices are equal between ego and obstacles
-                push!(cons_sps, ate' * Vex[i] + bte)
-                push!(l_sps, 0.0)
-                push!(u_sps, Inf)
-            end
-            for i in 1:m
-                push!(cons_sps, -ate' * V[i, :] - bte)
-                push!(l_sps, 0.0)
-                push!(u_sps, Inf)
-            end
-            push!(cons_sps, ate' * ate - 0.5)
-            push!(l_sps, 0.0)
-            push!(u_sps, Inf)
-        end
-    end
-    (cons_sps, l_sps, u_sps)
-end
-
-function get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
+function get_sps_cons_3d(z, T, ego_polys, obs_polys, n_xu, n_per_col)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_ego = n_per_col * n_obs
@@ -53,32 +23,35 @@ function get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
     u_sps = Float64[]
 
     for t in 1:T
-        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+3])
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+6])
         yt = @view(z[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
 
         for (i, Pi) in enumerate(ego_polys)
             yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
             Ve = Pi.V
-            Vex = shift_to(Ve, xt)
+            Vex = shift_to_3D(Ve, xt)
 
             for (k, Pk) in enumerate(obs_polys)
-                # ate = @view(yti[(k-1)*n_per_col+1:(k-1)*n_per_col+2])
-                ate = yti[(k-1)*n_per_col+1]
-                bte = yti[(k-1)*n_per_col+2]
-                norm_unit = [cos(ate), sin(ate)]
+                abc = @view(yti[1:3])
+                d = yti[4]
                 Vo = Pk.V
 
                 for j in 1:sides_per_ego
-                    push!(cons_sps, norm_unit' * Vex[j] + bte) # >= 0 
+                    push!(cons_sps, abc' * Vex[j] + d) # >= 0 
                     push!(l_sps, 0.0)
                     push!(u_sps, Inf)
                 end
 
                 for j in 1:sides_per_obs
-                    push!(cons_sps, -norm_unit' * Vo[j] - bte) # >= 0 
+                    push!(cons_sps, -abc' * Vo[j] - d) # >= 0 
                     push!(l_sps, 0.0)
                     push!(u_sps, Inf)
                 end
+
+                push!(cons_sps, abc' * abc - 1) # = 0 
+                push!(l_sps, -Inf)
+                push!(u_sps, Inf)
+
             end
         end
     end
@@ -111,8 +84,8 @@ function setup_sep_planes_3d(
     n_ego = length(ego_polys)
     # n_side_ego = length(ego_polys[1].b)
     # n_side_obs = length(obs_polys[1].b)
-    n_side_ego = maximum([length(i.b) for i in ego_polys]) # just for the buffer
-    n_side_obs = maximum([length(i.b) for i in obs_polys]) # just for the buffer
+    # n_side_ego = maximum([length(i.b) for i in ego_polys]) # just for the buffer
+    # n_side_obs = maximum([length(i.b) for i in obs_polys]) # just for the buffer
     n_per_col = 4 # for every collision, we need four parameters, a, b, c, and d, to represent a hyperplane ax + by + cz + d = 0 
     n_per_ego = n_per_col * n_obs
     n_per_t = n_per_col * n_obs * n_ego
@@ -130,7 +103,7 @@ function setup_sep_planes_3d(
     #end
 
     #cons_sps2, l_sps2, u_sps2 = g_col_sps(z, T, Vos, Ve)
-    cons_sps, l_sps, u_sps = get_sps_cons(z, T, ego_polys, obs_polys, n_xu, n_per_col)
+    cons_sps, l_sps, u_sps = get_sps_cons_3d(z, T, ego_polys, obs_polys, n_xu, n_per_col)
 
     cons_nom = [cons_dyn; cons_env; cons_sps]
 
@@ -171,7 +144,14 @@ function setup_sep_planes_3d(
         n_nom=length(λ_nom),
         ego_polys,
         p1_max,
-        p2_min,
+        p2_max,
+        p3_max,
+        u1_max,
+        u2_max,
+        u3_max,
+        u4_max,
+        u5_max,
+        u6_max,
         n_xu,
         obs_polys,
         n_per_col,
@@ -180,86 +160,68 @@ function setup_sep_planes_3d(
     )
 end
 
-function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figure(), ax=Axis(fig[1, 1], aspect=DataAspect()), θ=[], is_displaying=true, is_showing_sep_plane=true)
+function visualize_sep_planes_3d(x0, T, ego_polys, obs_polys; n_per_col=4, fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true, is_showing_sep_plane=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     n_per_t = n_per_col * n_obs * n_ego
-    n_xu = 9
-
-    Vos = map(obs_polys) do P
-        hcat(P.V...)' |> collect
-    end
-
+    n_xu = 18
     xxts = Dict()
-    abts = Dict()
-    
-    # limit of x and y to draw the hyperplane
-    lim_x = [-10, 10]
-    lim_y = [-10, 10]
-    
-    for i in 1:length(ego_polys)
-        xx = x0[1:3]
-        Aeb = shift_to(ego_polys[i].A, ego_polys[i].b, xx)
-        self_poly = ConvexPolygon2D(Aeb[1], Aeb[2])
-        Vex = self_poly.V
+    abcdts = Dict()
 
-        plot!(ax, self_poly; color=:blue)
-        for t in 1:T-1# 5:5:T-1
-            xxts[i, t] = Observable(x0[1:3])
-            Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
-            self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
-            plot!(ax, self_poly; color=:blue, linestyle=:dash)
 
-            if is_showing_sep_plane
-                for (e, V) in enumerate(Vos)
-                    abts[i, t, e] = Observable([0, -1.0])
-                    # a1*x + a2*y + b = 0
-                    a1 = @lift(cos($(abts[i, t, e])[1]))
-                    a2 = @lift(sin($(abts[i, t, e])[1]))
-                    b = @lift($(abts[i, t, e])[2])
-                    line_seg = @lift(get_line_segment($a1, $a2, $b; lim_x=lim_x, lim_y=lim_y))
-                    xs = @lift(($line_seg)[1])
-                    ys = @lift(($line_seg)[2])
-                    # GLMakie.lines!(ax, xs, ys; color=:green, linewidth=3)
-                    # limits!(ax, lim_x, lim_y)
-                end
-            end
+    for i in 1:n_ego
+        xx = x0[1:6]
+        Aeb = shift_to_3D(ego_polys[i].A, ego_polys[i].b, xx)
+        self_poly = ConvexPolygon3D(Aeb[1], Aeb[2])
+        #plot!(ax, self_poly; color=:blue)
+        plot_3D!(ax3, self_poly; color=:blue)
+
+        for t in 1:T-1#5:1:T-1
+            xxts[i, t] = Observable(x0[1:6])
+            Aeb = @lift(shift_to_3D(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+            self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
+            #plot!(ax, self_poly; color=:blue, linestyle=:dash)
+            plot_3D!(ax3, self_poly; color=:blue, linestyle=:dash)
         end
         t = T
-        xxts[i, t] = Observable(x0[1:3])
-        Aeb = @lift(shift_to(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
-        self_poly = @lift(ConvexPolygon2D($(Aeb)[1], $(Aeb)[2]))
-        plot!(ax, self_poly; color=:blue, linewidth=3)
+        xxts[i, t] = Observable(x0[1:6])
+        Aeb = @lift(shift_to_3D(ego_polys[i].A, ego_polys[i].b, $(xxts[i, t])))
+        self_poly = @lift(ConvexPolygon3D($(Aeb)[1], $(Aeb)[2]))
+        #plot!(ax, self_poly; color=:blue, linewidth=3)
+        plot_3D!(ax3, self_poly; color=:blue, linewidth=3)
 
         if is_showing_sep_plane
             for e in 1:n_obs
-                abts[i, t, e] = Observable([0, -1.0])
-                # a1*x + a2*y + b = 0
-                a1 = @lift(cos($(abts[i, t, e])[1]))
-                a2 = @lift(sin($(abts[i, t, e])[1]))
-                b = @lift($(abts[i, t, e])[2])
-                line_seg = @lift(get_line_segment($a1, $a2, $b; lim_x=lim_x, lim_y=lim_y))
-                xs = @lift(($line_seg)[1])
-                ys = @lift(($line_seg)[2])
-                GLMakie.lines!(ax, xs, ys; color=:green, linewidth=3)
-                limits!(ax, lim_x, lim_y)
+                abcdts[i, e] = Observable([1.0, 1.0, 1.0, -1.0])
+                # ax + by + +cz + d = 0
+                a = @lift($(abcdts[i, e])[1])
+                b = @lift($(abcdts[i, e])[2])
+                c = @lift($(abcdts[i, e])[3])
+                d = @lift($(abcdts[i, e])[4])
+
+                xs = LinRange(-10, 10, 3)
+                ys = LinRange(-10, 10, 3)
+                zs = @lift([(-($d)-($a)*x-($b)*y)/($c) for x in xs, y in ys])
+
+                surface!(ax3, xs, ys, zs)
             end
         end
     end
 
     colors = [:red for _ in 1:n_obs]
     for (P, c) in zip(obs_polys, colors)
-        plot!(ax, P; color=c)
+        plot_3D!(ax3, P; color=c)
+        #plot!(ax, P; color=c)
     end
 
     function update_fig(θ)
         for i in 1:n_ego
-            for t in 1:T
-                xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
-                if is_showing_sep_plane
-                    for k in 1:n_obs
-                        abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+2])
-                    end
+            for t in 1:T #5:5:T
+                xxts[i, t][] = copy(θ[(t-1)*18+1:(t-1)*18+6])
+            end
+            if is_showing_sep_plane
+                for k in 1:n_obs
+                    abcdts[i, k][] = copy(θ[n_xu*T+(T-1)*n_per_t+(k-1)*3+1:n_xu*T+(T-1)*n_per_t+(k-1)*3+4])
                 end
             end
         end
@@ -273,12 +235,11 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
         display(fig)
     end
 
-    (fig, update_fig, ax)
+    (fig, update_fig, ax3)
 end
 
-function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
-    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, obs_polys, n_per_col) = prob
-
+function solve_prob_sep_planes_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
+    (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, u5_max, u6_max, n_xu, obs_polys, n_per_col) = prob
 
     J_rows, J_cols, J_vals! = J_both
     nnz_total = length(J_rows)
@@ -291,27 +252,32 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true, sleep_
     @assert n == n_z + n_nom "did you forget to update l/u"
 
     if is_displaying
-        (fig, update_fig) = visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col)
+        (fig, update_fig) = visualize_sep_planes_3d(x0, T, ego_polys, obs_polys; n_per_col)
     end
 
     if isnothing(θ0)
         θ0 = zeros(n)
+        p = x0[1:3]
+        mrp = x0[4:6]
+        R = R_from_mrp(mrp)
         for t in 1:T
-            θ0[(t-1)*n_xu+1:(t-1)*n_xu+6] = x0
+            θ0[(t-1)*n_xu+1:(t-1)*n_xu+12] = x0
             yt = @view(θ0[T*n_xu+(t-1)*n_per_t+1:T*n_xu+(t-1)*n_per_t+n_per_t])
-            for (i, Pi) in enumerate(ego_polys)
+            for (i, Pe) in enumerate(ego_polys)
                 yti = @view(yt[(i-1)*n_per_ego+1:(i-1)*n_per_ego+n_per_ego])
-                for (k, Pk) in enumerate(obs_polys)
+                
+                for (k, Po) in enumerate(obs_polys)
                     #Vo = hcat(Pk.V...)' |> collect
                     #Vo_center = sum(Vo; dims=1) ./ size(Vo, 1)
                     #a = x0[1:2] - Vo_center[1:2]
                     #z = (x0[1:2] + Vo_center[1:2]) / 2
                     #b = -a'z
-
-                    a = 0
-                    b = -1
-                    yti[(k-1)*n_per_col+1] = a
-                    yti[(k-1)*n_per_col+2] = b
+                    ce = R * Pe.c + p
+                    co_to_ce = ce - Po.c
+                    abc = co_to_ce / norm(co_to_ce)
+                    d = -abc' * (ce+Po.c)/2
+                    yti[(k-1)*n_per_col+1:(k-1)*n_per_col+3] .= abc
+                    yti[(k-1)*n_per_col+4] = d
                 end
             end
         end
@@ -319,7 +285,7 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true, sleep_
         #    for i in 1:n_ego
         #        xxts[i, t][] = copy(θ0[(t-1)*n_xu+1:(t-1)*n_xu+6])
         #        for k in 1:n_obs
-        #            abts[i, t, k][] = copy(θ0[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
+        #            abcdts[i, t, k][] = copy(θ0[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+3])
         #        end
         #    end
         #end

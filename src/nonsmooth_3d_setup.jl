@@ -901,7 +901,7 @@ function setup_nonsmooth_3d(
 end
 
 # this needs to be updated for 3d
-function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true, is_newsd=false)
+function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()

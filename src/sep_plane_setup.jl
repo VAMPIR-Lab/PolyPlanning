@@ -285,7 +285,7 @@ function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true, sleep_
     @assert n == n_z + n_nom "did you forget to update l/u"
 
     if is_displaying
-        (fig, update_fig) = visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col)
+        (fig, update_fig) = visualize_sep_planes_3d(x0, T, ego_polys, obs_polys; n_per_col)
     end
 
     if isnothing(θ0)
