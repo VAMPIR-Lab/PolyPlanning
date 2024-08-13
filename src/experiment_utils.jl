@@ -33,6 +33,44 @@ function multi_solve_nonsmooth(ego_polys, x0s, maps, param)
     sols
 end
 
+function multi_solve_nonsmooth_3d(ego_polys, x0s, maps, param)
+    @argcheck length(x0s) == param.n_x0s
+    @argcheck length(maps) == param.n_maps
+    for map in maps
+        @argcheck length(map) == param.n_obs
+    end
+
+    sols = Dict()
+    p = Progress(param.n_maps * param.n_x0s, dt=1.0)
+    for (i, map) in enumerate(maps)
+        nonsmooth_prob = setup_nonsmooth_3d(
+            ego_polys,
+            map;
+            param.T,
+            param.dt,
+            R_cost=param.R_cost,
+            Q_cost=param.Q_cost,
+            param.u1_max,
+            param.u2_max,
+            param.u3_max,
+            param.u4_max,
+            param.u5_max,
+            param.u6_max,
+            n_sd_slots=15
+        )
+        for (j, x0) in enumerate(x0s)
+            res = solve_nonsmooth_3d(nonsmooth_prob, x0; is_displaying=false)
+            mcp_success = res.status == PATHSolver.MCP_Solved
+            time = res.info.total_time
+            cost = f_3d(res.z, param.T, param.R_cost, param.Q_cost)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
+            next!(p)
+        end
+    end
+    sols
+end
+
 function multi_solve_sep(ego_poly, x0s, maps, param)
     @argcheck length(x0s) == param.n_x0s
     @argcheck length(maps) == param.n_maps
@@ -68,6 +106,43 @@ function multi_solve_sep(ego_poly, x0s, maps, param)
     sols
 end
 
+function multi_solve_sep_3d(ego_poly, x0s, maps, param)
+    @argcheck length(x0s) == param.n_x0s
+    @argcheck length(maps) == param.n_maps
+    for map in maps
+        @argcheck length(map) == param.n_obs
+    end
+
+    sols = Dict()
+    p = Progress(param.n_maps * param.n_x0s, dt=1.0)
+    for (i, map) in enumerate(maps)
+        prob = setup_sep_planes_3d(
+            ego_poly,
+            map;
+            param.T,
+            param.dt,
+            param.R_cost,
+            param.Q_cost,
+            param.u1_max,
+            param.u2_max,
+            param.u3_max,
+            param.u4_max,
+            param.u5_max,
+            param.u6_max
+        )
+
+        for (j, x0) in enumerate(x0s)
+            res = solve_prob_sep_planes_3d(prob, x0; is_displaying=false)
+            mcp_success = res.status == PATHSolver.MCP_Solved
+            time = res.info.total_time
+            cost = f_3d(res.z, param.T, param.R_cost, param.Q_cost)
+            final_pos = res.z[(param.T-1)*param.n_xu+1:(param.T-1)*param.n_xu+2]
+            sols[i, j] = (; mcp_success, time, cost, final_pos, res)
+            next!(p)
+        end
+    end
+    sols
+end
 
 function multi_solve_dcol(ego_poly, x0s, maps, param)
     @argcheck length(x0s) == param.n_x0s
@@ -140,13 +215,18 @@ function multi_solve_kkt(ego_poly, x0s, maps, param)
     sols
 end
 
-function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
+function load_all(exp_name, exp_file_date, res_file_date, ; is_loading_our=true, is_loading_sep=false, is_loading_dcol=false, is_loading_kkt=false, data_dir="data")
     @info "Loading $exp_name exp results from $res_file_date for data from $exp_file_date..."
-    our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
-    our_sols = our_file["our_sols"]
+    our_sols = []
     sep_sols = []
     dcol_sols = []
     kkt_sols = []
+
+    if is_loading_our
+        our_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(res_file_date).jld2", "r")
+        our_sols = our_file["our_sols"]
+    end
+
     if is_loading_sep
         sep_file = jldopen("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(res_file_date).jld2", "r")
         sep_sols = sep_file["sep_sols"]
@@ -212,6 +292,60 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
             jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_kkt_sols_$(date_now).jld2"; kkt_sols)
         end
     end
+
+    (our_sols, sep_sols, dcol_sols, kkt_sols)
+end
+
+function compute_all_3d(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_our=false, is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
+    #n_maps = length(maps)
+    #n_x0s = length(x0s)
+    our_sols = []
+    if is_running_our
+        @info "Computing nonsmooth solutions..."
+        start_t = time()
+        our_sols = multi_solve_nonsmooth_3d(ego_poly, x0s, maps, param)
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_our_sols_$(date_now).jld2"; our_sols)
+        end
+    end
+
+    sep_sols = []
+    if is_running_sep
+        @info "Computing separating hyperplane solutions..."
+        start_t = time()
+        sep_sols = multi_solve_sep_3d(ego_poly, x0s, maps, param)
+        @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
+
+        if is_saving
+            jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_sep_sols_$(date_now).jld2"; sep_sols)
+        end
+    end
+
+    dcol_sols = []
+    # if is_running_dcol
+    #     @info "Computing DifferentiableCollisions.jl solutions..."
+    #     start_t = time()
+    #     dcol_sols = multi_solve_dcol(ego_poly, x0s, maps, param)
+    #     @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
+
+    #     if is_saving
+    #         jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_dcol_sols_$(date_now).jld2"; dcol_sols)
+    #     end
+    # end
+
+    kkt_sols = []
+    # if is_running_kkt
+    #     @info "Computing direct KKT solutions..."
+    #     start_t = time()
+    #     kkt_sols = multi_solve_kkt(ego_poly, x0s, maps, param)
+    #     @info "Done! $(round(time() - start_t; sigdigits)) seconds elapsed."
+
+    #     if is_saving
+    #         jldsave("$data_dir/$(exp_name)_exp_$(exp_file_date)_kkt_sols_$(date_now).jld2"; kkt_sols)
+    #     end
+    # end
 
     (our_sols, sep_sols, dcol_sols, kkt_sols)
 end

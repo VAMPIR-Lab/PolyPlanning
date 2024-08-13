@@ -71,6 +71,13 @@ function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
     return get_grad_A_ego_wrt_xt, get_grad_b_ego_wrt_xt, get_Hessian_A_ego_wrt_xt, get_Hessian_b_ego_wrt_xt
 end
 
+# AA = [A_ego*R' A_ego*centr_ego+b_ego
+#       A_obs    A_obs*centr_obs+b_obs]
+# bb = [b_ego-A_ego*R'*l
+#         b_obs]
+# Only R and l are determined by xt.
+# The last column of AA, the last several rows of AA and bb are constant.
+
 # update grad_A_wrt_xt and grad_b_wrt_xt according to assignment
 function get_grad_A_b_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_xt, grad_b_ego_wrt_xt, m1)
     for k in eachindex(grad_A_wrt_xt)
@@ -87,8 +94,10 @@ function get_grad_A_b_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_
             grad_A_wrt_xt[k, 1] .= grad_A_ego_wrt_xt[ind, 1]
             grad_A_wrt_xt[k, 2] .= grad_A_ego_wrt_xt[ind, 2]
             grad_A_wrt_xt[k, 3] .= grad_A_ego_wrt_xt[ind, 3]
+            # grad_A_wrt_xt[k, 4] is a constant and independent of xt
             grad_b_wrt_xt[k] .= grad_b_ego_wrt_xt[ind]
         end
+        # If ind > m1, i.e., constraints from obstacle, are constant and independent of xt
     end
 end
 
@@ -189,10 +198,16 @@ function get_grad_sd_wrt_xt!(grad_sd_wrt_xt, grad_sd_wrt_Ab, grad_Ab_wrt_xt)
     grad_sd_wrt_xt .= grad_sd_wrt_Ab' * grad_Ab_wrt_xt
 end
 
+# H ∈ R 20*20, J ∈ R 20 * 6
 function get_HJ(HJ, Hessian_sd_wrt_Ab, Jacobian_Ab_wrt_xt)
     HJ .= Hessian_sd_wrt_Ab * Jacobian_Ab_wrt_xt
 end
 
+# sd(Ab(xt)) is a scalar function, Ab is a 20d vector function (for 4d linear system, there 16+4=20 parameters),
+# xt is a 6d vector (xt[7:12] are control variables, which does not affect sd)
+# ∂sd/∂xt = Σ ∂sd/∂Ab * ∂Ab/∂xt    ∀ Ab    (chain rule, implemented in function get_grad_sd_wrt_xt!)
+# ∂²sd/∂xt² = Σ J[k,:]*HJ[k,:]'    ∀ k∈[1:20]    (outer product of two 6d vectors, get a 6*6 matrix)
+#           + Σ ∂sd/∂Ab[k] * Hessian_Ab[k]_wrt_xt    ∀ k∈[1:20]   (scalar times a 6*6 matrix)
 function get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt, grad_sd_wrt_Ab, Jacobian_Ab_wrt_xt, HJ, Hessian_Ab_wrt_xt)
     Hessian_sd_wrt_xt .= 0.0
     for k in eachindex(grad_sd_wrt_Ab)

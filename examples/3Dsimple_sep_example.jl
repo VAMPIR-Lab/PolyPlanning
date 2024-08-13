@@ -37,4 +37,4 @@ sep_prob = PolyPlanning.setup_sep_planes_3d(
     u6_max=π,
 )
 
-sep_sol = PolyPlanning.solve_prob_sep_planes_3d(sep_prob, x0; is_displaying=true, sleep_duration=0.01)
+sep_sol = PolyPlanning.solve_prob_sep_planes_3d(sep_prob, x0; is_displaying=false)#, sleep_duration=0.01)
