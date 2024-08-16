@@ -1027,8 +1027,9 @@ function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_dur
     Jbuf = zeros(nnz_total)
     w = randn(length(θ0))
     F(n, w, buf)
+    t=time()
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-
+    println("update J takes ", time()-t, " seconds")
     # # check Jacobian
     # buf2 = zeros(n)
     # Jrows, Jcols, _ = findnz(prob.J_example)

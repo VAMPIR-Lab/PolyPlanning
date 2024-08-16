@@ -6,7 +6,7 @@ using GLMakie
 using Symbolics
 
 r=rand
-mrp = ([4,2,1]+r(3))/4
+mrp = (ones(3)*0.8+r(3)*0.4)/sqrt(3) # tan(θ/4)∈[0.8, 1.2] θ∈[2.70, 3.50]
 # e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
 # err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
 # if norm(err)>1e-4

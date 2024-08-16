@@ -18,8 +18,8 @@ data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 2 # number of maps
-n_x0s = 2 # number of initial conditions
+n_maps = 10 # number of maps
+n_x0s = 10 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 12 # 6-state variable + control variable
@@ -99,7 +99,7 @@ else # generate ego_poly, x0s and maps
     ego_poly = [Pe]
 
     x0s = map(1:n_x0s) do i
-        mrp = ([4,2,1]+r(3))/4
+        mrp = (ones(3)*0.8+r(3)*0.4)/sqrt(3) # tan(θ/4)∈[0.8, 1.2] θ∈[2.70, 3.50]
         trans =zeros(3) + [5,2,3] + r(3)
         [trans; mrp; zeros(6)]
     end
