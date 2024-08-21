@@ -119,7 +119,7 @@ function setup_sep_planes_3d(
     n_per_col = 4 # for every collision, we need four parameters, a, b, c, and d, to represent a hyperplane ax + by + cz + d = 0 
     n_per_ego = n_per_col * n_obs
     n_per_t = n_per_col * n_obs * n_ego
-    n_sps = (n_side_ego + n_side_obs + 1) * T # number of sep plane parameters
+    n_sps = (n_side_ego + n_side_obs + 1) * T * n_obs * n_ego # number of sep plane parameters
 
     n_dyn_cons = T * n_x
     n_env_cons = T * n_xu
@@ -487,9 +487,9 @@ function solve_prob_sep_planes_3d(prob, x0; θ0=nothing, is_displaying=true, sle
     Jbuf = zeros(nnz_total)
     w = randn(length(θ0))
     F(n, w, buf)
-    t=time()
+    # t=time()
     J(n, nnz_total, w, zero(J_col), zero(J_len), zero(J_row), Jbuf)
-    println("update J takes ", time()-t, " seconds")
+    # println("update J takes ", time()-t, " seconds")
 
     # # check Jacobian
     # buf2 = zeros(n)

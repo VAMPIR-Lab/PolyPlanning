@@ -6,7 +6,10 @@ using GLMakie
 using Symbolics
 
 r=rand
-mrp = (ones(3)*0.8+r(3)*0.4)/sqrt(3) # tan(θ/4)∈[0.8, 1.2] θ∈[2.70, 3.50]
+# mrp = ([4,2,1]+r(3))/4 # seems to get a higher success rate
+# mrp = (ones(3)*0.8+r(3)*0.4)/sqrt(3) # tan(θ/4)∈[0.8, 1.2] θ∈[2.70, 3.50]
+axis = rand(3)
+mrp = axis / norm(axis) * (0.8+0.4*r()) # norm(mrp)∈[0.8, 1.2]
 # e, θ = PolyPlanning.axis_angle_from_mrp(mrp)
 # err = mrp - PolyPlanning.mrp_from_axis_angle(e, θ)
 # if norm(err)>1e-4
@@ -17,7 +20,7 @@ mrp = (ones(3)*0.8+r(3)*0.4)/sqrt(3) # tan(θ/4)∈[0.8, 1.2] θ∈[2.70, 3.50]
 trans =zeros(3) + [5,2,3] + r(3)
 x0 = [trans; mrp; zeros(6)]
 
-Ve = [[-r(), -r(), -r()], [r(), -r(), -r()], [0, r(), -r()], [0, 0, 5r()]]
+Ve = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 1+r()]]
 Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
 
 # success example

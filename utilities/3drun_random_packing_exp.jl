@@ -12,9 +12,9 @@ is_running_dcol = false
 is_running_kkt = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = true  # skip compute and load from file
-exp_file_date = "2024-08-17_2334"
-res_file_date = "2024-08-17_2334"
-exp_name = "simple_packing"
+exp_file_date = "2024-08-20_1029"
+res_file_date = "2024-08-20_1029"
+exp_name = "random_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
@@ -22,7 +22,7 @@ date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 n_maps = 3 # number of maps
 n_x0s = 100 # number of initial conditions
 n_sides = 4 # 
-n_obs = 1
+n_obs = 3
 n_xu = 12 # 6-state variable + control variable
 T = 20 # timestep
 dt = 0.2 #
@@ -83,7 +83,7 @@ else # generate ego_poly, x0s and maps
     )
 
     # generate x0s and maps
-    Ve = [[-r(), -r(), -r()], [r(), -r(), -r()], [0, r(), -r()], [0, 0, r()]]
+    Ve = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 1+r()]]
     Pe = PolyPlanning.ConvexPolygon3D(Ve)
     ego_poly = [Pe]
 
@@ -97,9 +97,13 @@ else # generate ego_poly, x0s and maps
 
 
     maps = map(1:n_maps) do i
-        Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
-        Po = PolyPlanning.ConvexPolygon3D(Vo)
-        [Po]
+        Vo1 = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
+        Vo2 = [[-1-r(), -1-r(), 1+r()], [1+r(), -1-r(), 1+r()], [0, 1+r(), 1+r()], [0, 0, -5r()]]
+        Vo3 = [[3r(),3r(),3r()], [3r(),3r(),3r()], [3r(),3r(),3r()], [3r(),3r(),3r()]]
+        Po1 = PolyPlanning.ConvexPolygon3D(Vo1)
+        Po2 = PolyPlanning.ConvexPolygon3D(Vo2)
+        Po3 = PolyPlanning.ConvexPolygon3D(Vo3)
+        [Po1, Po2, Po3]
     end
 
     if is_saving
