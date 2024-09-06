@@ -12,20 +12,20 @@ is_running_dcol = false
 is_running_kkt = false
 is_loading_exp = true # skip experiment generation and load from file
 is_loading_res = true  # skip compute and load from file
-exp_file_date = "2024-08-17_2334"
-res_file_date = "2024-08-17_2334"
+exp_file_date = "2024-08-19_0033"
+res_file_date = "2024-08-19_0033"
 exp_name = "simple_packing"
 data_dir = "data"
 date_now = Dates.format(Dates.now(), "YYYY-mm-dd_HHMM")
 
 # experiment parameters (ignored if is_loading_exp or is_loading_res)
-n_maps = 3 # number of maps
+n_maps = 10 # number of maps
 n_x0s = 100 # number of initial conditions
 n_sides = 4 # 
 n_obs = 1
 n_xu = 12 # 6-state variable + control variable
-T = 20 # timestep
-dt = 0.2 #
+T = 2 # timestep
+dt = 2. #
 R_cost = 1e-3 * PolyPlanning.I(6) # penalty for control variable
 R_cost[4:6, 4:6] = R_cost[4:6, 4:6] / 100.0
 Q_cost=2e-3 * PolyPlanning.I(3) # penalty for translation
@@ -83,7 +83,7 @@ else # generate ego_poly, x0s and maps
     )
 
     # generate x0s and maps
-    Ve = [[-r(), -r(), -r()], [r(), -r(), -r()], [0, r(), -r()], [0, 0, r()]]
+    Ve = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 1+r()]]
     Pe = PolyPlanning.ConvexPolygon3D(Ve)
     ego_poly = [Pe]
 

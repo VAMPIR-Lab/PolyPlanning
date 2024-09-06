@@ -65,6 +65,20 @@ function f_3d(z, T, R_cost, Q_cost)
     cost
 end
 
+function f_3d_0step(z, T, R_cost, Q_cost)
+    n_x = 6
+    n_u = 0
+    n_xu = n_x + n_u
+
+    cost = 0.0
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        # ut = @view(z[(t-1)*n_xu+n_x+1:(t-1)*n_xu+n_xu])
+        cost += xt[1:3]' * Q_cost * xt[1:3]
+    end
+    cost
+end
+
 function pointmass_dyn(x, u, dt)
     p1, p2, v1, v2 = x
     a1, a2 = u
