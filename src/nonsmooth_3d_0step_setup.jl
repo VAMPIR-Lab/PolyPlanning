@@ -1,372 +1,12 @@
 
-function get_Num0s(n_row, n_col)
-    return [Num(0) for _ in 1:n_row, _ in 1:n_col]
-end
-
-function get_Num0s(n)
-    return [Num(0) for _ in 1:n]
-end
-
-function get_aibi_wrt_xt_fun(R, l, xt)
-    # Symbolics of one row of original ego constraints
-    Ai = Symbolics.@variables(Ai[1:3])[1] |> Symbolics.scalarize
-    bi = Symbolics.@variables(bi)[1]
-
-    # parameterized Ai and bi w.r.t. xt
-    a1, a2, a3 = Ai' * R'
-    b1 = bi - [a1, a2, a3]' *l
-
-    # expression of gradient
-    grad_a1_wrt_xt = Symbolics.gradient(a1, xt; simplify=false)
-    grad_a2_wrt_xt = Symbolics.gradient(a2, xt; simplify=false)
-    grad_a3_wrt_xt = Symbolics.gradient(a3, xt; simplify=false)
-    grad_b1_wrt_xt = Symbolics.gradient(b1, xt; simplify=false)
-
-    Hessian_a1_wrt_xt = Symbolics.jacobian(grad_a1_wrt_xt, xt; simplify=false)
-    Hessian_a2_wrt_xt = Symbolics.jacobian(grad_a2_wrt_xt, xt; simplify=false)
-    Hessian_a3_wrt_xt = Symbolics.jacobian(grad_a3_wrt_xt, xt; simplify=false)
-    Hessian_b1_wrt_xt = Symbolics.jacobian(grad_b1_wrt_xt, xt; simplify=false)
-
-    # function of gradient
-    get_grad_a1_wrt_xt = Symbolics.build_function(grad_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_grad_a2_wrt_xt = Symbolics.build_function(grad_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_grad_a3_wrt_xt = Symbolics.build_function(grad_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_grad_b1_wrt_xt = Symbolics.build_function(grad_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    
-    # function of Hessian matrix
-    get_Hessian_a1_wrt_xt = Symbolics.build_function(Hessian_a1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_Hessian_a2_wrt_xt = Symbolics.build_function(Hessian_a2_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_Hessian_a3_wrt_xt = Symbolics.build_function(Hessian_a3_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-    get_Hessian_b1_wrt_xt = Symbolics.build_function(Hessian_b1_wrt_xt, xt, Ai, bi; expression=Val(false))[2]
-
-    return [get_grad_a1_wrt_xt, get_grad_a2_wrt_xt, get_grad_a3_wrt_xt, get_grad_b1_wrt_xt, get_Hessian_a1_wrt_xt, get_Hessian_a2_wrt_xt, get_Hessian_a3_wrt_xt, get_Hessian_b1_wrt_xt]
-end
-
-function get_Ab_ego_wrt_xt_fun(xt, A_ego, b_ego, aibi_wrt_xt_functions)
-    get_grad_a1_wrt_xt, get_grad_a2_wrt_xt, get_grad_a3_wrt_xt, get_grad_b1_wrt_xt, get_Hessian_a1_wrt_xt, get_Hessian_a2_wrt_xt, get_Hessian_a3_wrt_xt, get_Hessian_b1_wrt_xt = aibi_wrt_xt_functions
-    m1 = length(b_ego)
-
-    grad_A_ego_wrt_xt = [get_Num0s(6) for _ in 1:m1, _ in 1:3] # the same shape as A_ego, where every element is a gradient
-    grad_b_ego_wrt_xt = [get_Num0s(6) for _ in 1:m1] # the same shape as b_ego, where every element is a gradient 
-    Hessian_A_ego_wrt_xt = [get_Num0s(6, 6) for _ in 1:m1, _ in 1:3] # the same shape as A_ego, where every element is a Hessian matrix
-    Hessian_b_ego_wrt_xt = [get_Num0s(6, 6) for _ in 1:m1] # the same shape as b_ego, where every element is a Hessian matrix
-
-    # replace symbolic Ai and bi with values of A_ego and b_ego, get expressions only including xt
-    for k in 1:m1
-        get_grad_a1_wrt_xt(grad_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
-        get_grad_a2_wrt_xt(grad_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
-        get_grad_a3_wrt_xt(grad_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
-        get_grad_b1_wrt_xt(grad_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
-
-        get_Hessian_a1_wrt_xt(Hessian_A_ego_wrt_xt[k, 1], xt, A_ego[k,:], b_ego[k])
-        get_Hessian_a2_wrt_xt(Hessian_A_ego_wrt_xt[k, 2], xt, A_ego[k,:], b_ego[k])
-        get_Hessian_a3_wrt_xt(Hessian_A_ego_wrt_xt[k, 3], xt, A_ego[k,:], b_ego[k])
-        get_Hessian_b1_wrt_xt(Hessian_b_ego_wrt_xt[k], xt, A_ego[k,:], b_ego[k])
-    end
-
-    get_grad_A_ego_wrt_xt = Symbolics.build_function(grad_A_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_grad_b_ego_wrt_xt = Symbolics.build_function(grad_b_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_Hessian_A_ego_wrt_xt = Symbolics.build_function(Hessian_A_ego_wrt_xt, xt; expression=Val(false))[2]
-    get_Hessian_b_ego_wrt_xt = Symbolics.build_function(Hessian_b_ego_wrt_xt, xt; expression=Val(false))[2]
-    return get_grad_A_ego_wrt_xt, get_grad_b_ego_wrt_xt, get_Hessian_A_ego_wrt_xt, get_Hessian_b_ego_wrt_xt
-end
-
-# AA = [A_ego*R' A_ego*centr_ego+b_ego
-#       A_obs    A_obs*centr_obs+b_obs]
-# bb = [b_ego-A_ego*R'*l
-#         b_obs]
-# Only R and l are determined by xt.
-# The last column of AA, the last several rows of AA and bb are constant.
-
-# update grad_A_wrt_xt and grad_b_wrt_xt according to assignment
-function get_grad_A_b_wrt_xt!(grad_A_wrt_xt, grad_b_wrt_xt, ass, grad_A_ego_wrt_xt, grad_b_ego_wrt_xt, m1)
-    for k in eachindex(grad_A_wrt_xt)
-        grad_A_wrt_xt[k] .= .0
-    end
-    for k in eachindex(grad_b_wrt_xt)
-        grad_b_wrt_xt[k] .= .0
-    end
-
-    for (k, ind) in enumerate(ass)
-        if ind <= m1
-            # must update element by element, otherwise they will point to the same memory, like the following line
-            # A_wrt_xt[k, 1:3] .= A_ego_wrt_xt[ind, :]
-            grad_A_wrt_xt[k, 1] .= grad_A_ego_wrt_xt[ind, 1]
-            grad_A_wrt_xt[k, 2] .= grad_A_ego_wrt_xt[ind, 2]
-            grad_A_wrt_xt[k, 3] .= grad_A_ego_wrt_xt[ind, 3]
-            # grad_A_wrt_xt[k, 4] is a constant and independent of xt
-            grad_b_wrt_xt[k] .= grad_b_ego_wrt_xt[ind]
-        end
-        # If ind > m1, i.e., constraints from obstacle, are constant and independent of xt
-    end
-end
-
-# update Hessian_A_wrt_xt and Hessian_b_wrt_xt according to assignment
-function get_Hessian_A_b_wrt_xt!(Hessian_A_wrt_xt, Hessian_b_wrt_xt, ass, Hessian_A_ego_wrt_xt, Hessian_b_ego_wrt_xt, m1)
-    for k in eachindex(Hessian_A_wrt_xt)
-        Hessian_A_wrt_xt[k] .= .0
-    end
-    for k in eachindex(Hessian_b_wrt_xt)
-        Hessian_b_wrt_xt[k] .= .0
-    end
-
-    for (k, ind) in enumerate(ass)
-        if ind <= m1
-            # must update element by element, otherwise they will point to the same memory, like the following line
-            # J_A_wrt_xt[k, 1:3] .= J_A_ego_wrt_xt[ind, :]
-            Hessian_A_wrt_xt[k, 1] .= Hessian_A_ego_wrt_xt[ind, 1]
-            Hessian_A_wrt_xt[k, 2] .= Hessian_A_ego_wrt_xt[ind, 2]
-            Hessian_A_wrt_xt[k, 3] .= Hessian_A_ego_wrt_xt[ind, 3]
-            Hessian_b_wrt_xt[k] .= Hessian_b_ego_wrt_xt[ind]
-        end
-    end
-end
-
-# update Hessian_Ab_wrt_xt according to Hessian_A_wrt_xt and Hessian_b_wrt_xt (rearrange them), a vector of matrices
-function get_Hessian_Ab_wrt_xt(Hessian_Ab_wrt_xt, Hessian_A_wrt_xt, Hessian_b_wrt_xt)
-    for k in eachindex(Hessian_A_wrt_xt)
-        Hessian_Ab_wrt_xt[k] .= Hessian_A_wrt_xt[k]
-    end
-    for k in eachindex(Hessian_b_wrt_xt)
-        Hessian_Ab_wrt_xt[k+16] .= Hessian_b_wrt_xt[k]
-    end  
-end
-
-# update grad_Ab_wrt_xt according to grad_A_wrt_xt and grad_b_wrt_xt (rearrange them), a vector of vectors
-function get_grad_Ab_wrt_xt(grad_Ab_wrt_xt, grad_A_wrt_xt, grad_b_wrt_xt)
-    for k in eachindex(grad_A_wrt_xt)
-        grad_Ab_wrt_xt[k] .= grad_A_wrt_xt[k]
-    end
-    for k in eachindex(grad_b_wrt_xt)
-        grad_Ab_wrt_xt[k+16] .= grad_b_wrt_xt[k]
-    end  
-end
-
-function get_Ab!(Ab, A, b)
-    for k in eachindex(A)
-        Ab[k] = A[k]
-    end
-    for k in eachindex(b)
-        Ab[k+16] = b[k]
-    end
-end
-
-# update Jacobian_Ab_wrt_xt according to grad_Ab_wrt_xt (rearrange it), a matrix
-function get_Jacobian_Ab_wrt_xt(Jacobian_Ab_wrt_xt, grad_Ab_wrt_xt)
-    for k in eachindex(grad_Ab_wrt_xt)
-        Jacobian_Ab_wrt_xt[k, :] .= grad_Ab_wrt_xt[k]
-    end
-end
-
-function get_sd_wrt_Ab_fun()
-    # Symbolics of a 4d linear system
-    A = Symbolics.@variables(A[1:4, 1:4])[1] |> Symbolics.scalarize
-    b = Symbolics.@variables(b[1:4])[1] |> Symbolics.scalarize
-
-    # sol = -A \ b
-    # for k in eachindex(sol)
-    #     sol[k] = Symbolics.simplify(sol[k]) # need to be simplified, otherwise it returns NaN for some values of A and b
-    # end
-
-    # results of code above
-    sol = [(A[1, 2]*A[2, 3]*A[3, 4]*b[4] - A[1, 2]*A[2, 3]*A[4, 4]*b[3] - A[1, 2]*A[2, 4]*A[3, 3]*b[4] + A[1, 2]*A[2, 4]*A[4, 3]*b[3] + A[1, 2]*A[3, 3]*A[4, 4]*b[2] - A[1, 2]*A[3, 4]*A[4, 3]*b[2] - A[1, 3]*A[2, 2]*A[3, 4]*b[4] + A[1, 3]*A[2, 2]*A[4, 4]*b[3] + A[1, 3]*A[2, 4]*A[3, 2]*b[4] - A[1, 3]*A[2, 4]*A[4, 2]*b[3] - A[1, 3]*A[3, 2]*A[4, 4]*b[2] + A[1, 3]*A[3, 4]*A[4, 2]*b[2] + A[1, 4]*A[2, 2]*A[3, 3]*b[4] - A[1, 4]*A[2, 2]*A[4, 3]*b[3] - A[1, 4]*A[2, 3]*A[3, 2]*b[4] + A[1, 4]*A[2, 3]*A[4, 2]*b[3] + A[1, 4]*A[3, 2]*A[4, 3]*b[2] - A[1, 4]*A[3, 3]*A[4, 2]*b[2] - A[2, 2]*A[3, 3]*A[4, 4]*b[1] + A[2, 2]*A[3, 4]*A[4, 3]*b[1] + A[2, 3]*A[3, 2]*A[4, 4]*b[1] - A[2, 3]*A[3, 4]*A[4, 2]*b[1] - A[2, 4]*A[3, 2]*A[4, 3]*b[1] + A[2, 4]*A[3, 3]*A[4, 2]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
-            (-A[1, 1]*A[2, 3]*A[3, 4]*b[4] + A[1, 1]*A[2, 3]*A[4, 4]*b[3] + A[1, 1]*A[2, 4]*A[3, 3]*b[4] - A[1, 1]*A[2, 4]*A[4, 3]*b[3] - A[1, 1]*A[3, 3]*A[4, 4]*b[2] + A[1, 1]*A[3, 4]*A[4, 3]*b[2] + A[1, 3]*A[2, 1]*A[3, 4]*b[4] - A[1, 3]*A[2, 1]*A[4, 4]*b[3] - A[1, 3]*A[2, 4]*A[3, 1]*b[4] + A[1, 3]*A[2, 4]*A[4, 1]*b[3] + A[1, 3]*A[3, 1]*A[4, 4]*b[2] - A[1, 3]*A[3, 4]*A[4, 1]*b[2] - A[1, 4]*A[2, 1]*A[3, 3]*b[4] + A[1, 4]*A[2, 1]*A[4, 3]*b[3] + A[1, 4]*A[2, 3]*A[3, 1]*b[4] - A[1, 4]*A[2, 3]*A[4, 1]*b[3] - A[1, 4]*A[3, 1]*A[4, 3]*b[2] + A[1, 4]*A[3, 3]*A[4, 1]*b[2] + A[2, 1]*A[3, 3]*A[4, 4]*b[1] - A[2, 1]*A[3, 4]*A[4, 3]*b[1] - A[2, 3]*A[3, 1]*A[4, 4]*b[1] + A[2, 3]*A[3, 4]*A[4, 1]*b[1] + A[2, 4]*A[3, 1]*A[4, 3]*b[1] - A[2, 4]*A[3, 3]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
-            (A[1, 1]*A[2, 2]*A[3, 4]*b[4] - A[1, 1]*A[2, 2]*A[4, 4]*b[3] - A[1, 1]*A[2, 4]*A[3, 2]*b[4] + A[1, 1]*A[2, 4]*A[4, 2]*b[3] + A[1, 1]*A[3, 2]*A[4, 4]*b[2] - A[1, 1]*A[3, 4]*A[4, 2]*b[2] - A[1, 2]*A[2, 1]*A[3, 4]*b[4] + A[1, 2]*A[2, 1]*A[4, 4]*b[3] + A[1, 2]*A[2, 4]*A[3, 1]*b[4] - A[1, 2]*A[2, 4]*A[4, 1]*b[3] - A[1, 2]*A[3, 1]*A[4, 4]*b[2] + A[1, 2]*A[3, 4]*A[4, 1]*b[2] + A[1, 4]*A[2, 1]*A[3, 2]*b[4] - A[1, 4]*A[2, 1]*A[4, 2]*b[3] - A[1, 4]*A[2, 2]*A[3, 1]*b[4] + A[1, 4]*A[2, 2]*A[4, 1]*b[3] + A[1, 4]*A[3, 1]*A[4, 2]*b[2] - A[1, 4]*A[3, 2]*A[4, 1]*b[2] - A[2, 1]*A[3, 2]*A[4, 4]*b[1] + A[2, 1]*A[3, 4]*A[4, 2]*b[1] + A[2, 2]*A[3, 1]*A[4, 4]*b[1] - A[2, 2]*A[3, 4]*A[4, 1]*b[1] - A[2, 4]*A[3, 1]*A[4, 2]*b[1] + A[2, 4]*A[3, 2]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])
-            (-A[1, 1]*A[2, 2]*A[3, 3]*b[4] + A[1, 1]*A[2, 2]*A[4, 3]*b[3] + A[1, 1]*A[2, 3]*A[3, 2]*b[4] - A[1, 1]*A[2, 3]*A[4, 2]*b[3] - A[1, 1]*A[3, 2]*A[4, 3]*b[2] + A[1, 1]*A[3, 3]*A[4, 2]*b[2] + A[1, 2]*A[2, 1]*A[3, 3]*b[4] - A[1, 2]*A[2, 1]*A[4, 3]*b[3] - A[1, 2]*A[2, 3]*A[3, 1]*b[4] + A[1, 2]*A[2, 3]*A[4, 1]*b[3] + A[1, 2]*A[3, 1]*A[4, 3]*b[2] - A[1, 2]*A[3, 3]*A[4, 1]*b[2] - A[1, 3]*A[2, 1]*A[3, 2]*b[4] + A[1, 3]*A[2, 1]*A[4, 2]*b[3] + A[1, 3]*A[2, 2]*A[3, 1]*b[4] - A[1, 3]*A[2, 2]*A[4, 1]*b[3] - A[1, 3]*A[3, 1]*A[4, 2]*b[2] + A[1, 3]*A[3, 2]*A[4, 1]*b[2] + A[2, 1]*A[3, 2]*A[4, 3]*b[1] - A[2, 1]*A[3, 3]*A[4, 2]*b[1] - A[2, 2]*A[3, 1]*A[4, 3]*b[1] + A[2, 2]*A[3, 3]*A[4, 1]*b[1] + A[2, 3]*A[3, 1]*A[4, 2]*b[1] - A[2, 3]*A[3, 2]*A[4, 1]*b[1]) / (A[1, 1]*A[2, 2]*A[3, 3]*A[4, 4] - A[1, 1]*A[2, 2]*A[3, 4]*A[4, 3] - A[1, 1]*A[2, 3]*A[3, 2]*A[4, 4] + A[1, 1]*A[2, 3]*A[3, 4]*A[4, 2] + A[1, 1]*A[2, 4]*A[3, 2]*A[4, 3] - A[1, 1]*A[2, 4]*A[3, 3]*A[4, 2] - A[1, 2]*A[2, 1]*A[3, 3]*A[4, 4] + A[1, 2]*A[2, 1]*A[3, 4]*A[4, 3] + A[1, 2]*A[2, 3]*A[3, 1]*A[4, 4] - A[1, 2]*A[2, 3]*A[3, 4]*A[4, 1] - A[1, 2]*A[2, 4]*A[3, 1]*A[4, 3] + A[1, 2]*A[2, 4]*A[3, 3]*A[4, 1] + A[1, 3]*A[2, 1]*A[3, 2]*A[4, 4] - A[1, 3]*A[2, 1]*A[3, 4]*A[4, 2] - A[1, 3]*A[2, 2]*A[3, 1]*A[4, 4] + A[1, 3]*A[2, 2]*A[3, 4]*A[4, 1] + A[1, 3]*A[2, 4]*A[3, 1]*A[4, 2] - A[1, 3]*A[2, 4]*A[3, 2]*A[4, 1] - A[1, 4]*A[2, 1]*A[3, 2]*A[4, 3] + A[1, 4]*A[2, 1]*A[3, 3]*A[4, 2] + A[1, 4]*A[2, 2]*A[3, 1]*A[4, 3] - A[1, 4]*A[2, 2]*A[3, 3]*A[4, 1] - A[1, 4]*A[2, 3]*A[3, 1]*A[4, 2] + A[1, 4]*A[2, 3]*A[3, 2]*A[4, 1])]
-    sd = sol[4]
-    # symbolic solution to a 4d linear system
-    get_sol_A_b = Symbolics.build_function(sol, A, b; expression=Val(false))[2]
-
-    Ab = vcat(vec(A),b) # vectorize all parameters
-    grad_sd_wrt_Ab = Symbolics.gradient(sd, Ab)
-    Hessian_sd_wrt_Ab = Symbolics.jacobian(grad_sd_wrt_Ab, Ab)
-    get_grad_sd_wrt_Ab = Symbolics.build_function(grad_sd_wrt_Ab, Ab; expression=Val(false))[2]
-    get_Hessian_sd_wrt_Ab = Symbolics.build_function(Hessian_sd_wrt_Ab, Ab; expression=Val(false))[2]
-
-    return get_grad_sd_wrt_Ab, get_Hessian_sd_wrt_Ab, get_sol_A_b
-end
-
-function get_sol_xt!(sol_xt, AA, bb, get_sol_A_b, assignments)
-    sol = zeros(4)
-    for (k, ass) in enumerate(assignments)
-        get_sol_A_b(sol, AA[ass, :], bb[ass])
-        sol_xt[:, k] .= sol
-    end
-end
-
-function get_grad_sd_wrt_xt!(grad_sd_wrt_xt, grad_sd_wrt_Ab, grad_Ab_wrt_xt)
-    grad_sd_wrt_xt .= grad_sd_wrt_Ab' * grad_Ab_wrt_xt
-end
-
-# H ∈ R 20*20, J ∈ R 20 * 6
-function get_HJ(HJ, Hessian_sd_wrt_Ab, Jacobian_Ab_wrt_xt)
-    HJ .= Hessian_sd_wrt_Ab * Jacobian_Ab_wrt_xt
-end
-
-# sd(Ab(xt)) is a scalar function, Ab is a 20d vector function (for 4d linear system, there 16+4=20 parameters),
-# xt is a 6d vector (xt[7:12] are control variables, which does not affect sd)
-# ∂sd/∂xt = Σ ∂sd/∂Ab * ∂Ab/∂xt    ∀ Ab    (chain rule, implemented in function get_grad_sd_wrt_xt!)
-# ∂²sd/∂xt² = Σ J[k,:]*HJ[k,:]'    ∀ k∈[1:20]    (outer product of two 6d vectors, get a 6*6 matrix)
-#           + Σ ∂sd/∂Ab[k] * Hessian_Ab[k]_wrt_xt    ∀ k∈[1:20]   (scalar times a 6*6 matrix)
-function get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt, grad_sd_wrt_Ab, Jacobian_Ab_wrt_xt, HJ, Hessian_Ab_wrt_xt)
-    Hessian_sd_wrt_xt .= 0.0
-    for k in eachindex(grad_sd_wrt_Ab)
-        Hessian_sd_wrt_xt .+= Jacobian_Ab_wrt_xt[k, :] * HJ[k, :]' + grad_sd_wrt_Ab[k] * Hessian_Ab_wrt_xt[k]
-    end
-end
-
-function gen_LP_data_3d(A_ego::AbstractArray{T}, b_ego, centr_ego, A_obs, b_obs, centr_obs) where {T}
-    A = [A_ego A_ego*centr_ego+b_ego
-        A_obs A_obs*centr_obs+b_obs]
-    b = [b_ego; b_obs]
-    q = [0, 0, 0, 1.0]
-    (A, b, q)
-end
-
-# filter indices which are impossible to be active at the same time for one poly
-function get_3_possible_constraint_ids(A, b; tol=1e-4)
-    AA = Matrix(A)
-    dim = size(AA)[2]
-    bb = b
-    ind = collect(1:length(bb))
-    inds = powerset(ind) |> collect
-    itr = [i for i in inds if length(i)==dim]
-    feasible_inds=[]
-    for i in itr
-        try
-            xx = - AA[i,:] \ bb[i]
-            if all(AA*xx +bb .> -tol)
-                push!(feasible_inds, i)
-            end
-        catch err
-            if err isa LinearAlgebra.SingularException
-                continue
-            else
-                # @warn(err)
-            end
-        end
-    end
-    feasible_inds
-end
-
-# get possible pair of indices, which means edges
-function get_2_possible_constraint_ids(A, b, V; tol=1e-4)
-    matrix_v_face = map(V) do v
-        A * v + b .< tol
-    end
-    feasible_inds = []
-    for i in eachindex(matrix_v_face)
-        for j in i+1:length(matrix_v_face)
-            common_faces = matrix_v_face[i] + matrix_v_face[j] .== 2
-            if sum(common_faces) == 2
-                push!(feasible_inds, findall(common_faces))
-            end
-        end
-    end
-    feasible_inds
-end
-
-# get_possible_assignments_3d(Pe.A, Pe.b, Pe.V, Po.A, Po.b, Po.V)
-# enumerate possible assignments (2 indices from one poly, and 2 indices from the other; or 3 + 1; or 1 + 3)
-function get_possible_assignments_3d(Ae, be, Ve, Ao, bo, Vo)
-    m1 = length(be)
-    m2 = length(bo)
-    inds_e = get_3_possible_constraint_ids(Ae, be)
-    inds_o = get_3_possible_constraint_ids(Ao, bo)
-    for i in eachindex(inds_o)
-        inds_o[i] += [m1, m1, m1]
-    end
-    Itr=[]
-    for i in 1:m1
-        for ind in inds_o
-            push!(Itr, sort(vcat(ind, i)))
-        end
-    end
-    for i in m1+1:m1+m2
-        for ind in inds_e
-            push!(Itr, sort(vcat(ind, i)))
-        end
-    end
-
-    inds_e = get_2_possible_constraint_ids(Ae, be, Ve)
-    inds_o = get_2_possible_constraint_ids(Ao, bo, Vo)
-    for i in eachindex(inds_o)
-        inds_o[i] += [m1, m1]
-    end
-    for e in inds_e
-        for o in inds_o
-            push!(Itr, [e; o])
-        end
-    end
-
-    Itr
-end
-
-function g_col_single_3d(xt, A_ego, b_ego, V_ego, centr_ego, A_obs, b_obs, V_obs, centr_obs)
-    sds = Dict()
-    intercepts = Dict()
-    R = R_from_mrp(xt[4:6])
-    l = xt[1:3]
-
-    # some terms are not eliminated when calculating symbolics
-    # Aex, bex = shift_to_3D(A_ego, b_ego, xt)
-    # centroidex = l + R * centr_ego
-    # AA, bb, qq = gen_LP_data_3d(Aex, bex, centroidex, A_obs, b_obs, centr_obs)
-
-    # better way to get AA and bb than above
-    AA = [A_ego*R' A_ego*centr_ego+b_ego
-          A_obs    A_obs*centr_obs+b_obs]
-    bb = [b_ego-A_ego*R'*l
-          b_obs]
-    Itr = get_possible_assignments_3d(A_ego, b_ego, V_ego, A_obs, b_obs, V_obs)
-    for active_inds in Itr
-        # if !is_ass_feasible(active_inds, m1, m2)
-        #     continue
-        # end
-
-        try
-            AA_active = collect(AA[active_inds, :])
-            bb_active = collect(bb[active_inds])
-            # TODO what if not unique primal? Need to resolve
-            if length(active_inds) == 4
-                zz = -AA_active \ bb_active
-            else
-                # if linear system is underdetermined, use minimum norm solution (calculated by right inverse)
-                # Note: every solution has the same sd, i.e., zz[3], but different zz[1:2]
-                zz = -AA_active' * ((AA_active * AA_active') \ bb_active)
-                @warn "wrong"
-                @infiltrate
-            end
-            sd = zz[4]
-            intercepts[active_inds] = zz[1:3]
-            sds[active_inds] = sd
-        catch err
-            if err isa LinearAlgebra.SingularException
-                continue
-            else
-                @warn(err)
-            end
-        end
-    end
-    sds, intercepts, AA, bb
-end
-
 function setup_nonsmooth_3d_0step(
     ego_polys,
     obs_polys;
     T=2,
-    dt=0.2,
-    R_cost=1e-3 * I(6), # penality for control variables
     Q_cost=1e-3 * I(3), # penality for distance
     p1_max=500.0,
     p2_max=500.0,
     p3_max=500.0,
-    u1_max=1.0,
-    u2_max=1.0,
-    u3_max=1.0,
-    u4_max=π / 4,
-    u5_max=π / 4,
-    u6_max=π / 4,
     n_sd_slots=2
 )
 
@@ -381,7 +21,6 @@ function setup_nonsmooth_3d_0step(
     # n_side_obs = length(obs_polys[1].b)
     n_side_ego = maximum([length(i.b) for i in ego_polys]) # just for the buffer
     n_side_obs = maximum([length(i.b) for i in obs_polys]) # just for the buffer
-    # n_dyn_cons = T * n_x * 0
     n_env_cons = T * n_xu
     # combin_2_from_n = n::Int -> n * (n - 1) ÷ 2
     # n_sds = (combin_2_from_n(n_side_ego) * n_side_obs + n_side_ego * combin_2_from_n(n_side_obs))
@@ -398,13 +37,11 @@ function setup_nonsmooth_3d_0step(
     x0 = Symbolics.@variables(x0[1:n_x])[1] |> Symbolics.scalarize
     xt = Symbolics.@variables(xt[1:n_x])[1] |> Symbolics.scalarize
 
-    cost = f_3d_0step(z, T, R_cost, Q_cost)
-    dyn_cons = g_dyn_3d(z, x0, T, dt)
-    env_cons = g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, u5_max, u6_max)
+    cost = f_3d_0step(z, T, Q_cost)
+    env_cons = g_env_3d_0step(z, T, p1_max, p2_max, p3_max)
 
     # check indexing consistency
     @assert length(z_s2i) == n_z
-    @assert length(dyn_cons_s2i) == length(dyn_cons)
     @assert length(env_cons_s2i) == length(env_cons)
     @assert length(sd_cons_s2i) == n_sd_cons
 
@@ -463,7 +100,7 @@ function setup_nonsmooth_3d_0step(
     end
     n_sds = maximum(n_sds)
 
-    nom_cons = [dyn_cons; env_cons]
+    nom_cons = env_cons
     λ_nom = Symbolics.@variables(λ_nom[1:length(nom_cons)])[1] |> Symbolics.scalarize
     λ_sd = Symbolics.@variables(λ_col[1:n_sd_cons])[1] |> Symbolics.scalarize
 
@@ -485,10 +122,6 @@ function setup_nonsmooth_3d_0step(
     # gradient = 0
     l[z_s2i[:]] .= -Inf
     u[z_s2i[:]] .= Inf
-
-    # dynamics constraints
-    l[dyn_cons_s2i[:]] .= -Inf
-    u[dyn_cons_s2i[:]] .= Inf
 
     # environmental constraints
     l[env_cons_s2i[:]] .= 0.0
@@ -586,7 +219,7 @@ function setup_nonsmooth_3d_0step(
     end
 
     # fill_F!
-    λ_nom_s2i = [dyn_cons_s2i...; env_cons_s2i...]
+    λ_nom_s2i = [env_cons_s2i...]
 
     # do not use fill(), because every element points to the same vector zeros(6)
     grad_A_ego_wrt_xt_buffer = [zeros(6) for _ in 1:n_side_ego, _ in 1:3]
@@ -614,74 +247,6 @@ function setup_nonsmooth_3d_0step(
     sd_lag_buf = zeros(n_x)
     Jsdlag_buf = zeros(n_x, n_x+1)
     Jsd_buf = zeros(n_x)
-
-
-    # # Jsd = ∇sd, 12d vector
-    # function get_Jsd!(J_sd, xt, i, ass, AA, bb, m1)
-    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
-    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
-    #     # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-    #     # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
-
-    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
-    #     # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
-
-    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-    #     # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-
-    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
-    #     # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
-        
-    #     J_sd .= [grad_sd_wrt_xt_buffer; zeros(6)]
-    # end
-
-
-    # # sd_lag = -λsd*∇sd, 12d vector
-    # function get_sd_lag!(sd_lag, xt, λsd, i, ass, AA, bb, m1)
-    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
-    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
-    #     # get_J_A_ego_wrt_xt_fun[i](J_A_ego_wrt_xt_buffer, xt[1:6])
-    #     # get_J_b_ego_wrt_xt_fun[i](J_b_ego_wrt_xt_buffer, xt[1:6])
-
-    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
-    #     # get_J_Ab_wrt_xt!(J_A_wrt_xt_buffer, J_b_wrt_xt_buffer, ass, J_A_ego_wrt_xt_buffer, J_b_ego_wrt_xt_buffer, m1)
-
-    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-    #     # get_J_sd_wrt_A_fun(J_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     # get_J_sd_wrt_b_fun(J_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-
-    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
-    #     # get_J_sd_wrt_xt!(J_sd_wrt_xt_buffer, sd_wrt_A_buffer, A_wrt_xt_buffer, sd_wrt_b_buffer, b_wrt_xt_buffer, J_sd_wrt_A_buffer, J_A_wrt_xt_buffer, J_sd_wrt_b_buffer, J_b_wrt_xt_buffer)
-        
-    #     sd_lag .= [-λsd * grad_sd_wrt_xt_buffer; zeros(6)]
-    # end
-
-
-    # # sd_lag = -λsd*∇sd, Jsdlag = [-λsd * Jsd -∇sd] ∈ R12 × R13
-    # function get_Jsdlag!(Jsdlag, xt, λsd, i, ass, AA, bb, m1)
-    #     get_grad_A_ego_wrt_xt[i](grad_A_ego_wrt_xt_buffer, xt[1:6])
-    #     get_grad_b_ego_wrt_xt[i](grad_b_ego_wrt_xt_buffer, xt[1:6])
-    #     get_Hessian_A_ego_wrt_xt[i](Hessian_A_ego_wrt_xt_buffer, xt[1:6])
-    #     get_Hessian_b_ego_wrt_xt[i](Hessian_b_ego_wrt_xt_buffer, xt[1:6])
-
-    #     get_grad_Ab_wrt_xt!(grad_A_wrt_xt_buffer, grad_b_wrt_xt_buffer, ass, grad_A_ego_wrt_xt_buffer, grad_b_ego_wrt_xt_buffer, m1)
-    #     get_Hessian_Ab_wrt_xt!(Hessian_A_wrt_xt_buffer, Hessian_b_wrt_xt_buffer, ass, Hessian_A_ego_wrt_xt_buffer, Hessian_b_ego_wrt_xt_buffer, m1)
-
-    #     get_sd_wrt_A_fun(grad_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     get_sd_wrt_b_fun(grad_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-    #     get_J_sd_wrt_A_fun(Hessian_sd_wrt_A_buffer, AA[ass,:], bb[ass])
-    #     get_J_sd_wrt_b_fun(Hessian_sd_wrt_b_buffer, AA[ass,:], bb[ass])
-
-    #     get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer)
-    #     get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_A_buffer, grad_A_wrt_xt_buffer, grad_sd_wrt_b_buffer, grad_b_wrt_xt_buffer, Hessian_sd_wrt_A_buffer, Hessian_A_wrt_xt_buffer, Hessian_sd_wrt_b_buffer, Hessian_b_wrt_xt_buffer)
-
-    #     Jsdlag .= [
-    #                 [-λsd*Hessian_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-grad_sd_wrt_xt_buffer; zeros(6)]
-    #                 ]
-    # end
 
     function fill_F!(F, θ, x0)
         # TODO obs_polys as parameters
@@ -738,7 +303,7 @@ function setup_nonsmooth_3d_0step(
                         get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_Ab_wrt_xt_buffer)
                         # get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer, HJ_buffer, Hessian_Ab_wrt_xt_buffer)
 
-                        sd_lag_buf .= [-λsd * grad_sd_wrt_xt_buffer; zeros(6)]
+                        sd_lag_buf .= -λsd * grad_sd_wrt_xt_buffer
 
                         @inbounds F[xt_ind] += sd_lag_buf
                         @inbounds F[sd_ind] += sorted_sds[sd_rank]
@@ -827,10 +392,8 @@ function setup_nonsmooth_3d_0step(
                         get_grad_sd_wrt_xt!(grad_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, grad_Ab_wrt_xt_buffer)
                         get_Hessian_sd_wrt_xt!(Hessian_sd_wrt_xt_buffer, grad_sd_wrt_Ab_buffer, Jacobian_Ab_wrt_xt_buffer, HJ_buffer, Hessian_Ab_wrt_xt_buffer)
 
-                        Jsd_buf .= [grad_sd_wrt_xt_buffer; zeros(6)]
-                        Jsdlag_buf .= [
-                                    [-λsd*Hessian_sd_wrt_xt_buffer zeros(6, 6); zeros(6, 6)  zeros(6, 6)]     [-grad_sd_wrt_xt_buffer; zeros(6)]
-                                    ]
+                        Jsd_buf .= grad_sd_wrt_xt_buffer
+                        Jsdlag_buf .= hcat(-λsd*Hessian_sd_wrt_xt_buffer, -grad_sd_wrt_xt_buffer)
 
 
                         # the same as code block above
@@ -886,21 +449,12 @@ function setup_nonsmooth_3d_0step(
         ego_polys,
         obs_polys,
         T,
-        dt,
-        R_cost,
         Q_cost,
         p1_max,
         p2_max,
         p3_max,
-        u1_max,
-        u2_max,
-        u3_max,
-        u4_max,
-        u5_max,
-        u6_max,
         n_sd_slots,
         z_s2i,
-        dyn_cons_s2i,
         env_cons_s2i,
         sd_cons_s2i
     )
@@ -916,7 +470,7 @@ function setup_nonsmooth_3d_0step(
 end
 
 # this needs to be updated for 3d
-function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true)
+function visualize_nonsmooth_3d_0step(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=LScene(fig[1, 1], scenekw=(camera=cam3d!, show_axis=true)), θ=[], is_displaying=true)
     n_obs = length(obs_polys)
     n_ego = length(ego_polys)
     xxts = Dict()
@@ -969,16 +523,16 @@ function visualize_nonsmooth_3d(x0, T, ego_polys, obs_polys; fig=Figure(), ax3=L
     (fig, update_fig, ax3)
 end
 
-function solve_nonsmooth_3d(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
+function solve_nonsmooth_3d_0step(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
     param = prob.param
 
-    n_x = 12
-    n_u = 6
+    n_x = 6
+    n_u = 0
     n_xu = n_x + n_u
     n = length(prob.l)
 
     if is_displaying
-        (fig, update_fig) = visualize_nonsmooth_3d(x0, param.T, param.ego_polys, param.obs_polys)
+        (fig, update_fig) = visualize_nonsmooth_3d_0step(x0, param.T, param.ego_polys, param.obs_polys)
     end
 
     # initialize

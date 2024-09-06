@@ -65,7 +65,7 @@ function f_3d(z, T, R_cost, Q_cost)
     cost
 end
 
-function f_3d_0step(z, T, R_cost, Q_cost)
+function f_3d_0step(z, T, Q_cost)
     n_x = 6
     n_u = 0
     n_xu = n_x + n_u
@@ -181,6 +181,19 @@ function g_env_3d(z, T, p1_max, p2_max, p3_max, u1_max, u2_max, u3_max, u4_max, 
         append!(g, [p1_max + xt[1], p1_max - xt[1], p2_max + xt[2], p2_max - xt[2], p3_max + xt[3], p3_max - xt[3],
         u1_max + ut[1], u1_max - ut[1], u2_max + ut[2], u2_max - ut[2], u3_max + ut[3], u3_max - ut[3],
         u4_max + ut[4], u4_max - ut[4], u5_max + ut[5], u5_max - ut[5], u6_max + ut[6], u6_max - ut[6],])
+    end
+    g
+end
+
+function g_env_3d_0step(z, T, p1_max, p2_max, p3_max)
+    n_x = 6
+    n_u = 0
+    n_xu = n_x + n_u
+
+    g = Num[]
+    for t in 1:T
+        xt = @view(z[(t-1)*n_xu+1:(t-1)*n_xu+n_x])
+        append!(g, [p1_max + xt[1], p1_max - xt[1], p2_max + xt[2], p2_max - xt[2], p3_max + xt[3], p3_max - xt[3],])
     end
     g
 end

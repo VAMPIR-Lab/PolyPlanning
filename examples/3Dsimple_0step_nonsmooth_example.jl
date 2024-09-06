@@ -18,7 +18,7 @@ mrp = axis / norm(axis) * (0.8+0.4*r()) # norm(mrp)∈[0.8, 1.2]
 #     println(rad2deg(θ))
 # end
 trans =zeros(3) + [5,2,3] + r(3)
-x0 = [trans; mrp; zeros(6)]
+x0 = [trans; mrp]
 
 Ve = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 1+r()]]
 Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0, 0, 5r()]]
@@ -43,9 +43,9 @@ Vo = [[-1-r(), -1-r(), -1-r()], [1+r(), -1-r(), -1-r()], [0, 1+r(), -1-r()], [0,
 # Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
 
 # failure example
-x0 = [ 5.129113794516678,2.515060674726819,3.2043899776388827,0.38173923415793265,0.7635567015039818,0.5014663742804137,0.0,0.0,0.0,0.0,0.0,0.0]
-Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
-Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+# x0 = [ 5.129113794516678,2.515060674726819,3.2043899776388827,0.38173923415793265,0.7635567015039818,0.5014663742804137]
+# Ve = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
+# Vo = [[-1.0, -1, -1], [1, -1, -1], [0, 1, -1], [0, 0, 5]]
 
 
 Pe = PolyPlanning.ConvexPolygon3D(Ve)
@@ -54,22 +54,12 @@ ego_polys = [Pe]
 obs_polys = [Po]
 
 
-R_cost = 1e-3 * PolyPlanning.I(6)
-R_cost[4:6, 4:6] = R_cost[4:6, 4:6] / 100.0
-nonsmooth_prob = PolyPlanning.setup_nonsmooth_3d(
+nonsmooth_prob = PolyPlanning.setup_nonsmooth_3d_0step(
     ego_polys,
     obs_polys;
-    T=20,
-    dt=.2,
-    R_cost,
+    T=1,
     Q_cost=2e-3 * PolyPlanning.I(3),
-    u1_max=10.0,
-    u2_max=10.0,
-    u3_max=10.0,
-    u4_max=π,
-    u5_max=π,
-    u6_max=π,
 	n_sd_slots=15
 )
 
-our_sol = PolyPlanning.solve_nonsmooth_3d(nonsmooth_prob, x0; is_displaying=false)#, sleep_duration=0.1)
+our_sol = PolyPlanning.solve_nonsmooth_3d_0step(nonsmooth_prob, x0; is_displaying=false)#, sleep_duration=0.1)
