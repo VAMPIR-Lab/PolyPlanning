@@ -6,7 +6,7 @@ using LinearAlgebra
 
 # user options
 is_saving = true
-is_running_our = true
+is_running_ourss = true
 is_running_sep = true
 is_running_dcol = false
 is_running_kkt = false
@@ -109,42 +109,66 @@ else # generate ego_poly, x0s and maps
 end
 
 if is_loading_res
-    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_our=is_running_our, is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_file_date, res_file_date; is_loading_our=is_running_ourss, is_loading_sep=is_running_sep, is_loading_dcol=is_running_dcol, is_loading_kkt=is_running_kkt, data_dir)
 else
-    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all_3d(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date,is_running_our, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
+    our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.compute_all_3d(ego_poly, x0s, maps, param; is_saving, exp_name, date_now, exp_file_date,is_running_ourss, is_running_sep, is_running_dcol, is_running_kkt, data_dir)
 end
 
+
 # process
-our_bins = PolyPlanning.process_into_bins(our_sols)
-@info "$(length(our_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% our success rate"
+our_bins = []
+if is_running_ours
+    our_bins = PolyPlanning.process_into_bins(our_sols)
+    #@info "$(length(our_bins.success.idx)/(length(our_sols))*100)% our success rate"
+end
 
 sep_bins = []
 if is_running_sep
     sep_bins = PolyPlanning.process_into_bins(sep_sols)
-    @info "$(length(sep_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% sep success rate"
+    #@info "$(length(sep_bins.success.idx)/(length(sep_sols))*100)% sep success rate"
 end
 
 dcol_bins = []
 if is_running_dcol
     dcol_bins = PolyPlanning.process_into_bins(dcol_sols)
-    @info "$(length(dcol_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% dcol success rate"
+    #@info "$(length(dcol_bins.success.idx)/(length(dcol_sols))*100)% dcol success rate"
 end
 
 kkt_bins = []
 if is_running_kkt
     kkt_bins = PolyPlanning.process_into_bins(kkt_sols)
-    @info "$(length(kkt_bins.success.idx)/(param.n_maps*param.n_x0s)*100)% kkt success rate"
+    #@info "$(length(kkt_bins.success.idx)/(length(kkt_sols))*100)% kkt success rate"
 end
 
+
+
 # tables
+if is_running_ours
+    PolyPlanning.print_stats(our_bins, length(our_sols); name="ours")
+end
+
 if is_running_sep
-    PolyPlanning.print_stats(our_bins, sep_bins, param.n_maps, param.n_x0s; name="ours", ref_name="sep")
+    PolyPlanning.print_stats(sep_bins, length(sep_sols); name="sep")
 end
 
 if is_running_dcol
-    PolyPlanning.print_stats(our_bins, dcol_bins, param.n_maps, param.n_x0s; name="ours", ref_name="dcol")
+    PolyPlanning.print_stats(dcol_bins, length(dcol_sols); name="dcol")
 end
 
 if is_running_kkt
-    PolyPlanning.print_stats(our_bins, kkt_bins, param.n_maps, param.n_x0s; name="ours", ref_name="kkt")
+    PolyPlanning.print_stats(kkt_bins, length(kkt_sols); name="kkt")
+end
+
+if is_running_ours
+    if is_running_sep
+        PolyPlanning.print_stats(our_bins, sep_bins, length(our_sols); name="ours", ref_name="sep")
+    end
+
+    if is_running_dcol
+        PolyPlanning.print_stats(our_bins, dcol_bins, length(our_sols); name="ours", ref_name="dcol")
+    end
+
+    if is_running_kkt
+        PolyPlanning.print_stats(our_bins, kkt_bins, length(our_sols); name="ours", ref_name="kkt")
+    end
 end

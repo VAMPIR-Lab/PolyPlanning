@@ -296,11 +296,11 @@ function compute_all(ego_poly, x0s, maps, param; is_saving=false, exp_name="", i
     (our_sols, sep_sols, dcol_sols, kkt_sols)
 end
 
-function compute_all_3d(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_our=false, is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
+function compute_all_3d(ego_poly, x0s, maps, param; is_saving=false, exp_name="", is_running_ours=false, is_running_sep=false, is_running_kkt=false, is_running_dcol=false, data_dir="data", date_now="", exp_file_date="", sigdigits=3)
     #n_maps = length(maps)
     #n_x0s = length(x0s)
     our_sols = []
-    if is_running_our
+    if is_running_ours
         @info "Computing nonsmooth solutions..."
         start_t = time()
         our_sols = multi_solve_nonsmooth_3d(ego_poly, x0s, maps, param)
@@ -415,22 +415,45 @@ function get_mean_std_CI(v)
     end
 end
 
-function print_stats(bin, ref_bin, n_maps, n_x0s; name="bin", ref_name="ref_bin", sigdigits=2)
+function print_stats(bin, n_samples; name="bin", sigdigits=5)
+    bin_success_percent = length(bin.success.idx) / n_samples * 100
+    bin_fail_percent = length(bin.fail.idx) / n_samples * 100
 
+    println("---")
+    println("$name  success     ct")
+    println("       $(round(bin_success_percent; sigdigits=3))%    $(length(bin.success.idx))")
+    #println("fail       $(round(bin_fail_percent; sigdigits=3))%    $(length(bin.fail.idx))")
+
+    time_stats = get_mean_std_CI(bin.success.time)
+    cost_stats = get_mean_std_CI(bin.success.cost)
+    println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits=2))")
+    println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits=2))")
+end
+
+
+function print_stats(bin, ref_bin, n_samples; name="bin", ref_name="ref_bin", sigdigits=3)
     common_success = PolyPlanning.find_bin_common(bin.success, ref_bin.success)
     common_fail = PolyPlanning.find_bin_common(bin.fail, ref_bin.fail)
 
-    bin_success_percent = length(bin.success.idx) / (n_maps * n_x0s) * 100
-    ref_success_percent = length(ref_bin.success.idx) / (n_maps * n_x0s) * 100
-    both_success_percent = length(common_success.idx) / (n_maps * n_x0s) * 100
-    bin_fail_percent = length(bin.fail.idx) / (n_maps * n_x0s) * 100
-    ref_fail_percent = length(ref_bin.fail.idx) / (n_maps * n_x0s) * 100
-    both_fail_percent = length(common_fail.idx) / (n_maps * n_x0s) * 100
-
+    bin_success_percent = length(bin.success.idx) / n_samples * 100
+    ref_success_percent = length(ref_bin.success.idx) / n_samples * 100
+    both_success_percent = length(common_success.idx) / n_samples * 100
+    bin_fail_percent = length(bin.fail.idx) / n_samples * 100
+    ref_fail_percent = length(ref_bin.fail.idx) / n_samples * 100
+    both_fail_percent = length(common_fail.idx) / n_samples * 100
 
     println("           $name     $ref_name     both    both(ct)")
     println("success    $(round(bin_success_percent; sigdigits))%    $(round(ref_success_percent; sigdigits))%    $(round(both_success_percent; sigdigits))%    $(length(common_success.idx))")
     println("fail       $(round(bin_fail_percent; sigdigits))%    $(round(ref_fail_percent; sigdigits))%    $(round(both_fail_percent; sigdigits))%    $(length(common_fail.idx))")
+
+    #time_stats = get_mean_std_CI(bin.success.time)
+    #cost_stats = get_mean_std_CI(bin.success.cost)
+    #ref_time_stats = get_mean_std_CI(ref_bin.success.time)
+    #ref_cost_stats = get_mean_std_CI(ref_bin.success.cost)
+    #println("       $name successes     $ref_name successes")
+    #println("time   $(round.(time_stats.mean; sigdigits)) ± $(round.(time_stats.CI; sigdigits))     $(round.(ref_time_stats.mean; sigdigits)) ± $(round.(ref_time_stats.CI; sigdigits))")
+    #println("cost   $(round.(cost_stats.mean; sigdigits)) ± $(round.(cost_stats.CI; sigdigits))     $(round.(ref_cost_stats.mean; sigdigits)) ± $(round.(ref_cost_stats.CI; sigdigits))")
+
     if length(common_success.idx) > 0
         print_table(common_success.time, common_success.ref_time, common_success.cost, common_success.ref_cost; name, ref_name)
     end
