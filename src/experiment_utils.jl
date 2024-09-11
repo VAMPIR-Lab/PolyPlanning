@@ -477,9 +477,9 @@ function visualize_multi(x0s, maps, sols, bins, T, ego_poly; n_rows=1, n_cols=1,
 
             if type == "nonsmooth"
                 if sol.mcp_success
-                    (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    (fig, update_fig, ax) = visualize_nonsmooth(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                 else
-                    (fig, update_fig, ax) = visualize_quick(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
+                    (fig, update_fig, ax) = visualize_nonsmooth(x0, T, ego_poly, map; fig, ax, sol.res.θ, is_displaying=false)
                     lines!(ax, [-5, 5], [-5, 5]; color=:red, linewidth=10)
                 end
             elseif type == "sep_planes"

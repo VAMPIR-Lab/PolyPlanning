@@ -36,8 +36,8 @@ include("run_piano_exp.jl")
 @info "Running Random packing experiment..."
 include("run_random_packing_exp.jl")
 
-@info "Running L through gap experiment..."
-include("run_L_through_gap_exp.jl")
+@info "Running L Piano experiment..."
+include("run_L_piano_exp.jl")
 
 @info "Running Random L packing experiment..."
 include("run_random_L_packing_exp.jl")
