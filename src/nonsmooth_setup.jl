@@ -21,17 +21,17 @@ end
 # end
 
 # filter indices which are impossible to be active at the same time for one poly
-function get_possible_ass_single(A, b; tol = 1e-4)
+function get_possible_ass_single(A, b; tol=1e-4)
     AA = Matrix(A)
     bb = b
     ind = collect(1:length(bb))
     inds = powerset(ind) |> collect
-    itr = [i for i in inds if length(i)==2]
-    feasible_inds=[]
+    itr = [i for i in inds if length(i) == 2]
+    feasible_inds = []
     for i in itr
         try
-            xx = - AA[i,:] \ bb[i]
-            if all(AA*xx +bb .> -tol)
+            xx = -AA[i, :] \ bb[i]
+            if all(AA * xx + bb .> -tol)
                 push!(feasible_inds, i)
             end
         catch err
@@ -52,9 +52,9 @@ function get_possible_ass_pair(Ae, be, Ao, bo)
     inds_e = get_possible_ass_single(Ae, be)
     inds_o = get_possible_ass_single(Ao, bo)
     for i in eachindex(inds_o)
-        inds_o[i] += [m1 ,m1]
+        inds_o[i] += [m1, m1]
     end
-    Itr=[]
+    Itr = []
     for i in 1:m1
         for ind in inds_o
             push!(Itr, sort(vcat(ind, i)))
@@ -288,7 +288,7 @@ function setup_nonsmooth(
         get_intercepts[i, j](intercept_buffer_full, xt)
         get_AA[i, j](AA_buffer_full, xt)
         get_bb[i, j](bb_buffer_full, xt)
-        
+
         # if the size of buffer is larger than what the function returns, it is filled by column, so here AA and intercept is transposed
         n_ass = length(assignments)
         sds_buffer = sds_buffer_full[1:n_ass]
@@ -309,10 +309,10 @@ function setup_nonsmooth(
         sorted_sds_inds = sds_buffer[valid_mask] |> sortperm
         sorted_sds = sds_buffer[valid_mask][sorted_sds_inds]
         sorted_ass = assignments[valid_mask][sorted_sds_inds]
-        
+
         # need to consider smarter way to filter out distant sds
         # local_factor = 1.5 # regard sds which are less than sd*local_factor as potential true sds
-        local_sd_mask = (sorted_sds.+1) .<= (sorted_sds[1]+1) * local_factor
+        local_sd_mask = (sorted_sds .+ 1) .<= (sorted_sds[1] + 1) * local_factor
         sorted_sds = sorted_sds[local_sd_mask]
         sorted_ass = sorted_ass[local_sd_mask]
         (sorted_sds, sorted_ass)
@@ -598,7 +598,7 @@ function visualize_nonsmooth(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(
     (fig, update_fig, ax)
 end
 
-function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0)
+function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0, is_recording=false)
     param = prob.param
 
     n_x = 6
@@ -618,13 +618,19 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
         end
     end
 
+    θ_history = []
     # F
     function F(n, θ, FF)
         FF .= 0.0
         prob.fill_F!(FF, θ, x0)
 
+        if is_recording
+            push!(θ_history, copy(θ))
+        end
+        
         if is_displaying
             update_fig(θ)
+
             if sleep_duration > 0
                 sleep(sleep_duration)
             end
@@ -690,6 +696,7 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
         convergence_tolerance=5e-4
     )
 
+
     f_res = zeros(n)
     F(n, θ, f_res)
 
@@ -699,5 +706,5 @@ function solve_nonsmooth(prob, x0; θ0=nothing, is_displaying=true, sleep_durati
 
     @inbounds z = @view(θ[param.z_s2i[:]])
 
-    (; status, info, θ, z, f_res)
+    (; status, info, θ, z, f_res, θ_history)
 end

@@ -39,8 +39,8 @@ our_sols, sep_sols, dcol_sols, kkt_sols = PolyPlanning.load_all(exp_name, exp_fi
 
 GLMakie.activate!()
 #PolyPlanning.visualize_multi(x0s, maps, our_sols, param.T, ego_poly; n_rows=plot_n_rows, n_cols=plot_n_cols, type="nonsmooth")
-x0_idx = 106 # 56, 106, 186
-map_idx = 2 # 5, 2,  3
+x0_idx = 186 # 56, 106, 186
+map_idx = 3 # 5, 2,  3
 x0 = x0s[x0_idx]
 map = maps[map_idx]
 sol = our_sols[(map_idx, x0_idx)]
