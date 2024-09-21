@@ -21,8 +21,8 @@ u1_max = 10.0;
 u2_max = 10.0;
 u3_max = π;
 
-xlims = [-.5, 6.5]
-ylims = [-3.5, 3.5]
+xlims = [-2, 5.]
+ylims = [-5., 2.]
 framerate=10
 
 video_name = "piano"
