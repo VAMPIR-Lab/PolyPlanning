@@ -41,7 +41,7 @@ ego_length = 2.0
 gap_min = ego_width + 0.1
 gap_max = 3 * ego_width
 gap_array = collect(gap_min:(gap_max-gap_min)/(n_maps-1):gap_max)
-gap_offset = 2.5
+gap_offset = 4.0
 if is_loading_exp || is_loading_res
     ego_poly, x0s, maps, param = PolyPlanning.load_experiment(exp_name, exp_file_date; data_dir)
 else # generate ego_poly, x0s and maps
@@ -94,6 +94,7 @@ else # generate ego_poly, x0s and maps
         exp_file_date = date_now
         jldsave("$data_dir/$(exp_name)_exp_$date_now.jld2"; ego_poly, x0s, maps, param)
     end
+
 end
 
 if is_loading_res

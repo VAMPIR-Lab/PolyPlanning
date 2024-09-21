@@ -1,13 +1,13 @@
 using PolyPlanning
 
-#x0 = [5.0, 0.0, 0.1, 0, 0, 0];
-x0 = x0s[8] # too long
-x0 = x0s[1] # fail
-#obs_polys = PolyPlanning.gen_packing_wall(4, 4; w=5.0, l=5.0, max_overlap=0.0);
-obs_polys = maps[1]
+x0 = [5.0, 0.0, 0.1, 0, 0, 0];
+#x0 = x0s[8] # too long
+#x0 = x0s[1] # fail
+obs_polys = PolyPlanning.gen_packing_wall(4, 4; w=5.0, l=5.0, max_overlap=0.0);
+#obs_polys = maps[1]
 #obs_polys = [obs_polys[4],obs_polys[2],obs_polys[3]]
 #obs_polys = [obs_polys[2],obs_polys[3]]
-PolyPlanning.plot_polys(obs_polys);
+#PolyPlanning.plot_polys(obs_polys);
 ego_rect = PolyPlanning.gen_ego_rect(; a=0.5, b=1.0);
 Rf = 1e-3 * PolyPlanning.I(3);
 Rf[3, 3] = Rf[3, 3] / 100.0;
