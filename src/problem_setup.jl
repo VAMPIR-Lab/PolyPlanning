@@ -174,7 +174,7 @@ end
 
 # .| <- w -> | 
 # ^origin
-function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0)
+function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0, seed=[])
     @assert n_sides > 2
     @assert n_obs > 0
 
@@ -185,14 +185,26 @@ function gen_packing_wall(n_obs, n_sides; w=1.0, l=1.0, max_overlap=0.0)
         y_max = -l + i * y_nom
 
         #base = [[0, y_min], [0, y_max]]
-        base = [[0, y_min], [0, y_max + max_overlap * rand()]]
+        if isempty(seed)
+            base = [[0, y_min], [0, y_max + max_overlap * rand()]]
 
-        prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
-        P = ConvexPolygon2D([base; prot])
-
-        while length(P.V) != n_sides
             prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
             P = ConvexPolygon2D([base; prot])
+
+            while length(P.V) != n_sides
+                prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
+                P = ConvexPolygon2D([base; prot])
+            end
+        else
+            base = [[0, y_min], [0, y_max + max_overlap * rand(MersenneTwister(seed))]]
+
+            prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand(MersenneTwister(seed))] for _ in 1:n_sides-2]
+            P = ConvexPolygon2D([base; prot])
+
+            while length(P.V) != n_sides
+                prot = [[w * rand(), y_min - y_nom + (y_max - y_min + 2 * y_nom) * rand()] for _ in 1:n_sides-2]
+                P = ConvexPolygon2D([base; prot])
+            end
         end
         P
     end

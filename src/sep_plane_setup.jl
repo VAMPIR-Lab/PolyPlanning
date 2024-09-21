@@ -263,10 +263,11 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
                 xxts[i, t][] = copy(θ[(t-1)*n_xu+1:(t-1)*n_xu+6])
                 if is_showing_sep_plane
                     for k in 1:n_obs
-                        abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*3+1:n_xu*T+(t-1)*n_per_t+(k-1)*3+2])
+                        abts[i, t, k][] = copy(θ[n_xu*T+(t-1)*n_per_t+(k-1)*n_per_col+1:n_xu*T+(t-1)*n_per_t+(k-1)*n_per_col+2])
                     end
                 end
             end
+            #@infiltrate
         end
     end
 
@@ -281,7 +282,7 @@ function visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=3, fig=Figu
     (fig, update_fig, ax)
 end
 
-function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=true, sleep_duration=0.0, is_recording=false)
+function solve_prob_sep_planes(prob, x0; θ0=nothing, is_displaying=false, sleep_duration=0.0, is_recording=false)
     (; F_both!, J_both, l, u, T, n_z, n_nom, ego_polys, p1_max, p2_min, n_xu, obs_polys, n_per_col) = prob
 
 

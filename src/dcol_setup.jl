@@ -399,7 +399,7 @@ function visualize_dcol(x0, T, ego_polys, obs_polys; fig=Figure(), ax=Axis(fig[1
     (fig, update_fig, ax)
 end
 
-function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_duration=0.0)
+function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_duration=0.0, is_recording=false)
     (; fill_F!, J_rows_cols_fill, J_example, ego_polys, l, u, T, n_z, n_xu, n_x, n_λ_nom, n_obs, z_s2i,
         λ_dcol_s2i, sides_per_poly, p1_max, p2_min) = prob
 
@@ -433,6 +433,7 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_
     J_row = JJ.rowval
     nnz_total = length(JJ.nzval)
 
+    θ_history = []
 
     function F(n, θ, result)
         result .= 0.0
@@ -440,6 +441,11 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_
         #    Main.@infiltrate
         #end
         fill_F!(result, θ, x0, obs_polys)
+
+        
+        if is_recording
+            push!(θ_history, copy(θ))
+        end
 
         if is_displaying
             update_fig(θ)
@@ -525,7 +531,7 @@ function solve_dcol(prob, x0, obs_polys; θ0=nothing, is_displaying=true, sleep_
 
     @inbounds z = @view(θ[1:n_z])
 
-    (; status, info, θ, z, fres)
+    (; status, info, θ, z, fres, θ_history)
 end
 
 
