@@ -18,6 +18,7 @@ function record_videos(video_name, ego_polys, obs_polys, T, dt, R_cost, Q_cost, 
     (fig, update_fig, ax) = PolyPlanning.visualize_nonsmooth(x0, T, ego_polys, obs_polys; is_displaying=true)
     PolyPlanning.xlims!(ax, xlims[1], xlims[2])
     PolyPlanning.ylims!(ax, ylims[1], ylims[2])
+    PolyPlanning.hidedecorations!(ax)
     hist_len = length(our_sol.θ_history)
     frames = 2:hist_len+1*framerate
 
@@ -46,6 +47,7 @@ function record_videos(video_name, ego_polys, obs_polys, T, dt, R_cost, Q_cost, 
     (fig, update_fig, ax) = PolyPlanning.visualize_sep_planes(x0, T, ego_polys, obs_polys; n_per_col=2, is_displaying=false)
     PolyPlanning.xlims!(ax, xlims[1], xlims[2])
     PolyPlanning.ylims!(ax, ylims[1], ylims[2])
+    PolyPlanning.hidedecorations!(ax)
     hist_len = length(sep_sol.θ_history)
     frames = 2:hist_len+1*framerate
 
@@ -73,6 +75,7 @@ function record_videos(video_name, ego_polys, obs_polys, T, dt, R_cost, Q_cost, 
     (fig, update_fig, ax) = PolyPlanning.visualize_dcol(x0, T, ego_polys, obs_polys; is_displaying=false)
     PolyPlanning.xlims!(ax, xlims[1], xlims[2])
     PolyPlanning.ylims!(ax, ylims[1], ylims[2])
+    PolyPlanning.hidedecorations!(ax)
     hist_len = length(dcol_sol.θ_history)
     frames = 2:hist_len+1*framerate
 

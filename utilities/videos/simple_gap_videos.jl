@@ -1,7 +1,7 @@
 using PolyPlanning
 include("record_videos.jl")
 
-x0 = [4.0, 0, π/2+.15, 0, 0, 0];
+x0 = [5.0, 0, π/2-.2, 0, 0, 0];
 ego_width = 0.5;
 ego_length = 2.0;
 ego_polys = PolyPlanning.gen_ego_rect(; a=ego_width, b=ego_length)
@@ -15,9 +15,9 @@ u1_max = 10.0;
 u2_max = 10.0;
 u3_max = π;
 
-xlims = [-1.5, 4.5]
-ylims = [-3., 3]
-framerate=10
+xlims = [-1.5, 5.5]
+ylims = [-3.5, 3.5]
+framerate=30
 
 video_name = "simple_gap"
 record_videos(video_name, ego_polys, obs_polys, T, dt, R_cost, Q_cost, u1_max, u2_max, u3_max, xlims, ylims, framerate)

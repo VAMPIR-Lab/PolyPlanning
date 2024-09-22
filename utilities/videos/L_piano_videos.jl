@@ -1,7 +1,7 @@
 using PolyPlanning
 include("record_videos.jl")
 
-x0 = [4., 0, pi / 2, 0, 0, 0];
+x0 = [4., 0, -pi / 2, 0, 0, 0];
 ego_polys = PolyPlanning.gen_ego_L();
 obs_polys = PolyPlanning.gen_gap(; width=1.5, xs=2.)
 
@@ -16,7 +16,7 @@ u3_max = π;
 
 xlims = [-2, 6.]
 ylims = [-4., 4.]
-framerate=10
+framerate=120
 
 video_name = "L_piano"
 record_videos(video_name, ego_polys, obs_polys, T, dt, R_cost, Q_cost, u1_max, u2_max, u3_max, xlims, ylims, framerate)

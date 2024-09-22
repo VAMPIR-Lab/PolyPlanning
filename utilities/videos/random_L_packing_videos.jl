@@ -1,9 +1,9 @@
 using PolyPlanning
 include("record_videos.jl")
 
-x0 = [5.0, 0.0, 0.1, 0, 0, 0];
-obs_polys = PolyPlanning.gen_packing_wall(4, 4; w=5.0, l=5.0, max_overlap=0.0, seed=0);
-PolyPlanning.plot_polys(obs_polys);
+x0 = [5.0, 0.0, π/4, 0, 0, 0];
+obs_polys = PolyPlanning.gen_packing_wall(4, 4; w=5.0, l=5.0, max_overlap=0.0, seed=44);
+#PolyPlanning.plot_polys(obs_polys);
 ego_polys = PolyPlanning.gen_ego_L(; a=.5)
 
 T = 20;
@@ -15,7 +15,7 @@ u1_max = 10.0;
 u2_max = 10.0;
 u3_max = π;
 
-xlims = [0., 7.]
+xlims = [-.5, 6.5]
 ylims = [-3.5, 3.5]
 framerate=10
 
