@@ -1,6 +1,6 @@
 name = "PolyPlanning"
 uuid = "3cea2e71-855b-4efd-a877-a0014a05bda5"
-authors = ["Forrest Laine <forrest.laine@vanderbilt.edu>"]
+authors = ["cinaral <andcinar@gmail.com>", "zhiyaooooo <yuezhao19961013@gmail.com>", "Forrest Laine <forrest.laine@vanderbilt.edu>"]
 version = "0.1.0"
 
 [deps]

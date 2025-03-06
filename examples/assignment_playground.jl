@@ -424,7 +424,7 @@ x0 = [1.5, -0.2, 0, 0, 0, 0]
 
 fig = create_ass_playground(x0, ego_polys, obs_polys)
 #fig.center = false;
-GLMakie.save("./plots/playground.png", fig; size=(1000,700))
+#GLMakie.save("./plots/playground.png", fig; size=(1000,700))
 #obs_polys = PolyPlanning.gen_rect_obs(; a=0.5, b=2.0, x_shift=0.0);
 #ego_polys = PolyPlanning.gen_ego_rect(; a=0.5, b=2.0);
 #
