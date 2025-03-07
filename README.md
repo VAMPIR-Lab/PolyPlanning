@@ -29,7 +29,7 @@ nonsmooth_prob = PolyPlanning.setup_nonsmooth(ego_polys, obs_polys)
 PolyPlanning.solve_nonsmooth(nonsmooth_prob, x0)
 ```
 
-More examples including simple usage examples for baselines methods, the separating hyperplanes and [dcol (differentiable collision detection)](https://arxiv.org/abs/2207.00669) methods are also available in the ```examples``` folder.
+More examples including simple usage examples for baselines methods, the separating hyperplanes and dcol (differentiable collision by [Tracy et al.](https://arxiv.org/abs/2207.00669)) are also available in the ```examples``` folder.
 
 ## Assignment Playground
 
